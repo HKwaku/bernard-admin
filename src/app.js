@@ -32,6 +32,15 @@ export function initApp() {
       <div class="shell">
         <!-- Top Bar -->
         <div class="topbar" style="position:relative">
+          <!-- Mobile menu button (moved to the LEFT) -->
+          <button
+            id="mobile-menu-btn"
+            class="mobile-menu-btn"
+            aria-expanded="false"
+            aria-controls="mobile-menu-drawer"
+            title="Menu"
+          >☰</button>
+
           <div class="brand"><span class="bot">🤖</span> Bernard</div>
 
           <div class="tabs" id="tabs">
@@ -45,25 +54,6 @@ export function initApp() {
 
           <button class="cta" id="new-booking-btn">+ New Booking</button>
           <div class="now" id="now"></div>
-
-          <!-- Mobile menu button (moved to the RIGHT) -->
-          <button
-            id="mobile-menu-btn"
-            class="mobile-menu-btn"
-            aria-expanded="false"
-            aria-controls="mobile-menu-drawer"
-            title="Menu"
-            style="
-              margin-left:8px;
-              border:1px solid var(--ring);
-              background:#fff;
-              color:#0f172a;
-              border-radius:10px;
-              padding:8px 12px;
-              font-weight:800;
-              cursor:pointer;
-            "
-          >☰</button>
 
           <!-- Right-aligned dropdown drawer -->
           <nav
@@ -82,11 +72,13 @@ export function initApp() {
             "
           >
             <ul style="list-style:none;margin:10px;padding:0;display:grid;gap:8px">
+              <li><button data-view="chat"         class="btn" style="width:100%">💬 Chat</button></li>
               <li><button data-view="reservations" class="btn" style="width:100%">🗓️ Reservations</button></li>
               <li><button data-view="rooms"        class="btn" style="width:100%">🏠 Room Types</button></li>
               <li><button data-view="extras"       class="btn" style="width:100%">✨ Extras</button></li>
               <li><button data-view="coupons"      class="btn" style="width:100%">🎟️ Coupons</button></li>
               <li><button data-view="packages"     class="btn" style="width:100%">📦 Packages</button></li>
+              <li><hr style="border:0;border-top:1px solid var(--ring);margin:6px 0"></li>
               <li><button data-view="newbooking"   class="btn" style="width:100%">➕ New Booking</button></li>
               <li><button data-view="quickstats"   class="btn" style="width:100%">📊 Quick Stats</button></li>
               <li><button data-view="recent"       class="btn" style="width:100%">🧾 Recent Bookings</button></li>
@@ -234,6 +226,17 @@ export function initApp() {
       $$('.panel').forEach((p) => p.classList.remove('show'));
       $(`#view-${btn.dataset.view}`).classList.add('show');
 
+      // Update page title
+      const titles = {
+        chat: 'Chat',
+        reservations: 'Reservations',
+        rooms: 'Room Types',
+        extras: 'Extras',
+        coupons: 'Coupons',
+        packages: 'Packages',
+      };
+      $('#section-title').textContent = titles[btn.dataset.view] || 'Dashboard';
+
       if (btn.dataset.view === 'reservations') initReservations();
       if (btn.dataset.view === 'rooms') initRooms();
       if (btn.dataset.view === 'extras') initExtras();
@@ -280,6 +283,17 @@ export function initApp() {
           document.getElementById('new-booking-btn')?.click();
           return;
         }
+
+        // Update page title
+        const titles = {
+          chat: 'Chat',
+          reservations: 'Reservations',
+          rooms: 'Room Types',
+          extras: 'Extras',
+          coupons: 'Coupons',
+          packages: 'Packages',
+        };
+        $('#section-title').textContent = titles[view] || 'Dashboard';
 
         // Delegate to the existing tab button (Reservations / Rooms / Extras / Coupons / Packages)
         const tab = document.querySelector(`#tabs .tab[data-view="${view}"]`);
