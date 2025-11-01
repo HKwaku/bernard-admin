@@ -838,25 +838,89 @@ body {
   background-repeat: no-repeat;
   padding-right: 34px;
 }
+/* === Clickable Mobile Menu (append-only) ============================== */
+.mobile-menu-btn {
+  display: none;
+}
 
-/* Mobile behaviour: show dropdown, keep Chat primary */
+/* Drawer defaults (hidden by default) */
+#mobile-menu-drawer {
+  display: none;
+}
+
+/* Mobile only */
 @media (max-width: 767px) {
-  /* Hide desktop controls */
-  .tabs,
-  .cta,
-  .now {
-    display: none !important;
-  }
-
-  /* Show the mobile dropdown inside the topbar */
-  #mobile-menu {
+  /* Show the button, place it top-left */
+  .mobile-menu-btn {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    margin-left: auto; /* push to the right side of the topbar */
+    background: #1f2937;
+    color: #e5e7eb;
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-weight: 800;
+    font-size: 0.875rem;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    order: 0;            /* before brand */
   }
 
-  /* Only Chat visible by default; other panels hidden until selected */
+  /* Reflow topbar so button is on the left */
+  .topbar {
+    justify-content: flex-start;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  /* Hide desktop-only controls */
+  .tabs, .cta, .now {
+    display: none !important;
+  }
+
+  /* Slide-down drawer */
+  #mobile-menu-drawer {
+    position: relative;
+    z-index: 40;
+    margin-top: 10px;
+    background: #0f172a;
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 12px;
+    box-shadow: 0 10px 24px rgba(0,0,0,0.25);
+    overflow: hidden;
+    animation: menudrop 160ms ease-out;
+  }
+  #mobile-menu-drawer[hidden] { display: none; }
+
+  #mobile-menu-drawer ul { list-style: none; margin: 0; padding: 6px; }
+  #mobile-menu-drawer li { margin: 2px 0; }
+
+  #mobile-menu-drawer button {
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    color: #e5e7eb;
+    border: 0;
+    padding: 12px 12px;
+    border-radius: 10px;
+    font-weight: 800;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  #mobile-menu-drawer button:hover {
+    background: rgba(255,255,255,0.08);
+  }
+
+  @keyframes menudrop {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Make Chat primary by default; others hidden unless selected */
   #view-chat.panel { display: block; }
   #view-reservations,
   #view-rooms,
@@ -865,9 +929,14 @@ body {
   #view-packages {
     display: none !important;
   }
+
+  /* Single column layout on mobile */
+  .grid { grid-template-columns: 1fr !important; }
+  .card { width: 100%; }
 }
 
-/* Ensure dropdown is hidden again on tablet/desktop */
+/* Tablet/desktop: hide mobile menu UI */
 @media (min-width: 768px) {
-  #mobile-menu { display: none !important; }
+  .mobile-menu-btn { display: none !important; }
+  #mobile-menu-drawer { display: none !important; }
 }
