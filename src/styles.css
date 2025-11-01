@@ -693,7 +693,6 @@ label {
 }
 
 #mobile-menu-drawer {
-  display: none;
   position: absolute;
   right: 10px;
   top: calc(100% + 8px);
