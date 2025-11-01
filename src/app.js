@@ -32,6 +32,9 @@ export function initApp() {
       <div class="shell">
         <!-- Top Bar -->
         <div class="topbar">
+          <!-- Mobile menu button (top-left) -->
+          <button id="mobile-menu-btn" class="mobile-menu-btn" aria-expanded="false" aria-controls="mobile-menu-drawer" title="Menu">☰</button>
+
           <div class="brand"><span class="bot">🤖</span> Bernard</div>
           <div class="tabs" id="tabs">
             <button class="tab active" data-view="chat">💬 Chat</button>
@@ -44,6 +47,20 @@ export function initApp() {
           <button class="cta" id="new-booking-btn">+ New Booking</button>
           <div class="now" id="now"></div>
         </div>
+
+        <!-- Mobile Menu Drawer (simple, hidden by default) -->
+        <nav id="mobile-menu-drawer" hidden>
+          <ul style="list-style:none;margin:8px 0 16px;padding:0 12px;display:grid;gap:8px">
+            <li><button data-view="chat"        class="btn" style="width:100%">💬 Chat</button></li>
+            <li><button data-view="reservations" class="btn" style="width:100%">🗓️ Reservations</button></li>
+            <li><button data-view="rooms"        class="btn" style="width:100%">🏠 Room Types</button></li>
+            <li><button data-view="extras"       class="btn" style="width:100%">✨ Extras</button></li>
+            <li><button data-view="coupons"      class="btn" style="width:100%">🎟️ Coupons</button></li>
+            <li><button data-view="packages"     class="btn" style="width:100%">📦 Packages</button></li>
+            <li><button data-view="quickstats"   class="btn" style="width:100%">📊 Quick Stats</button></li>
+            <li><button data-view="recent"       class="btn" style="width:100%">🧾 Recent Bookings</button></li>
+          </ul>
+        </nav>
 
         <!-- Page Heading -->
         <div class="pagehead">
@@ -108,7 +125,8 @@ export function initApp() {
           </div>
 
           <div>
-            <div class="card">
+            <!-- add ids so the mobile menu can scroll to these cards -->
+            <div class="card" id="quick-stats-card">
               <div class="card-hd">Quick Stats</div>
               <div class="card-bd">
                 <div class="stat-row"><span>Today's Check-ins</span><strong id="stat-checkins">—</strong></div>
@@ -118,7 +136,7 @@ export function initApp() {
               </div>
             </div>
 
-            <div class="card" style="margin-top:18px">
+            <div class="card" id="recent-bookings-card" style="margin-top:18px">
               <div class="card-hd">Recent Bookings</div>
               <div class="card-bd" id="recent-bookings">Loading…</div>
             </div>
@@ -191,6 +209,36 @@ export function initApp() {
       if (btn.dataset.view === 'packages') initPackages();
     })
   );
+
+  // ---------- Mobile Menu (minimal; uses existing tabs/sections) ----------
+  const mBtn = $('#mobile-menu-btn');
+  const mDrawer = $('#mobile-menu-drawer');
+
+  if (mBtn && mDrawer) {
+    const open = () => { mDrawer.hidden = false; mBtn.setAttribute('aria-expanded','true'); };
+    const close = () => { mDrawer.hidden = true;  mBtn.setAttribute('aria-expanded','false'); };
+    mBtn.addEventListener('click', () => (mDrawer.hidden ? open() : close()));
+
+    mDrawer.querySelectorAll('button[data-view]').forEach((b) => {
+      b.addEventListener('click', async () => {
+        const view = b.getAttribute('data-view');
+        close();
+
+        if (view === 'quickstats') {
+          document.getElementById('quick-stats-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          return;
+        }
+        if (view === 'recent') {
+          document.getElementById('recent-bookings-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          return;
+        }
+
+        // delegate to the existing tab button for consistency
+        const tab = document.querySelector(`#tabs .tab[data-view="${view}"]`);
+        tab?.dispatchEvent(new Event('click', { bubbles: true }));
+      });
+    });
+  }
 
   // ---------- Chat ----------
   addMessage(`Hello! My name is <strong>Bernard</strong>. What would you like to do today?`);
