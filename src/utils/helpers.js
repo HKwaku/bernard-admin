@@ -1,44 +1,86 @@
-export const $ = (sel, root = document) => root.querySelector(sel);
-export const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+// utils/helpers.js
 
-export function addMessage(html, isUser = false) {
-  const box = $('#messages');
-  if (!box) return;
-  const row = document.createElement('div');
-  row.style.margin = '8px 0';
-  row.style.textAlign = isUser ? 'right' : 'left';
-  row.innerHTML = `<span style="
-    display:inline-block;
-    padding:8px 12px;
-    border-radius:12px;
-    ${isUser
-      ? 'background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff'
-      : 'background:#f3f4f6;color:#111827;border:1px solid #e5e7eb'}
-  ">${html}</span>`;
-  box.appendChild(row);
-  box.scrollTop = box.scrollHeight;
+// DOM selection helpers
+export const $ = (selector) => document.querySelector(selector);
+export const $$ = (selector) => document.querySelectorAll(selector);
+
+// Chat helpers
+export function addMessage(text, isUser = false) {
+  const messagesDiv = $('#messages');
+  if (!messagesDiv) return;
+
+  const msgDiv = document.createElement('div');
+  msgDiv.className = isUser ? 'msg user' : 'msg bot';
+  
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.innerHTML = text;
+  
+  msgDiv.appendChild(bubble);
+  messagesDiv.appendChild(msgDiv);
+  
+  // Scroll to bottom
+  messagesDiv.scrollTop = messagesDiv.scrollHeight;
 }
 
-export function showTyping() { addMessage('<em>Bernard is thinking…</em>'); }
+export function showTyping() {
+  const messagesDiv = $('#messages');
+  if (!messagesDiv) return;
+
+  const typingDiv = document.createElement('div');
+  typingDiv.className = 'msg bot';
+  typingDiv.id = 'typing-indicator';
+  
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble typing';
+  bubble.innerHTML = '<span></span><span></span><span></span>';
+  
+  typingDiv.appendChild(bubble);
+  messagesDiv.appendChild(typingDiv);
+  
+  // Scroll to bottom
+  messagesDiv.scrollTop = messagesDiv.scrollHeight;
+}
+
 export function hideTyping() {
-  const box = $('#messages'); if (!box) return;
-  const last = box.lastElementChild;
-  if (last && last.textContent.includes('Bernard is thinking')) last.remove();
-}
-
-export function formatCurrency(amount, currency = 'GBP', locale = 'en-GB') {
-  return new Intl.NumberFormat(locale, { style: 'currency', currency }).format(Number(amount || 0));
-}
-
-export function openModal(id) { const m = document.getElementById(id); if (m) m.classList.add('show'); }
-export function closeModal(id){ const m = document.getElementById(id); if (m) m.classList.remove('show'); }
-
-export function toast(msg) {
-  let t = $('#__toast__');
-  if (!t) {
-    t = document.createElement('div'); t.id='__toast__';
-    t.style.cssText='position:fixed;right:16px;bottom:16px;background:#111827;color:#fff;padding:10px 14px;border-radius:10px;z-index:1000';
-    document.body.appendChild(t);
+  const typingIndicator = $('#typing-indicator');
+  if (typingIndicator) {
+    typingIndicator.remove();
   }
-  t.textContent = msg; setTimeout(()=>t.remove(), 2500);
+}
+
+// Modal helpers
+export function openModal(modalId) {
+  const modal = $(`#${modalId}`);
+  if (modal) {
+    modal.classList.add('show');
+  }
+}
+
+export function closeModal(modalId) {
+  const modal = $(`#${modalId}`);
+  if (modal) {
+    modal.classList.remove('show');
+  }
+}
+
+// Currency formatter
+export function formatCurrency(amount, currency = 'GBP') {
+  try {
+    return new Intl.NumberFormat('en-GB', {
+      style: 'currency',
+      currency: currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(amount);
+  } catch (error) {
+    // Fallback if currency is invalid
+    return `${currency} ${Number(amount).toFixed(2)}`;
+  }
+}
+
+// Toast notification (simple version)
+export function toast(message, type = 'info') {
+  console.log(`[${type.toUpperCase()}] ${message}`);
+  alert(message); // Simple fallback, replace with better toast UI if needed
 }
