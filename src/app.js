@@ -31,11 +31,9 @@ export function initApp() {
     <div class="wrap">
       <div class="shell">
         <!-- Top Bar -->
-        <div class="topbar">
-          <!-- Mobile menu button (top-left) -->
-          <button id="mobile-menu-btn" class="mobile-menu-btn" aria-expanded="false" aria-controls="mobile-menu-drawer" title="Menu">☰</button>
-
+        <div class="topbar" style="position:relative">
           <div class="brand"><span class="bot">🤖</span> Bernard</div>
+
           <div class="tabs" id="tabs">
             <button class="tab active" data-view="chat">💬 Chat</button>
             <button class="tab" data-view="reservations">🗓️ Reservations</button>
@@ -44,23 +42,57 @@ export function initApp() {
             <button class="tab" data-view="coupons">🎟️ Coupons</button>
             <button class="tab" data-view="packages">📦 Packages</button>
           </div>
+
           <button class="cta" id="new-booking-btn">+ New Booking</button>
           <div class="now" id="now"></div>
-        </div>
 
-        <!-- Mobile Menu Drawer (simple, hidden by default) -->
-        <nav id="mobile-menu-drawer" hidden>
-          <ul style="list-style:none;margin:8px 0 16px;padding:0 12px;display:grid;gap:8px">
-            <li><button data-view="chat"        class="btn" style="width:100%">💬 Chat</button></li>
-            <li><button data-view="reservations" class="btn" style="width:100%">🗓️ Reservations</button></li>
-            <li><button data-view="rooms"        class="btn" style="width:100%">🏠 Room Types</button></li>
-            <li><button data-view="extras"       class="btn" style="width:100%">✨ Extras</button></li>
-            <li><button data-view="coupons"      class="btn" style="width:100%">🎟️ Coupons</button></li>
-            <li><button data-view="packages"     class="btn" style="width:100%">📦 Packages</button></li>
-            <li><button data-view="quickstats"   class="btn" style="width:100%">📊 Quick Stats</button></li>
-            <li><button data-view="recent"       class="btn" style="width:100%">🧾 Recent Bookings</button></li>
-          </ul>
-        </nav>
+          <!-- Mobile menu button (moved to the RIGHT) -->
+          <button
+            id="mobile-menu-btn"
+            class="mobile-menu-btn"
+            aria-expanded="false"
+            aria-controls="mobile-menu-drawer"
+            title="Menu"
+            style="
+              margin-left:8px;
+              border:1px solid var(--ring);
+              background:#fff;
+              color:#0f172a;
+              border-radius:10px;
+              padding:8px 12px;
+              font-weight:800;
+              cursor:pointer;
+            "
+          >☰</button>
+
+          <!-- Right-aligned dropdown drawer -->
+          <nav
+            id="mobile-menu-drawer"
+            hidden
+            style="
+              position:absolute;
+              right:10px;
+              top:calc(100% + 8px);
+              width:min(260px, 92vw);
+              background:#fff;
+              border:1px solid var(--ring);
+              border-radius:12px;
+              box-shadow:0 10px 24px rgba(0,0,0,.12);
+              z-index:40;
+            "
+          >
+            <ul style="list-style:none;margin:10px;padding:0;display:grid;gap:8px">
+              <li><button data-view="reservations" class="btn" style="width:100%">🗓️ Reservations</button></li>
+              <li><button data-view="rooms"        class="btn" style="width:100%">🏠 Room Types</button></li>
+              <li><button data-view="extras"       class="btn" style="width:100%">✨ Extras</button></li>
+              <li><button data-view="coupons"      class="btn" style="width:100%">🎟️ Coupons</button></li>
+              <li><button data-view="packages"     class="btn" style="width:100%">📦 Packages</button></li>
+              <li><button data-view="newbooking"   class="btn" style="width:100%">➕ New Booking</button></li>
+              <li><button data-view="quickstats"   class="btn" style="width:100%">📊 Quick Stats</button></li>
+              <li><button data-view="recent"       class="btn" style="width:100%">🧾 Recent Bookings</button></li>
+            </ul>
+          </nav>
+        </div>
 
         <!-- Page Heading -->
         <div class="pagehead">
@@ -125,7 +157,7 @@ export function initApp() {
           </div>
 
           <div>
-            <!-- add ids so the mobile menu can scroll to these cards -->
+            <!-- ids so the mobile menu can scroll to these cards -->
             <div class="card" id="quick-stats-card">
               <div class="card-hd">Quick Stats</div>
               <div class="card-bd">
@@ -210,15 +242,27 @@ export function initApp() {
     })
   );
 
-  // ---------- Mobile Menu (minimal; uses existing tabs/sections) ----------
+  // ---------- Mobile Menu (right-aligned dropdown) ----------
   const mBtn = $('#mobile-menu-btn');
   const mDrawer = $('#mobile-menu-drawer');
 
   if (mBtn && mDrawer) {
     const open = () => { mDrawer.hidden = false; mBtn.setAttribute('aria-expanded','true'); };
     const close = () => { mDrawer.hidden = true;  mBtn.setAttribute('aria-expanded','false'); };
-    mBtn.addEventListener('click', () => (mDrawer.hidden ? open() : close()));
 
+    mBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      mDrawer.hidden ? open() : close();
+    });
+
+    // Close when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!mDrawer.hidden && !mDrawer.contains(e.target) && e.target !== mBtn) {
+        close();
+      }
+    });
+
+    // Handle menu actions
     mDrawer.querySelectorAll('button[data-view]').forEach((b) => {
       b.addEventListener('click', async () => {
         const view = b.getAttribute('data-view');
@@ -232,8 +276,12 @@ export function initApp() {
           document.getElementById('recent-bookings-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
           return;
         }
+        if (view === 'newbooking') {
+          document.getElementById('new-booking-btn')?.click();
+          return;
+        }
 
-        // delegate to the existing tab button for consistency
+        // Delegate to the existing tab button (Reservations / Rooms / Extras / Coupons / Packages)
         const tab = document.querySelector(`#tabs .tab[data-view="${view}"]`);
         tab?.dispatchEvent(new Event('click', { bubbles: true }));
       });
