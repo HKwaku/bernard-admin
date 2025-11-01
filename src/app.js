@@ -250,17 +250,17 @@ export function initApp() {
   const mDrawer = $('#mobile-menu-drawer');
 
   if (mBtn && mDrawer) {
-    const open = () => { mDrawer.hidden = false; mBtn.setAttribute('aria-expanded','true'); };
-    const close = () => { mDrawer.hidden = true;  mBtn.setAttribute('aria-expanded','false'); };
+    const open = () => { mDrawer.removeAttribute('hidden'); mBtn.setAttribute('aria-expanded','true'); };
+    const close = () => { mDrawer.setAttribute('hidden', '');  mBtn.setAttribute('aria-expanded','false'); };
 
     mBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      mDrawer.hidden ? open() : close();
+      mDrawer.hasAttribute('hidden') ? open() : close();
     });
 
     // Close when clicking outside
     document.addEventListener('click', (e) => {
-      if (!mDrawer.hidden && !mDrawer.contains(e.target) && e.target !== mBtn) {
+      if (!mDrawer.hasAttribute('hidden') && !mDrawer.contains(e.target) && e.target !== mBtn) {
         close();
       }
     });
