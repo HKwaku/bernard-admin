@@ -272,19 +272,27 @@ export function initApp() {
         close();
 
         if (view === 'quickstats') {
-          const card = document.getElementById('quick-stats-card');
-          if (card) {
-            card.style.display = 'block';
-            card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }
+          // Hide all panels
+          $$('.panel').forEach((p) => p.classList.remove('show'));
+          // Show only stats card
+          const statsCard = document.getElementById('quick-stats-card');
+          const recentCard = document.getElementById('recent-bookings-card');
+          if (statsCard) statsCard.style.display = 'block';
+          if (recentCard) recentCard.style.display = 'none';
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          $('#section-title').textContent = 'Quick Stats';
           return;
         }
         if (view === 'recent') {
-          const card = document.getElementById('recent-bookings-card');
-          if (card) {
-            card.style.display = 'block';
-            card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }
+          // Hide all panels
+          $$('.panel').forEach((p) => p.classList.remove('show'));
+          // Show only recent bookings card
+          const statsCard = document.getElementById('quick-stats-card');
+          const recentCard = document.getElementById('recent-bookings-card');
+          if (statsCard) statsCard.style.display = 'none';
+          if (recentCard) recentCard.style.display = 'block';
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          $('#section-title').textContent = 'Recent Bookings';
           return;
         }
         if (view === 'newbooking') {
@@ -302,6 +310,12 @@ export function initApp() {
           packages: 'Packages',
         };
         $('#section-title').textContent = titles[view] || 'Dashboard';
+
+        // Hide stats cards when switching to other views
+        const statsCard = document.getElementById('quick-stats-card');
+        const recentCard = document.getElementById('recent-bookings-card');
+        if (statsCard) statsCard.style.display = 'none';
+        if (recentCard) recentCard.style.display = 'none';
 
         // Delegate to the existing tab button (Reservations / Rooms / Extras / Coupons / Packages)
         const tab = document.querySelector(`#tabs .tab[data-view="${view}"]`);
@@ -464,10 +478,10 @@ export function initApp() {
                 ${desc}
                 ${adults}
               </div>
-              <div class="meta" style="text-align:right;min-width:220px">
-                Weekday: <strong>${r.base_price_per_night_weekday != null ? fmt(r.base_price_per_night_weekday, r.currency) : 'n/a'}</strong>
-                &nbsp;•&nbsp;
-                Weekend: <strong>${r.base_price_per_night_weekend != null ? fmt(r.base_price_per_night_weekend, r.currency) : 'n/a'}</strong>
+              <div class="meta room-prices" style="text-align:right;min-width:220px">
+                <span class="weekday-price">Weekday: <strong>${r.base_price_per_night_weekday != null ? fmt(r.base_price_per_night_weekday, r.currency) : 'n/a'}</strong></span>
+                <span class="price-separator">&nbsp;•&nbsp;</span>
+                <span class="weekend-price">Weekend: <strong>${r.base_price_per_night_weekend != null ? fmt(r.base_price_per_night_weekend, r.currency) : 'n/a'}</strong></span>
               </div>
             </div>
           </div>`;

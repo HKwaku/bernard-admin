@@ -826,6 +826,12 @@ label {
   .grid {
     grid-template-columns: 1fr 1fr;
   }
+  
+  /* Show stats and recent bookings on desktop */
+  #quick-stats-card,
+  #recent-bookings-card {
+    display: block !important;
+  }
 }
 
 /* Large devices (wide desktops, 1200px and up) */
@@ -887,6 +893,15 @@ label {
     display: none;
   }
 
+  /* Hide right column on mobile, but show stats/recent when clicked */
+  .grid > div:last-child {
+    display: block;
+  }
+  
+  .grid > div:first-child {
+    grid-column: 1;
+  }
+
   .h1 {
     font-size: 1.25rem;
   }
@@ -900,6 +915,68 @@ label {
   .list {
     padding: var(--space-md);
   }
+  
+  /* Better mobile filter layout */
+  #view-reservations .card-bd > div:first-child {
+    flex-direction: column;
+  }
+  
+  #view-reservations .card-bd > div:first-child > * {
+    width: 100% !important;
+    flex: none !important;
+  }
+  
+  /* Room types mobile layout */
+  #view-rooms .item .row {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+  
+  #view-rooms .item .row img {
+    width: 100% !important;
+    height: 200px !important;
+    margin: 0 0 var(--space-md) 0 !important;
+    border-radius: var(--radius-md) !important;
+  }
+  
+  #view-rooms .item .row > div {
+    width: 100%;
+  }
+  
+  #view-rooms .item .room-prices {
+    text-align: right !important;
+    min-width: auto !important;
+  }
+  
+  #view-rooms .item .weekday-price,
+  #view-rooms .item .weekend-price {
+    display: block !important;
+  }
+  
+  #view-rooms .item .price-separator {
+    display: none !important;
+  }
+  
+  #view-rooms .item .meta[style*="margin-top:6px;color:#6b7280"] {
+    display: none !important;
+  }
+  
+  /* Room types desktop - bigger images */
+  @media (min-width: 768px) {
+    #view-rooms .item .row img {
+      width: 120px !important;
+      height: 90px !important;
+    }
+    
+    #view-rooms .item .weekday-price,
+    #view-rooms .item .weekend-price {
+      display: inline !important;
+    }
+    
+    #view-rooms .item .price-separator {
+      display: inline !important;
+    }
+  }
 
   .item {
     padding: var(--space-md);
@@ -907,6 +984,27 @@ label {
   
   .item .row {
     flex-direction: column;
+    gap: var(--space-md);
+  }
+  
+  .item .row > div {
+    width: 100%;
+  }
+  
+  .item .row > div:last-child {
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+  }
+  
+  .item .code {
+    align-self: flex-start;
+    margin-bottom: var(--space-xs);
+  }
+  
+  .item .price {
+    margin-top: var(--space-xs);
   }
 
   .modal {
