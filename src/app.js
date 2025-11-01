@@ -272,11 +272,19 @@ export function initApp() {
         close();
 
         if (view === 'quickstats') {
-          document.getElementById('quick-stats-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          const card = document.getElementById('quick-stats-card');
+          if (card) {
+            card.style.display = 'block';
+            card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
           return;
         }
         if (view === 'recent') {
-          document.getElementById('recent-bookings-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          const card = document.getElementById('recent-bookings-card');
+          if (card) {
+            card.style.display = 'block';
+            card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
           return;
         }
         if (view === 'newbooking') {

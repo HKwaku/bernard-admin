@@ -878,7 +878,13 @@ label {
 
   .mobile-menu-btn {
     display: inline-flex;
-    order: 0;
+    order: 2;
+  }
+
+  /* Hide stats and recent bookings on mobile by default */
+  #quick-stats-card,
+  #recent-bookings-card {
+    display: none;
   }
 
   .h1 {
