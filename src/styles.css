@@ -566,6 +566,18 @@ label {
   }
 }
 
+/* Status indicator for chat actions */
+#status-indicator {
+  animation: slideIn 0.2s ease;
+}
+
+#status-indicator .bubble {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  color: #0369a1;
+  font-size: 0.875rem;
+}
+
 /* ===== Modal ===== */
 .modal {
   display: none;
@@ -939,8 +951,37 @@ label {
     border-radius: var(--radius-md) !important;
   }
   
-  #view-rooms .item .row > div {
+  #view-rooms .item .row > div:first-child {
+    order: 2;
+    flex: 1;
+  }
+  
+  #view-rooms .item .row > div:last-child {
+    order: 2;
+    flex: 0 0 auto;
+  }
+  
+  #view-rooms .item .row::after {
+    content: "";
+    display: flex;
     width: 100%;
+    order: 2;
+    flex-wrap: wrap;
+  }
+  
+  /* Make text and prices appear side by side after image */
+  #view-rooms .item .row {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  
+  #view-rooms .item .row img {
+    order: 1;
+    width: 100% !important;
+  }
+  
+  #view-rooms .item .row > div {
+    width: auto;
   }
   
   #view-rooms .item .room-prices {
@@ -966,6 +1007,21 @@ label {
     #view-rooms .item .row img {
       width: 120px !important;
       height: 90px !important;
+      order: 0;
+    }
+    
+    #view-rooms .item .row {
+      flex-wrap: nowrap;
+    }
+    
+    #view-rooms .item .row > div:first-child {
+      order: 0;
+      flex: 1;
+    }
+    
+    #view-rooms .item .row > div:last-child {
+      order: 0;
+      flex: 0 0 auto;
     }
     
     #view-rooms .item .weekday-price,

@@ -328,19 +328,59 @@ export function initApp() {
   addMessage(`Hello! My name is <strong>Bernard</strong>. What would you like to do today?`);
   $('#send-btn')?.addEventListener('click', send);
   $('#user-input')?.addEventListener('keydown', (e) => e.key === 'Enter' && send());
+  
   async function send() {
     const el = $('#user-input');
     const text = (el?.value || '').trim();
     if (!text) return;
     addMessage(text, true);
     el.value = '';
+    
     showTyping();
+    
+    // Create a status message element
+    const statusDiv = document.createElement('div');
+    statusDiv.className = 'msg bot';
+    statusDiv.id = 'status-indicator';
+    const statusBubble = document.createElement('div');
+    statusBubble.className = 'bubble';
+    statusBubble.style.fontStyle = 'italic';
+    statusBubble.style.opacity = '0.8';
+    statusBubble.textContent = '🤔 Thinking...';
+    statusDiv.appendChild(statusBubble);
+    
+    const messagesDiv = $('#messages');
+    if (messagesDiv) {
+      messagesDiv.appendChild(statusDiv);
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+    
     try {
-      const reply = await callOpenAI(conversationHistory, text);
+      const reply = await callOpenAI(conversationHistory, text, (status) => {
+        // Update status message
+        if (status) {
+          statusBubble.textContent = status;
+        }
+      });
+      
       hideTyping();
+      
+      // Remove status indicator
+      const statusIndicator = $('#status-indicator');
+      if (statusIndicator) {
+        statusIndicator.remove();
+      }
+      
       addMessage(reply || 'Done.');
     } catch (e) {
       hideTyping();
+      
+      // Remove status indicator
+      const statusIndicator = $('#status-indicator');
+      if (statusIndicator) {
+        statusIndicator.remove();
+      }
+      
       addMessage('<span style="color:#b91c1c">✖ AI service temporarily unavailable.</span>');
       console.error(e);
     }
