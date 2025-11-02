@@ -304,22 +304,56 @@ const availableFunctions = {
   },
 
   // ===== EXTRAS =====
-  getExtras: async (args) => {
+  getExtras: async (args = {}) => {
     const { category, activeOnly = true } = args;
     let query = supabase.from('extras').select('*');
     
     if (category) {
       query = query.eq('category', category);
     }
-    if (activeOnly) {
-      query = query.eq('active', true);
-    }
+    // Skip activeOnly filter since your extras table schema may not have this field
     
     query = query.order('name', { ascending: true });
-    const { data, error } = await query;
     
-    if (error) throw error;
-    return { extras: data };
+    try {
+      const { data, error } = await query;
+      
+      if (error) {
+        console.error('Error fetching extras:', error);
+        throw error;
+      }
+      
+      if (!data || data.length === 0) {
+        return {
+          totalExtras: 0,
+          extras: [],
+          message: `No extras found${category ? ` in category "${category}"` : ''}`
+        };
+      }
+      
+      // Format for better display
+      const formatted = data.map(extra => ({
+        name: extra.name || 'Unnamed Extra',
+        category: extra.category || 'Uncategorized',
+        price: extra.price || extra.extra_price || 0,
+        currency: extra.currency || 'GHS',
+        description: extra.description || '',
+        active: true // Default to true since we're not filtering
+      }));
+      
+      return { 
+        totalExtras: data.length,
+        extras: formatted,
+        message: `Found ${data.length} extra(s)${category ? ` in category "${category}"` : ''}`
+      };
+    } catch (error) {
+      console.error('getExtras error:', error);
+      return {
+        error: `Unable to retrieve extras: ${error.message}`,
+        totalExtras: 0,
+        extras: []
+      };
+    }
   },
 
   // ===== COUPONS =====
@@ -356,19 +390,57 @@ const availableFunctions = {
   },
 
   // ===== PACKAGES =====
-  getPackages: async (args) => {
+  getPackages: async (args = {}) => {
     const { activeOnly = true } = args;
     let query = supabase.from('packages').select('*');
     
+    // Your packages table uses 'is_active' not 'active'
     if (activeOnly) {
-      query = query.eq('active', true);
+      query = query.eq('is_active', true);
     }
     
-    query = query.order('created_at', { ascending: false });
-    const { data, error } = await query;
+    query = query.order('sort_order', { ascending: true });
     
-    if (error) throw error;
-    return { packages: data };
+    try {
+      const { data, error } = await query;
+      
+      if (error) {
+        console.error('Error fetching packages:', error);
+        throw error;
+      }
+      
+      if (!data || data.length === 0) {
+        return {
+          totalPackages: 0,
+          packages: [],
+          message: 'No packages found'
+        };
+      }
+      
+      // Format for better display
+      const formatted = data.map(pkg => ({
+        name: pkg.name || 'Unnamed Package',
+        code: (pkg.code || '').toUpperCase(),
+        description: pkg.description || '',
+        nights: pkg.nights || 1,
+        price: pkg.price || pkg.package_price || 0, // Check both price and package_price
+        currency: pkg.currency || 'GHS',
+        active: pkg.is_active !== false
+      }));
+      
+      return { 
+        totalPackages: data.length,
+        packages: formatted,
+        message: `Found ${data.length} package(s)`
+      };
+    } catch (error) {
+      console.error('getPackages error:', error);
+      return {
+        error: `Unable to retrieve packages: ${error.message}`,
+        totalPackages: 0,
+        packages: []
+      };
+    }
   },
 
   // ===== STATISTICS =====
@@ -641,6 +713,8 @@ export async function callOpenAI(history, userMessage, onStatusUpdate) {
               role: 'system',
               content: `You are Bernard, a helpful hotel booking assistant with access to the reservation database. 
 
+⚠️ CRITICAL: When displaying 2+ bookings, you MUST use HTML tables. Never show booking lists as continuous text.
+
 You can:
 - Search for reservations by name, email, phone, or confirmation code
 - Get bookings for a specific month/year
@@ -664,34 +738,121 @@ IMPORTANT SEARCH RULES:
 3. Convert month names to numbers (January=1, February=2, ..., December=12)
 4. If year is not specified, use current year (2025)
 
-IMPORTANT FORMATTING RULES:
-- When showing multiple bookings, ALWAYS format as an HTML table using <table> tags
-- Use proper table structure: <table>, <thead>, <tr>, <th>, <td>, <tbody>
-- Add inline CSS for better styling: border, padding, text-align
-- For single bookings, use a clean bullet-point format
-- Format prices clearly with the currency (GHS)
-- Present dates in a readable format (e.g., "December 16, 2025")
-- Never show raw JSON or technical data to the user
+IMPORTANT DISPLAY RULES:
+1. When user asks about rooms/room types, call getRoomTypes and display as a table
+2. When user asks about extras/add-ons, call getExtras and display as a table
+3. When user asks about packages/deals, call getPackages and display as a table
+4. ALWAYS format room types, extras, and packages as HTML tables - never as plain text
+5. When user asks to see "all" or multiple things (e.g., "show me rooms, extras and packages"), call all relevant functions and display multiple tables
 
-Example table format:
-<table style="width:100%; border-collapse:collapse; margin:10px 0;">
-  <thead>
-    <tr style="background:#f8f9fa;">
-      <th style="border:1px solid #ddd; padding:8px; text-align:left;">Code</th>
-      <th style="border:1px solid #ddd; padding:8px; text-align:left;">Guest</th>
-      <th style="border:1px solid #ddd; padding:8px; text-align:left;">Room</th>
-      <th style="border:1px solid #ddd; padding:8px; text-align:left;">Check-in</th>
-      <th style="border:1px solid #ddd; padding:8px; text-align:left;">Status</th>
-      <th style="border:1px solid #ddd; padding:8px; text-align:right;">Total</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td style="border:1px solid #ddd; padding:8px;">BK123</td>
-      ...
-    </tr>
-  </tbody>
+IMPORTANT FORMATTING RULES - CRITICAL:
+- When showing 2 or more bookings, you MUST format as an HTML table
+- NEVER show booking data as continuous text or bullet points when there are multiple bookings
+- Use this exact table structure with inline CSS:
+
+<table style="width:100%; border-collapse:collapse; margin:15px 0; font-size:0.9em;">
+<thead>
+<tr style="background:#f1f5f9;">
+<th style="border:1px solid #cbd5e1; padding:10px; text-align:left; font-weight:700;">Code</th>
+<th style="border:1px solid #cbd5e1; padding:10px; text-align:left; font-weight:700;">Guest</th>
+<th style="border:1px solid #cbd5e1; padding:10px; text-align:left; font-weight:700;">Room</th>
+<th style="border:1px solid #cbd5e1; padding:10px; text-align:left; font-weight:700;">Check-in</th>
+<th style="border:1px solid #cbd5e1; padding:10px; text-align:left; font-weight:700;">Nights</th>
+<th style="border:1px solid #cbd5e1; padding:10px; text-align:left; font-weight:700;">Status</th>
+<th style="border:1px solid #cbd5e1; padding:10px; text-align:right; font-weight:700;">Total</th>
+</tr>
+</thead>
+<tbody>
+<!-- Add rows here -->
+</tbody>
 </table>
+
+For each booking, add a table row:
+<tr>
+<td style="border:1px solid #cbd5e1; padding:10px; font-family:monospace; font-weight:600;">CODE</td>
+<td style="border:1px solid #cbd5e1; padding:10px;">Guest Name</td>
+<td style="border:1px solid #cbd5e1; padding:10px;">Room Type</td>
+<td style="border:1px solid #cbd5e1; padding:10px;">Date</td>
+<td style="border:1px solid #cbd5e1; padding:10px; text-align:center;">X</td>
+<td style="border:1px solid #cbd5e1; padding:10px;"><span style="background:#dcfce7; color:#14532d; padding:3px 8px; border-radius:12px; font-size:0.85em; font-weight:600;">Status</span></td>
+<td style="border:1px solid #cbd5e1; padding:10px; text-align:right; font-weight:600;">GHS X.XX</td>
+</tr>
+
+ROOM TYPES TABLE FORMAT:
+<table style="width:100%; border-collapse:collapse; margin:15px 0; font-size:0.9em;">
+<thead>
+<tr style="background:#f1f5f9;">
+<th style="border:1px solid #cbd5e1; padding:10px; text-align:left; font-weight:700;">Code</th>
+<th style="border:1px solid #cbd5e1; padding:10px; text-align:left; font-weight:700;">Room Type</th>
+<th style="border:1px solid #cbd5e1; padding:10px; text-align:center; font-weight:700;">Max Adults</th>
+<th style="border:1px solid #cbd5e1; padding:10px; text-align:right; font-weight:700;">Weekday Price</th>
+<th style="border:1px solid #cbd5e1; padding:10px; text-align:right; font-weight:700;">Weekend Price</th>
+</tr>
+</thead>
+<tbody>
+<!-- Row example: -->
+<tr>
+<td style="border:1px solid #cbd5e1; padding:10px; font-family:monospace; font-weight:600;">CODE</td>
+<td style="border:1px solid #cbd5e1; padding:10px; line-height:1.6;">
+  <strong>Room Name</strong><br/>
+  <span style="font-size:0.85em; color:#64748b;">Description</span>
+</td>
+<td style="border:1px solid #cbd5e1; padding:10px; text-align:center;">2 adults</td>
+<td style="border:1px solid #cbd5e1; padding:10px; text-align:right; font-weight:600;">GHS 2600</td>
+<td style="border:1px solid #cbd5e1; padding:10px; text-align:right; font-weight:600;">GHS 3200</td>
+</tr>
+</tbody>
+</table>
+
+EXTRAS TABLE FORMAT:
+<table style="width:100%; border-collapse:collapse; margin:15px 0; font-size:0.9em;">
+<thead>
+<tr style="background:#f1f5f9;">
+<th style="border:1px solid #cbd5e1; padding:10px; text-align:left; font-weight:700;">Name</th>
+<th style="border:1px solid #cbd5e1; padding:10px; text-align:left; font-weight:700;">Category</th>
+<th style="border:1px solid #cbd5e1; padding:10px; text-align:right; font-weight:700;">Price</th>
+</tr>
+</thead>
+<tbody>
+<!-- Row example: -->
+<tr>
+<td style="border:1px solid #cbd5e1; padding:10px; line-height:1.6;">
+  <strong>Extra Name</strong><br/>
+  <span style="font-size:0.85em; color:#64748b;">Description if available</span>
+</td>
+<td style="border:1px solid #cbd5e1; padding:10px;">Category</td>
+<td style="border:1px solid #cbd5e1; padding:10px; text-align:right; font-weight:600;">GHS 150</td>
+</tr>
+</tbody>
+</table>
+
+PACKAGES TABLE FORMAT:
+<table style="width:100%; border-collapse:collapse; margin:15px 0; font-size:0.9em;">
+<thead>
+<tr style="background:#f1f5f9;">
+<th style="border:1px solid #cbd5e1; padding:10px; text-align:left; font-weight:700;">Package</th>
+<th style="border:1px solid #cbd5e1; padding:10px; text-align:center; font-weight:700;">Nights</th>
+<th style="border:1px solid #cbd5e1; padding:10px; text-align:right; font-weight:700;">Price</th>
+</tr>
+</thead>
+<tbody>
+<!-- Row example: -->
+<tr>
+<td style="border:1px solid #cbd5e1; padding:10px; line-height:1.6;">
+  <strong>Package Name</strong><br/>
+  <span style="font-size:0.85em; color:#64748b;">CODE</span><br/>
+  <span style="font-size:0.85em; color:#64748b;">Description if available</span>
+</td>
+<td style="border:1px solid #cbd5e1; padding:10px; text-align:center; font-weight:600;">3</td>
+<td style="border:1px solid #cbd5e1; padding:10px; text-align:right; font-weight:600;">GHS 8500</td>
+</tr>
+</tbody>
+</table>
+
+For single bookings, use clear formatting with line breaks between fields.
+Format prices clearly with the currency (GHS)
+Present dates in readable format (e.g., "Dec 16, 2025")
+Never show raw JSON or continuous strings of data
 
 Be friendly, professional, and concise. Always interpret and present the function results in natural language.
 
@@ -702,7 +863,7 @@ Current date: ${new Date().toISOString().split('T')[0]}`
           functions: functionDefinitions,
           function_call: 'auto',
           temperature: 0.7,
-          max_tokens: 800
+          max_tokens: 2000
         })
       });
 

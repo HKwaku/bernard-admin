@@ -106,8 +106,8 @@ export function initApp() {
 
             <div id="view-reservations" class="card panel">
               <div class="card-bd">
-                <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px">
-                  <input id="res-search" class="input" placeholder="Search name/email/code…" />
+                <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+                  <input id="res-search" class="input" placeholder="Search name/email/code…" style="flex:1;min-width:200px" />
                   <select id="res-month" class="select">
                     <option value="">All months</option>
                     ${Array.from({ length: 12 })
@@ -118,8 +118,13 @@ export function initApp() {
                       .join('')}
                   </select>
                   <select id="res-year" class="select"></select>
+                  <div style="display:flex;gap:4px;border:1px solid #cbd5e1;border-radius:8px;padding:2px">
+                    <button id="view-list-btn" class="btn-view active" title="List View">📋</button>
+                    <button id="view-calendar-btn" class="btn-view" title="Calendar View">📅</button>
+                  </div>
                 </div>
                 <div id="res-list" class="list">Loading…</div>
+                <div id="res-calendar" class="calendar-view" style="display:none"></div>
               </div>
             </div>
 
@@ -443,18 +448,141 @@ export function initApp() {
   }
 
   // ---------- Reservations ----------
+  let allReservations = [];
+  let currentView = 'list'; // 'list' or 'calendar'
+  
   async function initReservations() {
     const list = $('#res-list');
     list.textContent = 'Loading…';
-    const { data, error } = await supabase.from('reservations').select('*').order('created_at', { ascending: false });
-    if (error) {
-      list.innerHTML = `<div style="color:#b91c1c">Error: ${error.message}</div>`;
+    
+    try {
+      const { data, error } = await supabase
+        .from('reservations')
+        .select('*')
+        .order('check_in', { ascending: false });
+      
+      if (error) {
+        list.innerHTML = `<div style="color:#b91c1c">Error: ${error.message}</div>`;
+        return;
+      }
+      
+      allReservations = data || [];
+      setupReservationFilters();
+      renderReservations();
+    } catch (e) {
+      list.innerHTML = `<div style="color:#b91c1c">Error loading reservations</div>`;
+    }
+  }
+  
+  function setupReservationFilters() {
+    const searchInput = $('#res-search');
+    const monthSelect = $('#res-month');
+    const yearSelect = $('#res-year');
+    const listBtn = $('#view-list-btn');
+    const calendarBtn = $('#view-calendar-btn');
+    
+    // Populate year dropdown
+    if (yearSelect) {
+      const currentYear = new Date().getFullYear();
+      const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
+      yearSelect.innerHTML = '<option value="">All years</option>' + 
+        years.map(y => `<option value="${y}">${y}</option>`).join('');
+    }
+    
+    // Search input filter
+    if (searchInput) {
+      searchInput.addEventListener('input', () => renderReservations());
+    }
+    
+    // Month filter
+    if (monthSelect) {
+      monthSelect.addEventListener('change', () => renderReservations());
+    }
+    
+    // Year filter
+    if (yearSelect) {
+      yearSelect.addEventListener('change', () => renderReservations());
+    }
+    
+    // View toggle
+    if (listBtn) {
+      listBtn.addEventListener('click', () => {
+        currentView = 'list';
+        listBtn.classList.add('active');
+        calendarBtn.classList.remove('active');
+        renderReservations();
+      });
+    }
+    
+    if (calendarBtn) {
+      calendarBtn.addEventListener('click', () => {
+        currentView = 'calendar';
+        calendarBtn.classList.add('active');
+        listBtn.classList.remove('active');
+        renderReservations();
+      });
+    }
+  }
+  
+  function filterReservations() {
+    const searchTerm = ($('#res-search')?.value || '').toLowerCase();
+    const selectedMonth = $('#res-month')?.value;
+    const selectedYear = $('#res-year')?.value;
+    
+    return allReservations.filter(r => {
+      // Search filter
+      if (searchTerm) {
+        const searchable = [
+          r.guest_first_name,
+          r.guest_last_name,
+          r.guest_email,
+          r.confirmation_code
+        ].join(' ').toLowerCase();
+        
+        if (!searchable.includes(searchTerm)) return false;
+      }
+      
+      // Month filter
+      if (selectedMonth !== '' && r.check_in) {
+        const checkInDate = new Date(r.check_in);
+        if (checkInDate.getMonth() !== parseInt(selectedMonth)) return false;
+      }
+      
+      // Year filter
+      if (selectedYear && r.check_in) {
+        const checkInDate = new Date(r.check_in);
+        if (checkInDate.getFullYear() !== parseInt(selectedYear)) return false;
+      }
+      
+      return true;
+    });
+  }
+  
+  function renderReservations() {
+    const filtered = filterReservations();
+    
+    if (currentView === 'list') {
+      renderListView(filtered);
+    } else {
+      renderCalendarView(filtered);
+    }
+  }
+  
+  function renderListView(data) {
+    const list = $('#res-list');
+    const calendar = $('#res-calendar');
+    
+    if (list) list.style.display = 'block';
+    if (calendar) calendar.style.display = 'none';
+    
+    if (!data || data.length === 0) {
+      list.innerHTML = '<div style="color:#6b7280;padding:20px;text-align:center">No reservations found</div>';
       return;
     }
+    
     list.innerHTML = data
-      .map(
-        (r) => `
-        <div class="item">
+      .map(r => `
+        <div class="item" onclick="showReservationDetails('${r.confirmation_code}')" style="cursor:pointer">
           <div class="row">
             <div>
               <div class="title">${r.guest_first_name} ${r.guest_last_name}</div>
@@ -469,13 +597,172 @@ export function initApp() {
                 <span class="badge ${r.status === 'confirmed' ? 'ok' : 'err'}">${r.status}</span>
                 <span class="badge ${r.payment_status === 'paid' ? 'ok' : 'err'}">${r.payment_status || 'unpaid'}</span>
               </div>
-              <div class="price">${formatCurrency(r.total || 0, r.currency || 'GBP')}</div>
+              <div class="price">${formatCurrency(r.total || 0, r.currency || 'GHS')}</div>
             </div>
           </div>
-        </div>`
-      )
+        </div>
+      `)
       .join('');
   }
+  
+  function renderCalendarView(data) {
+    const list = $('#res-list');
+    const calendar = $('#res-calendar');
+    
+    if (list) list.style.display = 'none';
+    if (calendar) calendar.style.display = 'block';
+    
+    // Determine which month to show
+    const selectedMonth = $('#res-month')?.value;
+    const selectedYear = $('#res-year')?.value;
+    
+    let displayDate;
+    if (selectedMonth !== '' && selectedYear) {
+      displayDate = new Date(parseInt(selectedYear), parseInt(selectedMonth), 1);
+    } else if (selectedYear) {
+      displayDate = new Date(parseInt(selectedYear), new Date().getMonth(), 1);
+    } else if (selectedMonth !== '') {
+      displayDate = new Date(new Date().getFullYear(), parseInt(selectedMonth), 1);
+    } else {
+      displayDate = new Date();
+    }
+    
+    renderCalendar(displayDate, data);
+  }
+  
+  function renderCalendar(date, reservations) {
+    const calendar = $('#res-calendar');
+    if (!calendar) return;
+    
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const startingDayOfWeek = firstDay.getDay();
+    const monthDays = lastDay.getDate();
+    
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                        'July', 'August', 'September', 'October', 'November', 'December'];
+    
+    // Group reservations by date
+    const reservationsByDate = {};
+    reservations.forEach(r => {
+      const checkIn = new Date(r.check_in);
+      const checkOut = new Date(r.check_out);
+      
+      // Add reservation to all dates it spans
+      for (let d = new Date(checkIn); d <= checkOut; d.setDate(d.getDate() + 1)) {
+        if (d.getMonth() === month && d.getFullYear() === year) {
+          const dateKey = d.getDate();
+          if (!reservationsByDate[dateKey]) reservationsByDate[dateKey] = [];
+          reservationsByDate[dateKey].push(r);
+        }
+      }
+    });
+    
+    let calendarHTML = `
+      <div class="calendar-container">
+        <div class="calendar-header">
+          <button class="btn" id="prev-month">‹</button>
+          <h3 style="margin:0;flex:1;text-align:center">${monthNames[month]} ${year}</h3>
+          <button class="btn" id="next-month">›</button>
+        </div>
+        <div class="calendar-grid">
+          <div class="calendar-day-header">Sun</div>
+          <div class="calendar-day-header">Mon</div>
+          <div class="calendar-day-header">Tue</div>
+          <div class="calendar-day-header">Wed</div>
+          <div class="calendar-day-header">Thu</div>
+          <div class="calendar-day-header">Fri</div>
+          <div class="calendar-day-header">Sat</div>
+    `;
+    
+    // Empty cells before first day
+    for (let i = 0; i < startingDayOfWeek; i++) {
+      calendarHTML += '<div class="calendar-day empty"></div>';
+    }
+    
+    // Days of the month
+    for (let day = 1; day <= monthDays; day++) {
+      const bookings = reservationsByDate[day] || [];
+      const isToday = new Date().toDateString() === new Date(year, month, day).toDateString();
+      
+      calendarHTML += `
+        <div class="calendar-day ${isToday ? 'today' : ''}" data-date="${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}">
+          <div class="calendar-day-number">${day}</div>
+          <div class="calendar-bookings">
+            ${bookings.slice(0, 3).map(b => {
+              const checkIn = new Date(b.check_in);
+              const isCheckIn = checkIn.getDate() === day && checkIn.getMonth() === month;
+              return `
+                <div class="calendar-booking ${isCheckIn ? 'check-in' : 'staying'}" 
+                     onclick="showReservationDetails('${b.confirmation_code}')"
+                     title="${b.guest_first_name} ${b.guest_last_name} - ${b.room_name}">
+                  ${isCheckIn ? '→ ' : ''}${b.guest_first_name} ${b.guest_last_name.charAt(0)}.
+                </div>
+              `;
+            }).join('')}
+            ${bookings.length > 3 ? `<div class="calendar-more">+${bookings.length - 3} more</div>` : ''}
+          </div>
+        </div>
+      `;
+    }
+    
+    calendarHTML += `
+        </div>
+      </div>
+    `;
+    
+    calendar.innerHTML = calendarHTML;
+    
+    // Add navigation handlers
+    $('#prev-month')?.addEventListener('click', () => {
+      const prevMonth = new Date(year, month - 1, 1);
+      renderCalendar(prevMonth, reservations);
+    });
+    
+    $('#next-month')?.addEventListener('click', () => {
+      const nextMonth = new Date(year, month + 1, 1);
+      renderCalendar(nextMonth, reservations);
+    });
+  }
+  
+  // Global function to show reservation details
+  window.showReservationDetails = async (confirmationCode) => {
+    const reservation = allReservations.find(r => r.confirmation_code === confirmationCode);
+    if (!reservation) return;
+    
+    const details = `
+      <div style="line-height:1.8">
+        <h3 style="margin:0 0 15px 0">${reservation.guest_first_name} ${reservation.guest_last_name}</h3>
+        <p><strong>Email:</strong> ${reservation.guest_email || 'N/A'}</p>
+        <p><strong>Phone:</strong> ${reservation.guest_phone || 'N/A'}</p>
+        <p><strong>Confirmation Code:</strong> <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px">${reservation.confirmation_code}</code></p>
+        <p><strong>Room:</strong> ${reservation.room_name || 'N/A'}</p>
+        <p><strong>Check-in:</strong> ${reservation.check_in}</p>
+        <p><strong>Check-out:</strong> ${reservation.check_out}</p>
+        <p><strong>Nights:</strong> ${reservation.nights || 1}</p>
+        <p><strong>Guests:</strong> ${reservation.adults || 1} adults</p>
+        <p><strong>Status:</strong> <span class="badge ${reservation.status === 'confirmed' ? 'ok' : 'err'}">${reservation.status}</span></p>
+        <p><strong>Payment:</strong> <span class="badge ${reservation.payment_status === 'paid' ? 'ok' : 'err'}">${reservation.payment_status || 'unpaid'}</span></p>
+        <p><strong>Total:</strong> ${formatCurrency(reservation.total || 0, reservation.currency || 'GHS')}</p>
+        ${reservation.notes ? `<p><strong>Notes:</strong> ${reservation.notes}</p>` : ''}
+      </div>
+    `;
+    
+    // Show in a simple alert for now (you can enhance this with a modal)
+    const modal = document.createElement('div');
+    modal.innerHTML = `
+      <div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center" onclick="this.remove()">
+        <div style="background:white;padding:30px;border-radius:12px;max-width:500px;width:90%;max-height:80vh;overflow-y:auto" onclick="event.stopPropagation()">
+          ${details}
+          <button class="btn" onclick="this.closest('div[style*=fixed]').remove()" style="margin-top:20px;width:100%">Close</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  };
+
 
   // ---------- Rooms ----------
   async function initRooms() {
