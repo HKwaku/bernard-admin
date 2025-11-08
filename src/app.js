@@ -867,7 +867,7 @@ async function initCoupons() {
   panel.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <h2 style="margin:0"> </h2>
-      <button class="btn btn-primary" id="coupon-add-btn" style="margin-right:8px"> + </button>
+      <button class="btn btn-primary" id="coupon-add-btn" style="margin-right:12px; margin-top:20px">+ Add </button>
     </div>
     <div id="coupons-list"><div class="muted">Loading…</div></div>
   `;
