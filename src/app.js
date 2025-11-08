@@ -865,9 +865,9 @@ async function initCoupons() {
   if (!panel) return;
 
   panel.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <h2 style="margin:0">Coupons</h2>
-      <button class="btn btn-primary" id="coupon-add-btn">+ Add Coupon</button>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h2 style="margin:0"> </h2>
+      <button class="btn btn-primary" id="coupon-add-btn" style="margin-right:8px"> + </button>
     </div>
     <div id="coupons-list"><div class="muted">Loading…</div></div>
   `;
@@ -898,33 +898,28 @@ async function coupons_renderList() {
     }
 
     r.innerHTML = rows.map(c => {
+      const discountLabel = c.discount_type === 'percentage' ? `${c.discount_value}%` : `£${c.discount_value}`;
+      const appliesToLabel = c.applies_to === 'both' ? 'both' : c.applies_to;
+      
       return `
-        <div class="data-card" data-id="${c.id}">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
-            <div>
-              <div style="font:800 18px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; color:#4f46e5">${(c.code||'').toUpperCase()}</div>
-              <div class="muted" style="margin-top:4px">${c.description || ''}</div>
+        <div class="item coupon-card" data-id="${c.id}">
+          <div class="row">
+            <div style="flex:1">
+              <div class="coupon-code">${(c.code||'').toUpperCase()}</div>
+              ${c.description ? `<div class="meta" style="margin-top:6px">${c.description}</div>` : ''}
             </div>
             <span class="badge ${c.is_active ? 'ok' : 'err'}">${c.is_active ? 'Active' : 'Inactive'}</span>
           </div>
-
-          <div class="data-row"><span>Discount</span>
-            <strong>${c.discount_type === 'percentage' ? `${c.discount_value}%` : `£${c.discount_value}`} · ${c.applies_to || 'both'}</strong>
-          </div>
-          <div class="data-row"><span>Usage</span>
-            <strong>${c.current_uses ?? 0}${c.max_uses ? `/${c.max_uses}` : ''}</strong>
-          </div>
-          ${c.max_uses_per_guest ? `<div class="data-row"><span>Max per guest</span><strong>${c.max_uses_per_guest}</strong></div>` : ''}
-          ${c.min_booking_amount ? `<div class="data-row"><span>Min booking</span><strong>£${c.min_booking_amount}</strong></div>` : ''}
-          <div class="data-row" style="border:0">
-            <span>Validity</span>
-            <strong>
-              ${c.valid_from ? new Date(c.valid_from).toLocaleDateString() : '—'} → 
-              ${c.valid_until ? new Date(c.valid_until).toLocaleDateString() : 'No expiry'}
-            </strong>
+          
+          <div class="meta" style="margin-top:14px;display:flex;flex-wrap:wrap;gap:20px;align-items:center">
+            <div><strong style="color:#0f172a">${discountLabel} off</strong> · ${appliesToLabel}</div>
+            <div>Used <strong style="color:#0f172a">${c.current_uses ?? 0}${c.max_uses ? `/${c.max_uses}` : ''}</strong></div>
+            ${c.max_uses_per_guest ? `<div>Max <strong style="color:#0f172a">${c.max_uses_per_guest}</strong>/guest</div>` : ''}
+            ${c.min_booking_amount ? `<div>Min <strong style="color:#0f172a">£${c.min_booking_amount}</strong></div>` : ''}
+            ${c.valid_from || c.valid_until ? `<div>${c.valid_from ? new Date(c.valid_from).toLocaleDateString('en-GB', {day:'2-digit',month:'2-digit',year:'numeric'}) : '—'} → ${c.valid_until ? new Date(c.valid_until).toLocaleDateString('en-GB', {day:'2-digit',month:'2-digit',year:'numeric'}) : '∞'}</div>` : ''}
           </div>
 
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+          <div style="display:flex;gap:8px;margin-top:14px">
             <button class="btn" data-action="edit" data-id="${c.id}">Edit</button>
             <button class="btn ${c.is_active ? 'btn-danger' : ''}" data-action="deactivate" data-id="${c.id}" ${!c.is_active ? 'disabled' : ''}>Deactivate</button>
           </div>
