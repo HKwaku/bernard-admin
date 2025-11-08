@@ -772,7 +772,7 @@ export function initApp() {
 
     const { data, error } = await supabase
       .from('room_types')
-      .select('code,name,base_price_per_night_weekday,base_price_per_night_weekend,currency,image_url,max_adults,description')
+      .select('code,name,base_price_per_night_weekday,base_price_per_night_weekend,currency,image_url,max_adults')
       .order('code', { ascending: true });
 
     if (error) {
@@ -845,30 +845,317 @@ export function initApp() {
       .join('');
   }
 
-  // ---------- Coupons ----------
-  async function initCoupons() {
-    const el = $('#coupons-list');
-    el.textContent = 'Loading…';
-    const { data, error } = await supabase.from('coupons').select('*').order('created_at', { ascending: false });
-    if (error) {
-      el.innerHTML = `<div style="color:#b91c1c">Error: ${error.message}</div>`;
+/* =========================
+   COUPONS (self-contained)
+   Supabase columns:
+   id, code, description, discount_type, discount_value,
+   applies_to, valid_from, valid_until,
+   max_uses, current_uses, max_uses_per_guest,
+   min_booking_amount, is_active, created_at, updated_at, created_by
+   ========================= */
+
+// ---- Utilities local to this module ----
+function $$sel(s, root = document) { return Array.from(root.querySelectorAll(s)); }
+function $sel(s, root = document) { return root.querySelector(s); }
+function coupons_nowISO(){ return new Date().toISOString(); }
+
+// ---- List + header ----
+async function initCoupons() {
+  const panel = $sel('#view-coupons');
+  if (!panel) return;
+
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h2 style="margin:0">Coupons</h2>
+      <button class="btn btn-primary" id="coupon-add-btn">+ Add Coupon</button>
+    </div>
+    <div id="coupons-list"><div class="muted">Loading…</div></div>
+  `;
+
+  $sel('#coupon-add-btn')?.addEventListener('click', () => coupons_openForm()); // ADD
+
+  await coupons_renderList();
+}
+
+async function coupons_renderList() {
+  const r = $sel('#coupons-list');
+  if (!r) return;
+
+  r.innerHTML = '<div class="muted" style="padding:12px">Loading…</div>';
+
+  try {
+    const { data, error } = await supabase
+      .from('coupons')
+      .select('id,code,description,discount_type,discount_value,applies_to,valid_from,valid_until,max_uses,current_uses,max_uses_per_guest,min_booking_amount,is_active,created_at,updated_at')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const rows = data ?? [];
+    if (!rows.length) {
+      r.innerHTML = '<div class="muted" style="padding:20px">No coupons found.</div>';
       return;
     }
-    el.innerHTML = data
-      .map(
-        (c) => `
-      <div class="item">
-        <div class="row">
-          <div>
-            <div class="title">${c.code}</div>
-            <div class="meta">${c.description || ''}</div>
+
+    r.innerHTML = rows.map(c => {
+      return `
+        <div class="data-card" data-id="${c.id}">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+            <div>
+              <div style="font:800 18px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; color:#4f46e5">${(c.code||'').toUpperCase()}</div>
+              <div class="muted" style="margin-top:4px">${c.description || ''}</div>
+            </div>
+            <span class="badge ${c.is_active ? 'ok' : 'err'}">${c.is_active ? 'Active' : 'Inactive'}</span>
           </div>
-          <div class="meta">${c.type || ''} ${c.value || ''}</div>
+
+          <div class="data-row"><span>Discount</span>
+            <strong>${c.discount_type === 'percentage' ? `${c.discount_value}%` : `£${c.discount_value}`} · ${c.applies_to || 'both'}</strong>
+          </div>
+          <div class="data-row"><span>Usage</span>
+            <strong>${c.current_uses ?? 0}${c.max_uses ? `/${c.max_uses}` : ''}</strong>
+          </div>
+          ${c.max_uses_per_guest ? `<div class="data-row"><span>Max per guest</span><strong>${c.max_uses_per_guest}</strong></div>` : ''}
+          ${c.min_booking_amount ? `<div class="data-row"><span>Min booking</span><strong>£${c.min_booking_amount}</strong></div>` : ''}
+          <div class="data-row" style="border:0">
+            <span>Validity</span>
+            <strong>
+              ${c.valid_from ? new Date(c.valid_from).toLocaleDateString() : '—'} → 
+              ${c.valid_until ? new Date(c.valid_until).toLocaleDateString() : 'No expiry'}
+            </strong>
+          </div>
+
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+            <button class="btn" data-action="edit" data-id="${c.id}">Edit</button>
+            <button class="btn ${c.is_active ? 'btn-danger' : ''}" data-action="deactivate" data-id="${c.id}" ${!c.is_active ? 'disabled' : ''}>Deactivate</button>
+          </div>
         </div>
-      </div>`
-      )
-      .join('');
+      `;
+    }).join('');
+
+    // wire row actions
+    $$sel('button[data-action="edit"]', r).forEach(btn =>
+      btn.addEventListener('click', () => coupons_openForm(btn.dataset.id)) // EDIT
+    );
+    $$sel('button[data-action="deactivate"]', r).forEach(btn =>
+      btn.addEventListener('click', () => coupons_deactivate(btn.dataset.id)) // DEACTIVATE
+    );
+
+  } catch (e) {
+    console.error(e);
+    r.innerHTML = `<div style="color:#b91c1c">Error: ${e.message || e}</div>`;
   }
+}
+
+// ---- Deactivate (is_active = false) ----
+async function coupons_deactivate(id) {
+  if (!id) return;
+  if (!confirm('Deactivate this coupon?')) return;
+
+  try {
+    const { error } = await supabase
+      .from('coupons')
+      .update({ is_active: false, updated_at: coupons_nowISO() })
+      .eq('id', id);
+    if (error) throw error;
+    await coupons_renderList();
+  } catch (e) {
+    alert('Failed: ' + (e.message || e));
+  }
+}
+
+// ---- Modal form (Add / Edit) ----
+function coupons_openForm(id /* optional */) {
+  const modal = document.createElement('div');
+  modal.className = 'modal show';
+  modal.id = 'coupon-modal';
+
+  // basic once-off styles (only if you don’t already have .modal)
+  if (!$sel('#coupon-modal-inline-styles')) {
+    const style = document.createElement('style');
+    style.id = 'coupon-modal-inline-styles';
+    style.textContent = `
+      .modal.show{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(15,23,42,.35);z-index:999}
+      .modal .content{background:#fff;border-radius:12px;max-width:680px;width:92vw;box-shadow:0 10px 30px rgba(0,0,0,.15)}
+      .modal .hd{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid #e5e7eb}
+      .modal .bd{padding:16px}
+      .modal .ft{padding:12px 16px;border-top:1px solid #e5e7eb;display:flex;gap:8px;justify-content:flex-end}
+      .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+      .form-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+      .form-group{display:flex;flex-direction:column;gap:6px}
+      .form-group input, .form-group select{padding:8px 10px;border:1px solid #e5e7eb;border-radius:10px}
+      .muted{color:#64748b}
+      @media (max-width:720px){.form-grid,.form-grid-3{grid-template-columns:1fr}}
+    `;
+    document.head.appendChild(style);
+  }
+
+  modal.innerHTML = `
+    <div class="content">
+      <div class="hd">
+        <h3 id="coupon-modal-title" style="margin:0">${id ? 'Edit Coupon' : 'Add Coupon'}</h3>
+        <button id="coupon-close" class="btn">×</button>
+      </div>
+      <div class="bd">
+        <div id="coupon-error" class="muted" style="min-height:18px"></div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Code *</label>
+            <input id="c-code" required style="text-transform:uppercase" />
+          </div>
+          <div class="form-group">
+            <label>Applies To *</label>
+            <select id="c-applies">
+              <option value="both">Both</option>
+              <option value="rooms">Rooms Only</option>
+              <option value="extras">Extras Only</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Discount Type *</label>
+            <select id="c-type">
+              <option value="percentage">Percentage</option>
+              <option value="fixed">Fixed amount</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Discount Value *</label>
+            <input id="c-value" type="number" step="0.01" required />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Description</label>
+          <input id="c-desc" />
+        </div>
+
+        <div class="form-grid-3">
+          <div class="form-group">
+            <label>Valid From</label>
+            <input id="c-from" type="date" />
+          </div>
+          <div class="form-group">
+            <label>Valid Until</label>
+            <input id="c-until" type="date" />
+          </div>
+          <div class="form-group">
+            <label>Active</label>
+            <select id="c-active">
+              <option value="true" selected>Yes</option>
+              <option value="false">No</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Max Uses (overall)</label>
+            <input id="c-max" type="number" />
+          </div>
+          <div class="form-group">
+            <label>Max Uses per Guest</label>
+            <input id="c-max-guest" type="number" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Min Booking Amount (£)</label>
+          <input id="c-min" type="number" step="0.01" />
+        </div>
+      </div>
+      <div class="ft">
+        <button class="btn" id="coupon-cancel">Cancel</button>
+        <button class="btn btn-primary" id="coupon-save">${id ? 'Update' : 'Create'}</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  // Close handlers
+  const close = () => modal.remove();
+  $sel('#coupon-close', modal).addEventListener('click', close);
+  $sel('#coupon-cancel', modal).addEventListener('click', close);
+  modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+
+  // If editing, fetch & populate
+  if (id) {
+    coupons_fillForm(id).catch(err => {
+      $sel('#coupon-error').textContent = 'Error loading coupon: ' + (err.message || err);
+    });
+  }
+
+  // Save
+  $sel('#coupon-save', modal).addEventListener('click', async () => {
+    try {
+      const payload = coupons_collectForm();
+      if (id) {
+        await supabase.from('coupons').update({ ...payload, updated_at: coupons_nowISO() }).eq('id', id);
+      } else {
+        await supabase.from('coupons').insert({ ...payload, created_at: coupons_nowISO(), updated_at: coupons_nowISO(), current_uses: 0 });
+      }
+      close();
+      await coupons_renderList();
+    } catch (e) {
+      $sel('#coupon-error').textContent = 'Error saving: ' + (e.message || e);
+    }
+  });
+}
+
+function coupons_collectForm() {
+  const code = $sel('#c-code').value.trim().toUpperCase();
+  const description = $sel('#c-desc').value.trim() || null;
+  const discount_type = $sel('#c-type').value;
+  const discount_value = parseFloat($sel('#c-value').value);
+  const applies_to = $sel('#c-applies').value;
+  const valid_from = $sel('#c-from').value || null;
+  const valid_until = $sel('#c-until').value || null;
+  const is_active = $sel('#c-active').value === 'true';
+  const max_uses = $sel('#c-max').value ? parseInt($sel('#c-max').value, 10) : null;
+  const max_uses_per_guest = $sel('#c-max-guest').value ? parseInt($sel('#c-max-guest').value, 10) : null;
+  const min_booking_amount = $sel('#c-min').value ? parseFloat($sel('#c-min').value) : null;
+
+  if (!code || Number.isNaN(discount_value)) {
+    throw new Error('Code and Discount Value are required.');
+  }
+  return {
+    code,
+    description,
+    discount_type,
+    discount_value,
+    applies_to,
+    valid_from,
+    valid_until,
+    is_active,
+    max_uses,
+    max_uses_per_guest,
+    min_booking_amount
+  };
+}
+
+async function coupons_fillForm(id) {
+  const { data, error } = await supabase
+    .from('coupons')
+    .select('*')
+    .eq('id', id)
+    .single();
+  if (error) throw error;
+  const c = data;
+
+  $sel('#c-code').value = (c.code || '').toUpperCase();
+  $sel('#c-desc').value = c.description || '';
+  $sel('#c-type').value = c.discount_type || 'percentage';
+  $sel('#c-value').value = c.discount_value ?? '';
+  $sel('#c-applies').value = c.applies_to || 'both';
+  $sel('#c-from').value = c.valid_from || '';
+  $sel('#c-until').value = c.valid_until || '';
+  $sel('#c-active').value = c.is_active ? 'true' : 'false';
+  $sel('#c-max').value = c.max_uses ?? '';
+  $sel('#c-max-guest').value = c.max_uses_per_guest ?? '';
+  $sel('#c-min').value = c.min_booking_amount ?? '';
+}
 
   // ---------- Packages ----------
   async function initPackages() {
