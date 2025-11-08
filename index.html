@@ -3,23 +3,15 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Bernard Admin (Test)</title>
+    <title>Bernard Admin</title>
+    <link rel="stylesheet" href="styles.css" />
   </head>
-  <script>
-  document.getElementById('root').insertAdjacentHTML(
-    'beforeend',
-    '<p>✅ Inline script ran and touched the DOM.</p>'
-  );
-  console.log('[inline] ok');
-</script>
-<script type="module" src="/src/main.js"></script>
-
   <body>
-    <div class="card" id="root">
-      <h1>✅ Raw HTML is rendering</h1>
-      <p>If you see this, the dev server and <code>/index.html</code> are fine.</p>
+    <div id="root">
+      <!-- App content will be injected here -->
     </div>
-
-    <!-- No external scripts. If the page is blank now, the issue is NOT your JS. -->
+    
+    <!-- Load scripts in correct order -->
+    <script type="module" src="src/app.js"></script>
   </body>
 </html>

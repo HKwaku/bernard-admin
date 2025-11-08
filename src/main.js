@@ -1,6 +1,6 @@
 // src/main.js
-import './styles.css';
-import { initApp } from './app.js';
+import '.src/styles.css';
+import { initApp } from '.src/app.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   initApp();

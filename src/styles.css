@@ -1141,3 +1141,213 @@ label {
     transition-duration: 0.01ms !important;
   }
 }
+/* ===== Reservations: Calendar View ===== */
+
+.calendar-view {
+  width: 100%;
+}
+
+.calendar-container {
+  background: #fff;
+  border: 1px solid var(--ring);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 8px rgba(0,0,0,.04);
+  overflow: hidden;
+}
+
+.calendar-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--ring);
+  background: linear-gradient(180deg,#F9FBFF 0%,#F4F7FC 100%);
+}
+
+.calendar-header .btn {
+  padding: 8px 12px;
+  border-radius: 10px;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0;
+  width: 100%;
+}
+
+.calendar-day-header {
+  padding: 10px 12px;
+  font-weight: 800;
+  font-size: .875rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  background: #fbfdff;
+  border-bottom: 1px solid var(--ring);
+  text-align: center;
+}
+
+.calendar-day {
+  position: relative;
+  min-height: 120px;
+  border-right: 1px solid var(--ring);
+  border-bottom: 1px solid var(--ring);
+  background: #fff;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: background var(--transition-fast);
+}
+
+.calendar-day:nth-child(7n) {
+  border-right: 0; /* remove right border on last column */
+}
+
+.calendar-day:hover {
+  background: #f8fafc;
+}
+
+.calendar-day.empty {
+  background: #fafcff;
+}
+
+.calendar-day.today {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+  background: #f5f7ff;
+}
+
+.calendar-day-number {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-weight: 800;
+  font-size: .875rem;
+  color: #334155;
+  opacity: .9;
+}
+
+.calendar-bookings {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 18px;
+}
+
+.calendar-booking {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--ring);
+  border-radius: 10px;
+  background: #fff;
+  font-size: .85rem;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
+  box-shadow: 0 1px 3px rgba(0,0,0,.04);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.calendar-booking:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,.08);
+  background: #f8fafc;
+}
+
+.calendar-booking.check-in {
+  border-color: rgba(22,163,74,.25);
+  background: var(--ok-bg);
+  color: #14532d;
+  font-weight: 700;
+}
+
+.calendar-booking.staying {
+  border-color: #e5e7eb;
+  background: #fff;
+  color: #0f172a;
+}
+
+.calendar-more {
+  font-size: .82rem;
+  color: var(--brand);
+  font-weight: 800;
+  user-select: none;
+}
+
+.calendar-more::before {
+  content: "… ";
+  color: #64748b;
+}
+
+/* Toggle buttons beside filters (List/Calendar) */
+.btn-view {
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid var(--ring);
+  font-weight: 800;
+  line-height: 1;
+}
+
+.btn-view.active {
+  background: linear-gradient(135deg, var(--brand), var(--brand-2));
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 4px 12px rgba(108, 99, 255, 0.25);
+}
+
+/* ===== Calendar – Responsive ===== */
+@media (max-width: 1023px) {
+  .calendar-day {
+    min-height: 100px;
+    padding: 8px;
+  }
+  .calendar-booking {
+    padding: 5px 8px;
+    font-size: .82rem;
+  }
+}
+
+@media (max-width: 767px) {
+  /* Keep 7 columns but tighten spacing for small screens */
+  .calendar-day-header {
+    font-size: .75rem;
+    padding: 8px 6px;
+  }
+  .calendar-day {
+    min-height: 86px;
+    padding: 6px;
+  }
+  .calendar-day-number {
+    top: 6px;
+    right: 8px;
+    font-size: .75rem;
+  }
+  .calendar-bookings {
+    gap: 4px;
+    margin-top: 16px;
+  }
+  .calendar-booking {
+    padding: 4px 6px;
+    font-size: .78rem;
+    border-radius: 8px;
+  }
+  .calendar-more {
+    font-size: .78rem;
+  }
+}
+
+/* High density (lots of bookings): compress chips slightly */
+@media (max-width: 420px) {
+  .calendar-booking {
+    padding: 3px 6px;
+    font-size: .75rem;
+  }
+}

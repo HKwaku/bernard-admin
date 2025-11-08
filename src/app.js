@@ -1,6 +1,7 @@
 // src/app.js
 // Bernard Admin – main application script
 
+import './styles.css';
 import { supabase } from './config/supabase.js';
 import { callOpenAI, conversationHistory } from './config/openai.js';
 import {
@@ -896,4 +897,9 @@ export function initApp() {
       )
       .join('');
   }
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
+  initApp();
 }
