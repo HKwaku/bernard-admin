@@ -131,12 +131,18 @@ export function initApp() {
 
             <div id="view-rooms" class="card panel">
               <div class="card-bd">
+                <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+                  <button id="add-room-btn" class="btn">+ Add Room Type</button>
+                </div>
                 <div id="rooms-list" class="list">Loading…</div>
               </div>
             </div>
 
             <div id="view-extras" class="card panel">
               <div class="card-bd">
+                <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+                  <button id="add-extra-btn" class="btn">+ Add Extra</button>
+                </div>
                 <div id="extras-list" class="list">Loading…</div>
               </div>
             </div>
@@ -592,7 +598,9 @@ export function initApp() {
               <div class="meta">Check-in: ${r.check_in} • Check-out: ${r.check_out}</div>
               <div class="meta">Guests: ${r.adults || 1} • Nights: ${r.nights || 1}</div>
             </div>
-            <div style="text-align:right;min-width:180px">
+
+            <!-- right column – removed min-width to avoid stretch -->
+            <div style="text-align:right">
               <div class="code">${r.confirmation_code}</div>
               <div style="margin:6px 0">
                 <span class="badge ${r.status === 'confirmed' ? 'ok' : 'err'}">${r.status}</span>
@@ -601,9 +609,201 @@ export function initApp() {
               <div class="price">${formatCurrency(r.total || 0, r.currency || 'GHS')}</div>
             </div>
           </div>
+
+          <!-- actions footer (same style as room types) -->
+          <div class="room-card-footer" onclick="event.stopPropagation()">
+            <button class="btn btn-sm" data-res-edit="${r.id}">Edit</button>
+            <button class="btn btn-sm" data-res-delete="${r.id}" style="color:#b91c1c">Delete</button>
+          </div>
         </div>
       `)
       .join('');
+      list.querySelectorAll('[data-res-edit]').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    reservationOpenEdit(btn.getAttribute('data-res-edit'));
+  });
+});
+list.querySelectorAll('[data-res-delete]').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    reservationDelete(btn.getAttribute('data-res-delete'));
+  });
+});
+window.reservationOpenEdit = async function (id) {
+  // tiny helper to coerce date strings -> YYYY-MM-DD for <input type="date">
+  const toDateInput = (v) => {
+    if (!v) return '';
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return '';
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  };
+
+  try {
+    const { data: r, error } = await supabase
+      .from('reservations')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error) throw error;
+
+    // pick whichever room field your schema uses
+    const roomFieldKey = ('room_type_code' in r) ? 'room_type_code'
+                        : ('room_code' in r) ? 'room_code'
+                        : ('room_name' in r) ? 'room_name'
+                        : null;
+
+    const modal = document.createElement('div');
+    modal.className = 'modal show';
+    modal.id = 'reservation-modal';
+    modal.innerHTML = `
+      <div class="content" onclick="event.stopPropagation()">
+        <div class="hd">
+          <h3>Edit Reservation</h3>
+          <button class="btn" onclick="this.closest('#reservation-modal').remove()">×</button>
+        </div>
+
+        <div class="bd">
+          <div class="form-grid">
+            <div class="form-group">
+              <label>First Name</label>
+              <input id="res-first" type="text" value="${r.guest_first_name || ''}" />
+            </div>
+            <div class="form-group">
+              <label>Last Name</label>
+              <input id="res-last" type="text" value="${r.guest_last_name || ''}" />
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Email</label>
+              <input id="res-email" type="email" value="${r.guest_email || ''}" />
+            </div>
+            <div class="form-group">
+              <label>Phone</label>
+              <input id="res-phone" type="text" value="${r.guest_phone || ''}" />
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Check-in</label>
+              <input id="res-in" type="date" value="${toDateInput(r.check_in)}" />
+            </div>
+            <div class="form-group">
+              <label>Check-out</label>
+              <input id="res-out" type="date" value="${toDateInput(r.check_out)}" />
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Adults</label>
+              <input id="res-adults" type="number" min="1" step="1" value="${r.adults ?? 1}" />
+            </div>
+            <div class="form-group">
+              <label>Children</label>
+              <input id="res-children" type="number" min="0" step="1" value="${r.children ?? 0}" />
+            </div>
+          </div>
+
+          ${roomFieldKey ? `
+          <div class="form-group">
+            <label>${roomFieldKey.replace(/_/g,' ')}</label>
+            <input id="res-room" type="text" value="${r[roomFieldKey] || ''}" />
+          </div>` : ''}
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Status</label>
+              <select id="res-status">
+                <option value="pending" ${r.status==='pending'?'selected':''}>pending</option>
+                <option value="confirmed" ${r.status==='confirmed'?'selected':''}>confirmed</option>
+                <option value="cancelled" ${r.status==='cancelled'?'selected':''}>cancelled</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Payment Status</label>
+              <select id="res-pay">
+                <option value="unpaid" ${r.payment_status==='unpaid'?'selected':''}>unpaid</option>
+                <option value="paid" ${r.payment_status==='paid'?'selected':''}>paid</option>
+                <option value="refunded" ${r.payment_status==='refunded'?'selected':''}>refunded</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Currency</label>
+              <input id="res-currency" type="text" value="${r.currency || 'GHS'}" />
+            </div>
+            <div class="form-group">
+              <label>Total</label>
+              <input id="res-total" type="number" step="0.01" value="${r.total ?? ''}" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Notes</label>
+            <textarea id="res-notes" rows="3">${r.notes || ''}</textarea>
+          </div>
+        </div>
+
+        <div class="ft">
+          <button class="btn" onclick="this.closest('#reservation-modal').remove()">Cancel</button>
+          <button class="btn btn-primary" id="res-edit-save">Save</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    modal.querySelector('#res-edit-save').addEventListener('click', async () => {
+      const payload = {
+        guest_first_name: modal.querySelector('#res-first').value.trim() || null,
+        guest_last_name:  modal.querySelector('#res-last').value.trim() || null,
+        guest_email:      modal.querySelector('#res-email').value.trim() || null,
+        guest_phone:      modal.querySelector('#res-phone').value.trim() || null,
+        check_in:         modal.querySelector('#res-in').value || null,
+        check_out:        modal.querySelector('#res-out').value || null,
+        adults:           parseInt(modal.querySelector('#res-adults').value || '0', 10) || 0,
+        children:         parseInt(modal.querySelector('#res-children').value || '0', 10) || 0,
+        status:           modal.querySelector('#res-status').value,
+        payment_status:   modal.querySelector('#res-pay').value,
+        currency:         modal.querySelector('#res-currency').value.trim() || null,
+        total:            (modal.querySelector('#res-total').value === '' ? null : parseFloat(modal.querySelector('#res-total').value)),
+        notes:            modal.querySelector('#res-notes').value || null
+      };
+
+      if (roomFieldKey) {
+        payload[roomFieldKey] = modal.querySelector('#res-room').value.trim() || null;
+      }
+
+      const { error: upErr } = await supabase.from('reservations').update(payload).eq('id', id);
+      if (upErr) { alert('Error saving: ' + upErr.message); return; }
+      modal.remove();
+      toast('Reservation updated');
+      initReservations();
+    });
+  } catch (e) {
+    console.error(e);
+    alert('Error loading reservation: ' + (e.message || e));
+  }
+};
+
+window.reservationDelete = async function (id) {
+  if (!confirm('Delete this reservation? This cannot be undone.')) return;
+  try {
+    const { error } = await supabase.from('reservations').delete().eq('id', id);
+    if (error) throw error;
+    toast('Reservation deleted');
+    initReservations();
+  } catch (e) {
+    console.error(e);
+    alert('Error deleting reservation: ' + (e.message || e));
+  }
+};
+
   }
   
   function renderCalendarView(data) {
@@ -767,12 +967,21 @@ export function initApp() {
 
   // ---------- Rooms ----------
   async function initRooms() {
+    // Add event listener for Add Room button
+    const addBtn = $('#add-room-btn');
+    if (addBtn) {
+      // Remove existing listener to avoid duplicates
+      const newBtn = addBtn.cloneNode(true);
+      addBtn.parentNode.replaceChild(newBtn, addBtn);
+      newBtn.addEventListener('click', () => openRoomModal());
+    }
+
     const el = $('#rooms-list');
     el.textContent = 'Loading…';
 
     const { data, error } = await supabase
       .from('room_types')
-      .select('code,name,base_price_per_night_weekday,base_price_per_night_weekend,currency,image_url,max_adults')
+      .select('*')
       .order('code', { ascending: true });
 
     if (error) {
@@ -791,34 +1000,284 @@ export function initApp() {
         const img = r.image_url
           ? `<img src="${r.image_url}" alt="${r.name}" style="width:80px;height:60px;object-fit:cover;border-radius:8px;margin-right:10px;border:1px solid #e5e7eb" />`
           : '';
-        const desc = r.description
-          ? `<div class="meta" style="margin-top:6px;color:#6b7280">${r.description}</div>`
-          : '';
         const adults = `<div class="meta" style="margin-top:6px;opacity:.8">Sleeps up to <strong>${r.max_adults || 1}</strong></div>`;
+        const isActive = r.is_active !== false;
 
         return `
-          <div class="item">
-            <div class="row" style="align-items:center;gap:12px">
-              ${img}
-              <div style="flex:1">
-                <div class="title">${(r.code ?? '—').toString().toUpperCase()}</div>
-                <div class="meta">${r.name ?? ''}</div>
-                ${desc}
-                ${adults}
-              </div>
-              <div class="meta room-prices" style="text-align:right;min-width:220px">
-                <span class="weekday-price">Weekday: <strong>${r.base_price_per_night_weekday != null ? fmt(r.base_price_per_night_weekday, r.currency) : 'n/a'}</strong></span>
-                <span class="price-separator">&nbsp;•&nbsp;</span>
-                <span class="weekend-price">Weekend: <strong>${r.base_price_per_night_weekend != null ? fmt(r.base_price_per_night_weekend, r.currency) : 'n/a'}</strong></span>
-              </div>
+  <div class="item">
+    <!-- Top section: image + content -->
+    <div class="room-card-top">
+      <div class="room-card-media">
+        ${r.image_url ? `<img src="${r.image_url}" alt="${r.name || ''}">` : ''}
+      </div>
+      <div>
+        <div class="room-card-header">
+          <div>
+            <h3 class="room-card-title">${r.name ?? ''}</h3>
+            <div class="meta" style="margin-top:6px;opacity:.8">
+              Sleeps up to <strong>${r.max_adults || 1}</strong>
             </div>
-          </div>`;
+          </div>
+          <span class="badge ${isActive ? 'ok' : 'err'}">
+            ${isActive ? 'Active' : 'Inactive'}
+          </span>
+        </div>
+
+        <div class="room-card-body">
+          <div class="room-card-price-row">
+            <span>Weekday:</span>
+            <strong>${
+              r.base_price_per_night_weekday != null
+                ? fmt(r.base_price_per_night_weekday, r.currency)
+                : 'n/a'
+            }</strong>
+          </div>
+          <div class="room-card-price-row">
+            <span>Weekend:</span>
+            <strong>${
+              r.base_price_per_night_weekend != null
+                ? fmt(r.base_price_per_night_weekend, r.currency)
+                : 'n/a'
+            }</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer actions -->
+    <div class="room-card-footer">
+      <button class="btn btn-sm" data-room-edit="${r.id}">Edit</button>
+      <button
+        class="btn btn-sm"
+        data-room-toggle="${r.id}"
+        data-room-active="${isActive}"
+      >
+        ${isActive ? 'Deactivate' : 'Activate'}
+      </button>
+      <button
+        class="btn btn-sm"
+        data-room-delete="${r.id}"
+        style="color:#b91c1c"
+      >
+        Delete
+      </button>
+    </div>
+  </div>`;
       })
       .join('');
+
+    // Attach event listeners
+    el.querySelectorAll('[data-room-edit]').forEach(btn => {
+      btn.addEventListener('click', () => openRoomModal(btn.dataset.roomEdit));
+    });
+    el.querySelectorAll('[data-room-toggle]').forEach(btn => {
+      btn.addEventListener('click', () => toggleRoomStatus(btn.dataset.roomToggle, btn.dataset.roomActive === 'true'));
+    });
+    el.querySelectorAll('[data-room-delete]').forEach(btn => {
+      btn.addEventListener('click', () => deleteRoom(btn.dataset.roomDelete));
+    });
+  }
+
+  // Room Modal
+  function openRoomModal(id = null) {
+    const modal = document.createElement('div');
+    modal.id = 'room-modal';
+    modal.className = 'modal';
+    modal.style.display = 'flex';
+
+    modal.innerHTML = `
+      <div class="content">
+        <div class="hd">
+          <h3 id="room-modal-title" style="margin:0">${id ? 'Edit Room Type' : 'Add Room Type'}</h3>
+          <button id="room-close" class="btn">×</button>
+        </div>
+        <div class="bd">
+          <div id="room-error" class="muted" style="min-height:18px"></div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Code *</label>
+              <input id="r-code" required style="text-transform:uppercase" />
+            </div>
+            <div class="form-group">
+              <label>Name *</label>
+              <input id="r-name" required />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Description</label>
+            <textarea id="r-desc" rows="3" style="resize:vertical"></textarea>
+          </div>
+
+          <div class="form-grid-3">
+            <div class="form-group">
+              <label>Weekday Price *</label>
+              <input id="r-weekday" type="number" step="0.01" required />
+            </div>
+            <div class="form-group">
+              <label>Weekend Price *</label>
+              <input id="r-weekend" type="number" step="0.01" required />
+            </div>
+            <div class="form-group">
+              <label>Currency</label>
+              <select id="r-currency">
+                <option value="GBP">GBP (£)</option>
+                <option value="USD">USD ($)</option>
+                <option value="EUR">EUR (€)</option>
+                <option value="GHS">GHS (₵)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Max Adults</label>
+              <input id="r-max-adults" type="number" min="1" value="2" />
+            </div>
+            <div class="form-group">
+              <label>Active</label>
+              <select id="r-active">
+                <option value="true" selected>Yes</option>
+                <option value="false">No</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Image URL</label>
+            <input id="r-image" type="url" placeholder="https://..." />
+          </div>
+        </div>
+        <div class="ft">
+          <button class="btn" id="room-cancel">Cancel</button>
+          <button class="btn btn-primary" id="room-save">${id ? 'Update' : 'Create'}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    // Close handlers
+    const close = () => modal.remove();
+    $('#room-close').addEventListener('click', close);
+    $('#room-cancel').addEventListener('click', close);
+    modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+
+    // If editing, fetch & populate
+    if (id) {
+      fillRoomForm(id).catch(err => {
+        $('#room-error').textContent = 'Error loading room: ' + (err.message || err);
+      });
+    }
+
+    // Save
+    $('#room-save').addEventListener('click', async () => {
+      try {
+        const payload = collectRoomForm();
+        let result;
+        if (id) {
+          result = await supabase.from('room_types').update(payload).eq('id', id);
+        } else {
+          result = await supabase.from('room_types').insert(payload);
+        }
+        if (result.error) throw result.error;
+        close();
+        await initRooms();
+        toast(`Room type ${id ? 'updated' : 'created'} successfully`);
+      } catch (e) {
+        $('#room-error').textContent = 'Error saving: ' + (e.message || e);
+      }
+    });
+  }
+
+  function collectRoomForm() {
+    const code = $('#r-code').value.trim().toUpperCase();
+    const name = $('#r-name').value.trim();
+    const description = $('#r-desc').value.trim() || null;
+    const base_price_per_night_weekday = parseFloat($('#r-weekday').value);
+    const base_price_per_night_weekend = parseFloat($('#r-weekend').value);
+    const currency = $('#r-currency').value;
+    const max_adults = parseInt($('#r-max-adults').value, 10) || 2;
+    const active = $('#r-active').value === 'true';
+    const image_url = $('#r-image').value.trim() || null;
+
+    if (!code || !name || Number.isNaN(base_price_per_night_weekday) || Number.isNaN(base_price_per_night_weekend)) {
+      throw new Error('Code, Name, and Prices are required.');
+    }
+    return {
+      code,
+      name,
+      description,
+      base_price_per_night_weekday,
+      base_price_per_night_weekend,
+      currency,
+      max_adults,
+      is_active: active, // map local `active` to DB column
+      image_url
+    };
+  }
+
+  async function fillRoomForm(id) {
+    const { data, error } = await supabase
+      .from('room_types')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error) throw error;
+    const r = data;
+
+    $('#r-code').value = (r.code || '').toUpperCase();
+    $('#r-name').value = r.name || '';
+    $('#r-desc').value = r.description || '';
+    $('#r-weekday').value = r.base_price_per_night_weekday ?? '';
+    $('#r-weekend').value = r.base_price_per_night_weekend ?? '';
+    $('#r-currency').value = r.currency || 'GBP';
+    $('#r-max-adults').value = r.max_adults ?? 2;
+    $('#r-active').value = (r.is_active !== false) ? 'true' : 'false';
+    $('#r-image').value = r.image_url || '';
+  }
+
+  async function toggleRoomStatus(id, currentStatus) {
+    const newStatus = !currentStatus;
+    try {
+      const { error } = await supabase
+        .from('room_types')
+        .update({ is_active: newStatus })
+        .eq('id', id);
+      
+      if (error) throw error;
+      await initRooms();
+      toast(`Room ${newStatus ? 'activated' : 'deactivated'} successfully`);
+    } catch (e) {
+      console.error('Toggle room status error:', e);
+      alert('Error updating room status: ' + (e.message || e));
+    }
+  }
+
+  async function deleteRoom(id) {
+    if (!confirm('Are you sure you want to delete this room type? This action cannot be undone.')) {
+      return;
+    }
+    const { error } = await supabase.from('room_types').delete().eq('id', id);
+    if (error) {
+      toast('Error deleting room: ' + error.message, 'error');
+      return;
+    }
+    await initRooms();
+    toast('Room type deleted successfully');
   }
 
   // ---------- Extras ----------
   async function initExtras() {
+    // Add event listener for Add Extra button
+    const addBtn = $('#add-extra-btn');
+    if (addBtn) {
+      // Remove existing listener to avoid duplicates
+      const newBtn = addBtn.cloneNode(true);
+      addBtn.parentNode.replaceChild(newBtn, addBtn);
+      newBtn.addEventListener('click', () => openExtraModal());
+    }
+
     const el = $('#extras-list');
     el.textContent = 'Loading…';
     const { data, error } = await supabase.from('extras').select('*').order('name', { ascending: true });
@@ -826,23 +1285,229 @@ export function initApp() {
       el.innerHTML = `<div style="color:#b91c1c">Error: ${error.message}</div>`;
       return;
     }
+    if (!data?.length) {
+      el.innerHTML = `<div style="color:#6b7280">No extras found.</div>`;
+      return;
+    }
     el.innerHTML = data
-      .map(
-        (x) => `
-      <div class="item">
-        <div class="row">
-          <div>
-            <div class="title">${x.name}</div>
-            <div class="meta">${x.category || ''}</div>
-            <div class="meta">${formatCurrency(x.price || 0, x.currency || 'GBP')}</div>
+      .map((x) => {
+        const isActive = x.is_active !== false;
+        return `
+        <div class="item">
+          <div class="row" style="align-items:flex-start;gap:12px">
+            <div style="flex:1">
+              <div class="title">${x.name || ''}</div>
+              <div class="meta">${x.category || ''}</div>
+              ${x.description ? `<div class="meta" style="margin-top:6px;color:#6b7280">${x.description}</div>` : ''}
+              <div class="meta" style="margin-top:8px">
+                Price: <strong>${formatCurrency(x.price || 0, x.currency || 'GHS')}</strong> • ${x.unit_type || ''}
+              </div>
+            </div>
+            <div style="text-align:right">
+              <span class="badge ${isActive ? 'ok' : 'err'}">${isActive ? 'Active' : 'Inactive'}</span>
+            </div>
           </div>
-          <div style="text-align:right">
-            <span class="badge ${x.active !== false ? 'ok' : 'err'}">${x.active !== false ? 'Active' : 'Inactive'}</span>
+
+          <div class="room-card-footer">
+            <button class="btn btn-sm" data-extra-edit="${x.id}">Edit</button>
+            <button class="btn btn-sm" data-extra-toggle="${x.id}" data-extra-active="${isActive}">${isActive ? 'Deactivate' : 'Activate'}</button>
+            <button class="btn btn-sm" data-extra-delete="${x.id}" style="color:#b91c1c">Delete</button>
           </div>
         </div>
-      </div>`
-      )
+      </div>`;
+      })
       .join('');
+
+    // Attach event listeners
+    el.querySelectorAll('[data-extra-edit]').forEach(btn => {
+      btn.addEventListener('click', () => openExtraModal(btn.dataset.extraEdit));
+    });
+    el.querySelectorAll('[data-extra-toggle]').forEach(btn => {
+      btn.addEventListener('click', () => toggleExtraStatus(btn.dataset.extraToggle, btn.dataset.extraActive === 'true'));
+    });
+    el.querySelectorAll('[data-extra-delete]').forEach(btn => {
+      btn.addEventListener('click', () => deleteExtra(btn.dataset.extraDelete));
+    });
+  }
+
+  // Extra Modal
+  function openExtraModal(id = null) {
+    const modal = document.createElement('div');
+    modal.id = 'extra-modal';
+    modal.className = 'modal';
+    modal.style.display = 'flex';
+
+    modal.innerHTML = `
+      <div class="content">
+        <div class="hd">
+          <h3 id="extra-modal-title" style="margin:0">${id ? 'Edit Extra' : 'Add Extra'}</h3>
+          <button id="extra-close" class="btn">×</button>
+        </div>
+        <div class="bd">
+          <div id="extra-error" class="muted" style="min-height:18px"></div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Name *</label>
+              <input id="e-name" required />
+            </div>
+            <div class="form-group">
+              <label>Category</label>
+              <input id="e-category" placeholder="e.g., Food, Activity, Service" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Description</label>
+            <textarea id="e-desc" rows="3" style="resize:vertical"></textarea>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Price *</label>
+              <input id="e-price" type="number" step="0.01" required />
+            </div>
+            <div class="form-group">
+              <label>Currency</label>
+              <select id="e-currency">
+                <option value="GBP">GBP (£)</option>
+                <option value="USD">USD ($)</option>
+                <option value="EUR">EUR (€)</option>
+                <option value="GHS">GHS (₵)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Unit Type</label>
+              <select id="e-unit-type">
+                <option value="per_booking">Per Booking</option>
+                <option value="per_night">Per Night</option>
+                <option value="per_person">Per Person</option>
+                <option value="per_person_per_night">Per Person Per Night</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Active</label>
+              <select id="e-active">
+                <option value="true" selected>Yes</option>
+                <option value="false">No</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="ft">
+          <button class="btn" id="extra-cancel">Cancel</button>
+          <button class="btn btn-primary" id="extra-save">${id ? 'Update' : 'Create'}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    // Close handlers
+    const close = () => modal.remove();
+    $('#extra-close').addEventListener('click', close);
+    $('#extra-cancel').addEventListener('click', close);
+    modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+
+    // If editing, fetch & populate
+    if (id) {
+      fillExtraForm(id).catch(err => {
+        $('#extra-error').textContent = 'Error loading extra: ' + (err.message || err);
+      });
+    }
+
+    // Save
+    $('#extra-save').addEventListener('click', async () => {
+      try {
+        const payload = collectExtraForm();
+        let result;
+        if (id) {
+          result = await supabase.from('extras').update(payload).eq('id', id);
+        } else {
+          result = await supabase.from('extras').insert(payload);
+        }
+        if (result.error) throw result.error;
+        close();
+        await initExtras();
+        toast(`Extra ${id ? 'updated' : 'created'} successfully`);
+      } catch (e) {
+        $('#extra-error').textContent = 'Error saving: ' + (e.message || e);
+      }
+    });
+  }
+
+  function collectExtraForm() {
+    const root = document.getElementById('extra-modal') || document;
+    const name = root.querySelector('#e-name').value.trim();
+    const category = root.querySelector('#e-category').value.trim() || null;
+    const description = root.querySelector('#e-desc').value.trim() || null;
+    const price = parseFloat(root.querySelector('#e-price').value);
+    const currency = root.querySelector('#e-currency').value;
+    const unit_type = root.querySelector('#e-unit-type').value;
+    const active = root.querySelector('#e-active').value === 'true';
+
+    if (!name || Number.isNaN(price)) {
+      throw new Error('Name and Price are required.');
+    }
+    return {
+      name,
+      category,
+      description,
+      price,
+      currency,
+      unit_type,
+      is_active: active     // map local `active` to DB column
+    };
+  }
+
+  async function fillExtraForm(id) {
+    const { data, error } = await supabase
+      .from('extras')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error) throw error;
+    const e = data;
+    const root = document.getElementById('extra-modal') || document;
+    root.querySelector('#e-name').value = e.name || '';
+    root.querySelector('#e-category').value = e.category || '';
+    root.querySelector('#e-desc').value = e.description || '';
+    root.querySelector('#e-price').value = e.price ?? '';
+     root.querySelector('#e-currency').value = e.currency || 'GBP';
+     root.querySelector('#e-unit-type').value = e.unit_type || 'per_booking';
+     root.querySelector('#e-active').value = (e.is_active !== false) ? 'true' : 'false';
+  }
+
+  async function toggleExtraStatus(id, currentStatus) {
+    const newStatus = !currentStatus;
+    try {
+      const { error } = await supabase
+        .from('extras')
+        .update({ is_active: newStatus })
+        .eq('id', id);
+      
+      if (error) throw error;
+      await initExtras();
+      toast(`Extra ${newStatus ? 'activated' : 'deactivated'} successfully`);
+    } catch (e) {
+      console.error('Toggle extra status error:', e);
+      alert('Error updating extra status: ' + (e.message || e));
+    }
+  }
+
+  async function deleteExtra(id) {
+    if (!confirm('Are you sure you want to delete this extra? This action cannot be undone.')) {
+      return;
+    }
+    const { error } = await supabase.from('extras').delete().eq('id', id);
+    if (error) {
+      toast('Error deleting extra: ' + error.message, 'error');
+      return;
+    }
+    await initExtras();
+    toast('Extra deleted successfully');
   }
 
 /* =========================
@@ -865,9 +1530,8 @@ async function initCoupons() {
   if (!panel) return;
 
   panel.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <h2 style="margin:0"> </h2>
-      <button class="btn btn-primary" id="coupon-add-btn" style="margin-right:12px; margin-top:20px">+ Add </button>
+    <div style="display: flex; justify-content: flex-end; margin: 4px 14px 4px 0; padding-top: 2px;">
+  <button class="btn" id="coupon-add-btn" style="margin-top: 8px;">+ Add Coupon</button>
     </div>
     <div id="coupons-list"><div class="muted">Loading…</div></div>
   `;
@@ -898,30 +1562,34 @@ async function coupons_renderList() {
     }
 
     r.innerHTML = rows.map(c => {
-      const discountLabel = c.discount_type === 'percentage' ? `${c.discount_value}%` : `£${c.discount_value}`;
+      const discountLabel = c.discount_type === 'percentage' ? `${c.discount_value}%` : `GHS${c.discount_value}`;
       const appliesToLabel = c.applies_to === 'both' ? 'both' : c.applies_to;
+      const isActive = c.is_active;
       
       return `
-        <div class="item coupon-card" data-id="${c.id}">
-          <div class="row">
-            <div style="flex:1">
-              <div class="coupon-code">${(c.code||'').toUpperCase()}</div>
-              ${c.description ? `<div class="meta" style="margin-top:6px">${c.description}</div>` : ''}
+          <div class="item coupon-card" data-id="${c.id}">
+            <div class="row">
+              <div style="flex:1">
+                <div class="title">${(c.code||'').toUpperCase()}</div>
+                <div class="meta"><strong style="color:#0f172a">${discountLabel} off</strong> · ${appliesToLabel}</div>
+                ${c.description ? `<div class="meta" style="margin-top:6px;color:#6b7280">${c.description}</div>` : ''}
+                <div class="meta" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:16px">
+                  <span>Used <strong style="color:#0f172a">${c.current_uses ?? 0}${c.max_uses ? `/${c.max_uses}` : ''}</strong></span>
+                  ${c.max_uses_per_guest ? `<span>Max <strong style="color:#0f172a">${c.max_uses_per_guest}</strong>/guest</span>` : ''}
+                  ${c.min_booking_amount ? `<span>Min <strong style="color:#0f172a">£${c.min_booking_amount}</strong></span>` : ''}
+                  ${c.valid_from || c.valid_until ? `<span>${c.valid_from ? new Date(c.valid_from).toLocaleDateString() : '∞'} → ${c.valid_until ? new Date(c.valid_until).toLocaleDateString() : '∞'}</span>` : ''}
+                </div>
+              </div>
+              <div style="text-align:right">
+                <span class="badge ${isActive ? 'ok' : 'err'}">${isActive ? 'Active' : 'Inactive'}</span>
+              </div>
             </div>
-            <span class="badge ${c.is_active ? 'ok' : 'err'}">${c.is_active ? 'Active' : 'Inactive'}</span>
-          </div>
-          
-          <div class="meta" style="margin-top:14px;display:flex;flex-wrap:wrap;gap:20px;align-items:center">
-            <div><strong style="color:#0f172a">${discountLabel} off</strong> · ${appliesToLabel}</div>
-            <div>Used <strong style="color:#0f172a">${c.current_uses ?? 0}${c.max_uses ? `/${c.max_uses}` : ''}</strong></div>
-            ${c.max_uses_per_guest ? `<div>Max <strong style="color:#0f172a">${c.max_uses_per_guest}</strong>/guest</div>` : ''}
-            ${c.min_booking_amount ? `<div>Min <strong style="color:#0f172a">£${c.min_booking_amount}</strong></div>` : ''}
-            ${c.valid_from || c.valid_until ? `<div>${c.valid_from ? new Date(c.valid_from).toLocaleDateString('en-GB', {day:'2-digit',month:'2-digit',year:'numeric'}) : '—'} → ${c.valid_until ? new Date(c.valid_until).toLocaleDateString('en-GB', {day:'2-digit',month:'2-digit',year:'numeric'}) : '∞'}</div>` : ''}
-          </div>
 
-          <div style="display:flex;gap:8px;margin-top:14px">
-            <button class="btn" data-action="edit" data-id="${c.id}">Edit</button>
-            <button class="btn ${c.is_active ? 'btn-danger' : ''}" data-action="deactivate" data-id="${c.id}" ${!c.is_active ? 'disabled' : ''}>Deactivate</button>
+            <div class="room-card-footer">
+              <button class="btn btn-sm" data-action="edit" data-id="${c.id}">Edit</button>
+              <button class="btn btn-sm" data-action="toggle" data-id="${c.id}" data-active="${isActive}">${isActive ? 'Deactivate' : 'Activate'}</button>
+              <button class="btn btn-sm" data-action="delete" data-id="${c.id}" style="color:#b91c1c">Delete</button>
+            </div>
           </div>
         </div>
       `;
@@ -931,8 +1599,11 @@ async function coupons_renderList() {
     $$sel('button[data-action="edit"]', r).forEach(btn =>
       btn.addEventListener('click', () => coupons_openForm(btn.dataset.id)) // EDIT
     );
-    $$sel('button[data-action="deactivate"]', r).forEach(btn =>
-      btn.addEventListener('click', () => coupons_deactivate(btn.dataset.id)) // DEACTIVATE
+    $$sel('button[data-action="toggle"]', r).forEach(btn =>
+      btn.addEventListener('click', () => coupons_toggleStatus(btn.dataset.id, btn.dataset.active === 'true')) // TOGGLE
+    );
+    $$sel('button[data-action="delete"]', r).forEach(btn =>
+      btn.addEventListener('click', () => coupons_delete(btn.dataset.id)) // DELETE
     );
 
   } catch (e) {
@@ -941,20 +1612,39 @@ async function coupons_renderList() {
   }
 }
 
-// ---- Deactivate (is_active = false) ----
-async function coupons_deactivate(id) {
+// ---- Toggle status (activate/deactivate) ----
+async function coupons_toggleStatus(id, currentStatus) {
   if (!id) return;
-  if (!confirm('Deactivate this coupon?')) return;
+  const newStatus = !currentStatus;
+  const action = newStatus ? 'activate' : 'deactivate';
+  if (!confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} this coupon?`)) return;
 
   try {
     const { error } = await supabase
       .from('coupons')
-      .update({ is_active: false, updated_at: coupons_nowISO() })
+      .update({ is_active: newStatus, updated_at: coupons_nowISO() })
       .eq('id', id);
     if (error) throw error;
     await coupons_renderList();
   } catch (e) {
     alert('Failed: ' + (e.message || e));
+  }
+}
+
+// ---- Delete coupon ----
+async function coupons_delete(id) {
+  if (!id) return;
+  if (!confirm('Are you sure you want to delete this coupon? This action cannot be undone.')) return;
+
+  try {
+    const { error } = await supabase
+      .from('coupons')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
+    await coupons_renderList();
+  } catch (e) {
+    alert('Failed to delete: ' + (e.message || e));
   }
 }
 
@@ -1057,7 +1747,7 @@ function coupons_openForm(id /* optional */) {
         </div>
 
         <div class="form-group">
-          <label>Min Booking Amount (£)</label>
+          <label>Min Booking Amount (GHS)</label>
           <input id="c-min" type="number" step="0.01" />
         </div>
       </div>
@@ -1086,11 +1776,13 @@ function coupons_openForm(id /* optional */) {
   $sel('#coupon-save', modal).addEventListener('click', async () => {
     try {
       const payload = coupons_collectForm();
+      let result;
       if (id) {
-        await supabase.from('coupons').update({ ...payload, updated_at: coupons_nowISO() }).eq('id', id);
+        result = await supabase.from('coupons').update({ ...payload, updated_at: coupons_nowISO() }).eq('id', id);
       } else {
-        await supabase.from('coupons').insert({ ...payload, created_at: coupons_nowISO(), updated_at: coupons_nowISO(), current_uses: 0 });
+        result = await supabase.from('coupons').insert({ ...payload, created_at: coupons_nowISO(), updated_at: coupons_nowISO(), current_uses: 0 });
       }
+      if (result.error) throw result.error;
       close();
       await coupons_renderList();
     } catch (e) {
@@ -1152,36 +1844,310 @@ async function coupons_fillForm(id) {
   $sel('#c-min').value = c.min_booking_amount ?? '';
 }
 
-  // ---------- Packages ----------
-  async function initPackages() {
-    const el = $('#packages-list');
-    el.textContent = 'Loading…';
-    const { data, error } = await supabase.from('packages').select('*').order('created_at', { ascending: false });
-    if (error) {
-      el.innerHTML = `<div style="color:#b91c1c">Error: ${error.message}</div>`;
-      return;
-    }
-    el.innerHTML = data
-      .map(
-        (p) => `
-      <div class="item">
-        <div class="row">
-          <div>
-            <div class="title">${p.name}</div>
-            <div class="meta">${(p.code || '').toUpperCase()}</div>
-            ${p.description ? `<div class="meta" style="margin-top:6px">${p.description}</div>` : ''}
+// ---------- Packages ----------
+async function initPackages() {
+  const list = document.getElementById("packages-list");
+  if (!list) return;
+
+  const { data, error } = await supabase
+    .from("packages")
+    .select("*")
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    list.innerHTML = `<div class="muted">Error loading packages: ${error.message}</div>`;
+    return;
+  }
+  if (!data || !data.length) {
+    list.innerHTML = `<div class="muted">No packages yet.</div>`;
+    return;
+  }
+
+  const html = data
+    .map((p) => {
+      const isActive = p.is_active !== false;
+      return `
+        <div class="item">
+          <div class="row" style="align-items:flex-start;gap:12px">
+            ${p.image_url ? `<img class="pkg-thumb" src="${p.image_url}" alt="${p.name || ""}">` : ""}
+            <div style="flex:1">
+              <div class="title">${p.name || ""}</div>
+              ${p.description ? `<div class="pkg-meta" style="margin-top:4px">${p.description}</div>` : ""}
+              <div class="meta" style="margin-top:8px;display:flex;gap:16px;flex-wrap:wrap">
+                <span>Code: <strong>${(p.code || "").toUpperCase()}</strong></span>
+                <span>Price: <strong>${formatCurrency(p.package_price || 0, p.currency || "GHS")}</strong></span>
+                ${p.nights ? `<span>Nights: <strong>${p.nights}</strong></span>` : ""}
+                ${
+                  p.valid_from || p.valid_until
+                    ? `<span>Valid: <strong>${p.valid_from || "—"}</strong> → <strong>${p.valid_until || "—"}</strong></span>`
+                    : ""
+                }
+                ${p.is_featured ? `<span>Featured</span>` : ""}
+              </div>
+            </div>
+            <div style="text-align:right">
+              <span class="badge ${isActive ? "ok" : "err"}">${isActive ? "Active" : "Inactive"}</span>
+            </div>
           </div>
-          <div class="meta">
-            Nights: <strong>${p.nights || 1}</strong> • Price: <strong>${formatCurrency(p.price || 0, p.currency || 'GBP')}</strong>
+
+          <div class="room-card-footer">
+            <button class="btn btn-sm" data-pkg-edit="${p.id}">Edit</button>
+            <button class="btn btn-sm" data-pkg-toggle="${p.id}" data-pkg-active="${isActive}">
+              ${isActive ? "Deactivate" : "Activate"}
+            </button>
+            <button class="btn btn-sm" data-pkg-delete="${p.id}" style="color:#b91c1c">Delete</button>
           </div>
         </div>
-      </div>`
-      )
-      .join('');
+      `;
+    })
+    .join("");
+
+  list.innerHTML = html;
+
+  // wire actions
+  list.querySelectorAll("[data-pkg-edit]").forEach((b) =>
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openPackageModal("edit", b.getAttribute("data-pkg-edit"));
+    })
+  );
+
+  list.querySelectorAll("[data-pkg-toggle]").forEach((b) =>
+    b.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const id = b.getAttribute("data-pkg-toggle");
+      const isActive = b.getAttribute("data-pkg-active") === "true";
+      await togglePackageStatus(id, !isActive);
+    })
+  );
+
+  list.querySelectorAll("[data-pkg-delete]").forEach((b) =>
+    b.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      await deletePackage(b.getAttribute("data-pkg-delete"));
+    })
+  );
+}
+
+function openPackageModal(mode = "add", id = null) {
+  const wrap = document.createElement("div");
+  wrap.id = "package-modal";
+  wrap.className = "modal show";
+  document.body.appendChild(wrap);
+
+  const toDateInput = (v) => {
+    if (!v) return "";
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return "";
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${d.getFullYear()}-${m}-${day}`;
+  };
+
+  const loadExisting = async () => {
+    if (mode !== "edit" || !id) return null;
+    const { data, error } = await supabase.from("packages").select("*").eq("id", id).single();
+    if (error) {
+      alert("Error loading package: " + error.message);
+      return null;
+    }
+    return data;
+  };
+
+  (async () => {
+    const p = (await loadExisting()) || {};
+    wrap.innerHTML = `
+      <div class="content" onclick="event.stopPropagation()">
+        <div class="hd">
+          <h3>${mode === "edit" ? "Edit" : "Add"} Package</h3>
+          <button class="btn" onclick="document.getElementById('package-modal').remove()">×</button>
+        </div>
+
+        <div class="bd">
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Code *</label>
+              <input id="pkg-code" type="text" value="${p.code || ""}">
+            </div>
+            <div class="form-group">
+              <label>Name *</label>
+              <input id="pkg-name" type="text" value="${p.name || ""}">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Description</label>
+            <textarea id="pkg-desc" rows="3">${p.description || ""}</textarea>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Package Price *</label>
+              <input id="pkg-price" type="number" step="0.01" value="${p.package_price ?? ""}">
+            </div>
+            <div class="form-group">
+              <label>Currency *</label>
+              <select id="pkg-currency">
+                <option value="GHS" ${p.currency === "GHS" ? "selected" : ""}>GHS (₵)</option>
+                <option value="USD" ${p.currency === "USD" ? "selected" : ""}>USD ($)</option>
+                <option value="GBP" ${p.currency === "GBP" ? "selected" : ""}>GBP (£)</option>
+                <option value="${p.currency || "GHS"}" ${
+      p.currency && !["GHS", "USD", "GBP"].includes(p.currency) ? "selected" : ""
+    }>${p.currency || "GHS"}</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Room Type ID</label>
+              <input id="pkg-room" type="text" value="${p.room_type_id || ""}">
+            </div>
+            <div class="form-group">
+              <label>Nights</label>
+              <input id="pkg-nights" type="number" min="1" step="1" value="${p.nights ?? ""}">
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Valid From</label>
+              <input id="pkg-from" type="date" value="${toDateInput(p.valid_from)}">
+            </div>
+            <div class="form-group">
+              <label>Valid Until</label>
+              <input id="pkg-until" type="date" value="${toDateInput(p.valid_until)}">
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Image URL</label>
+              <input id="pkg-image" type="text" value="${p.image_url || ""}">
+            </div>
+            <div class="form-group">
+              <label>Sort Order</label>
+              <input id="pkg-sort" type="number" step="1" value="${p.sort_order ?? ""}">
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Featured</label>
+              <select id="pkg-featured">
+                <option value="false" ${p.is_featured ? "" : "selected"}>No</option>
+                <option value="true" ${p.is_featured ? "selected" : ""}>Yes</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Active</label>
+              <select id="pkg-active">
+                <option value="false" ${p.is_active ? "" : "selected"}>No</option>
+                <option value="true" ${p.is_active ? "selected" : ""}>Yes</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="ft">
+          <button class="btn" onclick="document.getElementById('package-modal').remove()">Cancel</button>
+          <button class="btn btn-primary" id="pkg-save">Save</button>
+        </div>
+      </div>
+    `;
+
+    wrap.querySelector("#pkg-save").addEventListener("click", async () => {
+      try {
+        const payload = collectPackageForm();
+        if (mode === "edit") {
+          const { error: upErr } = await supabase.from("packages").update(payload).eq("id", id);
+          if (upErr) throw upErr;
+          toast("Package updated");
+        } else {
+          const { error: insErr } = await supabase.from("packages").insert(payload);
+          if (insErr) throw insErr;
+          toast("Package created");
+        }
+        wrap.remove();
+        initPackages();
+      } catch (e) {
+        alert("Error saving: " + (e.message || e));
+      }
+    });
+  })();
+}
+
+function collectPackageForm() {
+  const root = document.getElementById("package-modal") || document;
+  const code = root.querySelector("#pkg-code").value.trim();
+  const name = root.querySelector("#pkg-name").value.trim();
+  const description = root.querySelector("#pkg-desc").value.trim() || null;
+  const priceEl = root.querySelector("#pkg-price").value;
+  const package_price = priceEl === "" ? null : parseFloat(priceEl);
+  const currency = root.querySelector("#pkg-currency").value;
+  const room_type_id = root.querySelector("#pkg-room").value.trim() || null;
+  const nightsEl = root.querySelector("#pkg-nights").value;
+  const nights = nightsEl === "" ? null : parseInt(nightsEl, 10);
+  const valid_from = root.querySelector("#pkg-from").value || null;
+  const valid_until = root.querySelector("#pkg-until").value || null;
+  const image_url = root.querySelector("#pkg-image").value.trim() || null;
+  const sortEl = root.querySelector("#pkg-sort").value;
+  const sort_order = sortEl === "" ? null : parseInt(sortEl, 10);
+  const is_featured = root.querySelector("#pkg-featured").value === "true";
+  const is_active = root.querySelector("#pkg-active").value === "true";
+
+  if (!code || !name || package_price == null || !currency) {
+    throw new Error("Code, Name, Price and Currency are required.");
+  }
+
+  return {
+    code,
+    name,
+    description,
+    package_price,
+    currency,
+    room_type_id,
+    nights,
+    valid_from,
+    valid_until,
+    image_url,
+    sort_order,
+    is_featured,
+    is_active
+  };
+}
+
+async function togglePackageStatus(id, newStatus) {
+  try {
+    const { error } = await supabase.from("packages").update({ is_active: newStatus }).eq("id", id);
+    if (error) throw error;
+    toast(newStatus ? "Package activated" : "Package deactivated");
+    initPackages();
+  } catch (e) {
+    alert("Error updating: " + (e.message || e));
   }
 }
+
+async function deletePackage(id) {
+  if (!confirm("Delete this package? This cannot be undone.")) return;
+  try {
+    const { error } = await supabase.from("packages").delete().eq("id", id);
+    if (error) throw error;
+    toast("Package deleted");
+    initPackages();
+  } catch (e) {
+    alert("Error deleting: " + (e.message || e));
+  }
+}
+
+// optional: hook a button with id="package-add-btn"
+document.getElementById("package-add-btn")?.addEventListener("click", () => openPackageModal("add"));
+
+// keep your existing app bootstrap
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initApp);
 } else {
   initApp();
+}
 }
