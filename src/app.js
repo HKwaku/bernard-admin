@@ -53,7 +53,11 @@ export function initApp() {
             <button class="tab" data-view="packages">📦 Packages</button>
           </div>
 
-          <button class="cta" id="new-booking-btn">+ New Booking</button>
+          <div class="booking-buttons">
+            <button class="btn btn-primary" id="new-custom-booking-btn">+ New Custom Booking</button>
+            <button class="btn btn-primary" id="book-package-btn">+ Book New Package</button>
+          </div>
+
           <div class="now" id="now"></div>
 
           <!-- Right-aligned dropdown drawer -->
@@ -80,7 +84,9 @@ export function initApp() {
               <li><button data-view="coupons"      class="btn" style="width:100%">🎟️ Coupons</button></li>
               <li><button data-view="packages"     class="btn" style="width:100%">📦 Packages</button></li>
               <li><hr style="border:0;border-top:1px solid var(--ring);margin:6px 0"></li>
-              <li><button data-view="newbooking"   class="btn" style="width:100%">➕ New Booking</button></li>
+              <li><button id="mobile-custom-booking-btn" class="btn btn-primary" style="width:100%">+ New Custom Booking</button></li>
+              <li><button id="mobile-package-btn" class="btn btn-primary" style="width:100%">+ Book New Package</button></li>
+              <li><hr style="border:0;border-top:1px solid var(--ring);margin:6px 0"></li>
               <li><button data-view="quickstats"   class="btn" style="width:100%">📊 Quick Stats</button></li>
               <li><button data-view="recent"       class="btn" style="width:100%">🧾 Recent Bookings</button></li>
             </ul>
@@ -155,6 +161,9 @@ export function initApp() {
 
             <div id="view-packages" class="card panel">
               <div class="card-bd">
+                <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+                  <button id="add-package-btn" class="btn">+ Add Package</button>
+                </div>
                 <div id="packages-list" class="list">Loading…</div>
               </div>
             </div>
@@ -215,6 +224,62 @@ export function initApp() {
     </div>
   `;
 
+  // -------- Wire "New Custom Booking" and "Book New Package" buttons (no DOM changes) --------
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('button, a, [role="button"]');
+  if (!btn) return;
+
+  // normalize the visible text of the clicked element
+  const label = (btn.textContent || btn.innerText || '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // handle both the new labels and any legacy variants
+  if (
+    label.includes('new custom booking') ||
+    label === '+ new custom booking' ||
+    label.includes('new booking') // legacy safety
+  ) {
+    e.preventDefault();
+    if (typeof openNewCustomBookingModal === 'function') {
+      openNewCustomBookingModal();
+    } else {
+      alert('openNewCustomBookingModal() is not defined.');
+    }
+    return;
+  }
+
+  if (
+    label.includes('book new package') ||
+    label === '+ book new package'
+  ) {
+    e.preventDefault();
+    if (typeof openBookPackageModal === 'function') {
+      openBookPackageModal();
+    } else {
+      alert('openBookPackageModal() is not defined.');
+    }
+  }
+}, true);
+// Stack the two booking buttons vertically without changing their size
+function stackBookingButtons() {
+  const a = document.getElementById('new-custom-booking-btn');
+  const b = document.getElementById('book-package-btn');
+  if (!a || !b) return;
+
+  // already stacked?
+  if (a.parentElement && a.parentElement.classList.contains('booking-btn-stack')) return;
+
+  // create a compact vertical wrapper right where the first button lives
+  const parent = a.parentElement;
+  const wrap = document.createElement('div');
+  wrap.className = 'booking-btn-stack';
+  // insert before the first button, then move both buttons inside
+  parent.insertBefore(wrap, a);
+  wrap.appendChild(a);
+  wrap.appendChild(b);
+}
   // ---------- Live Clock ----------
   const nowEl = $('#now');
   const tick = () => {
@@ -1871,6 +1936,15 @@ async function coupons_fillForm(id) {
 
 // ---------- Packages ----------
 async function initPackages() {
+  // Add event listener for Add Package button
+  const addBtn = $('#add-package-btn');
+  if (addBtn) {
+    // Remove existing listener to avoid duplicates
+    const newBtn = addBtn.cloneNode(true);
+    addBtn.parentNode.replaceChild(newBtn, addBtn);
+    newBtn.addEventListener('click', () => openPackageModal());
+  }
+
   const list = document.getElementById("packages-list");
   if (!list) return;
 
@@ -2166,8 +2240,740 @@ async function deletePackage(id) {
   }
 }
 
+function genConfCode() {
+  return ('B' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4)).toUpperCase();
+}
+function toDateInput(v) {
+  if (!v) return '';
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function addDaysISO(isoDate, nights) {
+  const d = new Date(isoDate);
+  d.setDate(d.getDate() + (Number(nights)||0));
+  return toDateInput(d);
+}
+
+/* ---------- New Custom Booking ---------- */
+async function openNewCustomBookingModal() {
+  const wrap = document.createElement('div');
+  // Reuse reservation modal styling so you don't need new CSS
+  wrap.id = 'reservation-modal';
+  wrap.className = 'modal show';
+  document.body.appendChild(wrap);
+
+  // Fetch room types for dropdown
+  const { data: rooms } = await supabase
+    .from('room_types')
+    .select('id,code,name')
+    .eq('is_active', true)
+    .order('name', { ascending: true });
+
+  // Fetch extras for selection
+  const { data: extras } = await supabase
+    .from('extras')
+    .select('id,code,name,price,category')
+    .eq('is_active', true)
+    .order('category,name');
+
+  const roomOptions = (rooms || []).map(r =>
+    `<option value="${r.id}" data-code="${r.code}">${r.name} (${r.code})</option>`
+  ).join('');
+
+  const extrasHtml = (extras || []).map(e =>
+    `<div style="display:flex;align-items:center;gap:8px;margin:4px 0">
+      <input type="checkbox" id="extra-${e.id}" value="${e.id}" data-price="${e.price}" data-name="${e.name}" data-code="${e.code || ''}" style="width:auto">
+      <label for="extra-${e.id}" style="margin:0;font-weight:400;cursor:pointer">${e.name} - GHS ${e.price}</label>
+    </div>`
+  ).join('');
+
+  const today = toDateInput(new Date());
+
+  // Track state
+  let appliedCoupon = null;
+  let selectedExtras = [];
+
+  wrap.innerHTML = `
+    <div class="content" onclick="event.stopPropagation()">
+      <div class="hd">
+        <h3>New Custom Booking</h3>
+        <button class="btn" onclick="document.getElementById('reservation-modal').remove()">×</button>
+      </div>
+
+      <div class="bd">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>First Name</label>
+            <input id="nb-first" type="text" />
+          </div>
+          <div class="form-group">
+            <label>Last Name</label>
+            <input id="nb-last" type="text" />
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Email</label>
+            <input id="nb-email" type="email" />
+          </div>
+          <div class="form-group">
+            <label>Phone</label>
+            <input id="nb-phone" type="text" />
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Room (name/code)</label>
+            <select id="nb-room">
+              <option value="">Select room type...</option>
+              ${roomOptions}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Currency</label>
+            <input id="nb-currency" type="text" value="GHS" />
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Check-in</label>
+            <input id="nb-in" type="date" value="${today}" />
+          </div>
+          <div class="form-group">
+            <label>Check-out</label>
+            <input id="nb-out" type="date" value="${addDaysISO(today,1)}" />
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Nights (auto-calculated)</label>
+            <input id="nb-nights" type="number" min="1" step="1" value="1" readonly style="background:#f5f5f5" />
+          </div>
+          <div class="form-group">
+            <label>Room Subtotal</label>
+            <input id="nb-room-subtotal" type="number" step="0.01" value="" placeholder="Room cost" />
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Adults</label>
+            <input id="nb-adults" type="number" min="1" step="1" value="1" />
+          </div>
+          <div class="form-group">
+            <label>Children</label>
+            <input id="nb-children" type="number" min="0" step="1" value="0" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Extras (Optional)</label>
+          <div style="border:1px solid var(--ring);border-radius:var(--radius-md);padding:10px;max-height:150px;overflow-y:auto">
+            ${extrasHtml || '<div class="muted">No extras available</div>'}
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Coupon Code (Optional)</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input id="nb-coupon" type="text" placeholder="Enter coupon code" style="text-transform:uppercase;flex:1" />
+            <button class="btn btn-sm" id="apply-coupon-btn" type="button">Apply</button>
+          </div>
+          <div id="coupon-msg" style="margin-top:4px;font-size:0.875rem;min-height:18px"></div>
+          <div id="applied-coupon-display" style="margin-top:8px"></div>
+        </div>
+
+        <!-- Price Breakdown -->
+        <div style="background:#f8fafc;border:1px solid var(--ring);border-radius:var(--radius-md);padding:14px;margin-top:12px">
+          <div style="font-weight:700;font-size:0.875rem;margin-bottom:10px;color:var(--ink)">Price Breakdown</div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:0.875rem">
+            <span style="color:var(--muted)">Room Subtotal:</span>
+            <span id="calc-room-subtotal" style="font-weight:600">GHS 0.00</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:0.875rem">
+            <span style="color:var(--muted)">Extras:</span>
+            <span id="calc-extras-total" style="font-weight:600">GHS 0.00</span>
+          </div>
+          <div id="calc-discount-row" style="display:none;justify-content:space-between;margin-bottom:6px;font-size:0.875rem">
+            <span style="color:var(--muted)">Discount (<span id="calc-discount-label"></span>):</span>
+            <span id="calc-discount" style="font-weight:600;color:#16a34a">−GHS 0.00</span>
+          </div>
+          <div style="border-top:2px solid var(--ring);margin:10px 0;padding-top:10px;display:flex;justify-content:space-between;font-size:1rem">
+            <span style="font-weight:800">Total:</span>
+            <span id="calc-total" style="font-weight:800;color:var(--brand)">GHS 0.00</span>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Status</label>
+            <select id="nb-status">
+              <option value="pending">Pending</option>
+              <option value="confirmed" selected>Confirmed</option>
+              <option value="checked-in">Checked In</option>
+              <option value="checked-out">Checked Out</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Payment Status</label>
+            <select id="nb-pay">
+              <option value="unpaid" selected>Unpaid</option>
+              <option value="partial">Partially Paid</option>
+              <option value="paid">Paid</option>
+              <option value="refunded">Refunded</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Notes</label>
+          <textarea id="nb-notes" rows="3"></textarea>
+        </div>
+      </div>
+
+      <div class="ft">
+        <button class="btn" onclick="document.getElementById('reservation-modal').remove()">Cancel</button>
+        <button class="btn btn-primary" id="nb-save">Save</button>
+      </div>
+    </div>
+  `;
+
+  const inEl = wrap.querySelector('#nb-in');
+  const outEl = wrap.querySelector('#nb-out');
+  const nightsEl = wrap.querySelector('#nb-nights');
+  const roomSubtotalEl = wrap.querySelector('#nb-room-subtotal');
+
+  // Auto-calculate nights when dates change
+  function calculateNights() {
+    const checkIn = new Date(inEl.value);
+    const checkOut = new Date(outEl.value);
+    if (checkIn && checkOut && checkOut > checkIn) {
+      const nights = Math.ceil((checkOut - checkIn) / (1000 * 60 * 60 * 24));
+      nightsEl.value = nights;
+    } else {
+      nightsEl.value = 1;
+    }
+    updatePriceBreakdown();
+  }
+
+  // Calculate price breakdown
+  function updatePriceBreakdown() {
+    const roomSubtotal = parseFloat(roomSubtotalEl.value) || 0;
+    const currency = wrap.querySelector('#nb-currency').value || 'GHS';
+    
+    // Calculate extras total
+    selectedExtras = Array.from(wrap.querySelectorAll('input[type="checkbox"]:checked'))
+      .map(cb => ({
+        extra_id: cb.value,
+        extra_code: cb.getAttribute('data-code') || '',
+        extra_name: cb.getAttribute('data-name') || '',
+        price: parseFloat(cb.getAttribute('data-price') || 0),
+        quantity: 1
+      }));
+    
+    const extrasTotal = selectedExtras.reduce((sum, e) => sum + e.price, 0);
+    
+    // Calculate discount
+    let discount = 0;
+    if (appliedCoupon) {
+      const subtotal = roomSubtotal + extrasTotal;
+      if (appliedCoupon.applies_to === 'both') {
+        discount = appliedCoupon.discount_type === 'percentage' 
+          ? (subtotal * appliedCoupon.discount_value / 100)
+          : appliedCoupon.discount_value;
+      } else if (appliedCoupon.applies_to === 'rooms') {
+        discount = appliedCoupon.discount_type === 'percentage'
+          ? (roomSubtotal * appliedCoupon.discount_value / 100)
+          : appliedCoupon.discount_value;
+      } else if (appliedCoupon.applies_to === 'extras') {
+        discount = appliedCoupon.discount_type === 'percentage'
+          ? (extrasTotal * appliedCoupon.discount_value / 100)
+          : appliedCoupon.discount_value;
+      }
+      discount = Math.min(discount, subtotal);
+    }
+    
+    const finalTotal = Math.max(0, roomSubtotal + extrasTotal - discount);
+    
+    // Update display
+    wrap.querySelector('#calc-room-subtotal').textContent = `${currency} ${roomSubtotal.toFixed(2)}`;
+    wrap.querySelector('#calc-extras-total').textContent = `${currency} ${extrasTotal.toFixed(2)}`;
+    
+    if (discount > 0) {
+      wrap.querySelector('#calc-discount-row').style.display = 'flex';
+      wrap.querySelector('#calc-discount-label').textContent = appliedCoupon.code;
+      wrap.querySelector('#calc-discount').textContent = `−${currency} ${discount.toFixed(2)}`;
+    } else {
+      wrap.querySelector('#calc-discount-row').style.display = 'none';
+    }
+    
+    wrap.querySelector('#calc-total').textContent = `${currency} ${finalTotal.toFixed(2)}`;
+  }
+
+  // Validate and apply coupon
+  async function validateCoupon(code) {
+    try {
+      const { data: coupons } = await supabase
+        .from('coupons')
+        .select('*')
+        .eq('code', code.toUpperCase());
+      
+      if (!coupons || coupons.length === 0) {
+        return { valid: false, error: 'Invalid coupon code' };
+      }
+      
+      const coupon = coupons[0];
+      
+      if (!coupon.is_active) {
+        return { valid: false, error: 'This coupon is no longer active' };
+      }
+      
+      const today = new Date().toISOString().split('T')[0];
+      if (coupon.valid_until && coupon.valid_until < today) {
+        return { valid: false, error: 'This coupon has expired' };
+      }
+      
+      if (coupon.max_uses && (coupon.current_uses || 0) >= coupon.max_uses) {
+        return { valid: false, error: 'This coupon has reached its usage limit' };
+      }
+      
+      const roomSubtotal = parseFloat(roomSubtotalEl.value) || 0;
+      const extrasTotal = selectedExtras.reduce((sum, e) => sum + e.price, 0);
+      const subtotal = roomSubtotal + extrasTotal;
+      
+      if (coupon.min_booking_amount && subtotal < coupon.min_booking_amount) {
+        return { 
+          valid: false, 
+          error: `Minimum booking amount of GHS ${coupon.min_booking_amount} required` 
+        };
+      }
+      
+      return { valid: true, coupon: coupon };
+    } catch (err) {
+      return { valid: false, error: 'Error validating coupon: ' + err.message };
+    }
+  }
+
+  // Event listeners
+  inEl.addEventListener('change', calculateNights);
+  outEl.addEventListener('change', calculateNights);
+  roomSubtotalEl.addEventListener('input', updatePriceBreakdown);
+  
+  // Extras checkboxes
+  wrap.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', updatePriceBreakdown);
+  });
+
+  // Apply coupon button
+  wrap.querySelector('#apply-coupon-btn').addEventListener('click', async () => {
+    const code = wrap.querySelector('#nb-coupon').value.trim();
+    const msgEl = wrap.querySelector('#coupon-msg');
+    const displayEl = wrap.querySelector('#applied-coupon-display');
+    const btn = wrap.querySelector('#apply-coupon-btn');
+    
+    if (!code) {
+      msgEl.style.color = '#b91c1c';
+      msgEl.textContent = 'Please enter a coupon code';
+      return;
+    }
+    
+    btn.disabled = true;
+    btn.textContent = 'Checking...';
+    
+    const result = await validateCoupon(code);
+    
+    if (result.valid) {
+      appliedCoupon = result.coupon;
+      msgEl.style.color = '#166534';
+      msgEl.textContent = '✓ Coupon applied: ' + (appliedCoupon.description || appliedCoupon.code);
+      
+      // Show applied coupon with remove button
+      const discountText = appliedCoupon.discount_type === 'percentage'
+        ? `${appliedCoupon.discount_value}% off`
+        : `GHS ${appliedCoupon.discount_value} off`;
+      
+      displayEl.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#dcfce7;border:1px solid #86efac;border-radius:8px">
+          <div style="font-size:0.875rem;color:#166534">
+            <strong>${appliedCoupon.code}</strong> - ${discountText} ${appliedCoupon.applies_to}
+          </div>
+          <button type="button" class="btn btn-sm" id="remove-coupon-btn" style="background:#fff;color:#b91c1c;border:1px solid #fecaca;padding:4px 8px;font-size:0.75rem">Remove</button>
+        </div>
+      `;
+      
+      wrap.querySelector('#remove-coupon-btn')?.addEventListener('click', () => {
+        appliedCoupon = null;
+        wrap.querySelector('#nb-coupon').value = '';
+        msgEl.textContent = '';
+        displayEl.innerHTML = '';
+        updatePriceBreakdown();
+      });
+      
+      updatePriceBreakdown();
+    } else {
+      msgEl.style.color = '#b91c1c';
+      msgEl.textContent = '✗ ' + result.error;
+      appliedCoupon = null;
+    }
+    
+    btn.disabled = false;
+    btn.textContent = 'Apply';
+  });
+
+  calculateNights(); // Initial calculation
+
+  wrap.querySelector('#nb-save').addEventListener('click', async () => {
+    try {
+      const roomSelect = wrap.querySelector('#nb-room');
+      const selectedOption = roomSelect.selectedOptions[0];
+      const roomTypeId = roomSelect.value || null;
+      const roomTypeCode = selectedOption ? selectedOption.getAttribute('data-code') : null;
+      const roomName = selectedOption ? selectedOption.textContent : null;
+
+      if (!roomTypeId || !roomTypeCode) {
+        alert('Please select a room type');
+        return;
+      }
+
+      const roomSubtotal = parseFloat(roomSubtotalEl.value) || 0;
+      const extrasTotal = selectedExtras.reduce((sum, e) => sum + e.price, 0);
+      
+      // Calculate final discount
+      let discount = 0;
+      if (appliedCoupon) {
+        const subtotal = roomSubtotal + extrasTotal;
+        if (appliedCoupon.applies_to === 'both') {
+          discount = appliedCoupon.discount_type === 'percentage' 
+            ? (subtotal * appliedCoupon.discount_value / 100)
+            : appliedCoupon.discount_value;
+        } else if (appliedCoupon.applies_to === 'rooms') {
+          discount = appliedCoupon.discount_type === 'percentage'
+            ? (roomSubtotal * appliedCoupon.discount_value / 100)
+            : appliedCoupon.discount_value;
+        } else if (appliedCoupon.applies_to === 'extras') {
+          discount = appliedCoupon.discount_type === 'percentage'
+            ? (extrasTotal * appliedCoupon.discount_value / 100)
+            : appliedCoupon.discount_value;
+        }
+        discount = Math.min(discount, subtotal);
+      }
+      
+      const finalTotal = Math.max(0, roomSubtotal + extrasTotal - discount);
+
+      // Create the reservation first
+      const reservationPayload = {
+        confirmation_code: genConfCode(),
+        guest_first_name:  wrap.querySelector('#nb-first').value.trim() || null,
+        guest_last_name:   wrap.querySelector('#nb-last').value.trim() || null,
+        guest_email:       wrap.querySelector('#nb-email').value.trim() || null,
+        guest_phone:       wrap.querySelector('#nb-phone').value.trim() || null,
+        room_name:         roomName,
+        room_type_id:      roomTypeId,
+        room_type_code:    roomTypeCode,
+        check_in:          wrap.querySelector('#nb-in').value || null,
+        check_out:         wrap.querySelector('#nb-out').value || null,
+        nights:            parseInt(wrap.querySelector('#nb-nights').value || '0', 10) || 0,
+        adults:            parseInt(wrap.querySelector('#nb-adults').value || '0', 10) || 0,
+        children:          parseInt(wrap.querySelector('#nb-children').value || '0', 10) || 0,
+        status:            wrap.querySelector('#nb-status').value,
+        payment_status:    wrap.querySelector('#nb-pay').value,
+        currency:          wrap.querySelector('#nb-currency').value.trim() || 'GHS',
+        room_subtotal:     roomSubtotal,
+        extras_total:      extrasTotal,
+        discount_amount:   discount,
+        coupon_code:       appliedCoupon ? appliedCoupon.code : null,
+        total:             finalTotal,
+        notes:             wrap.querySelector('#nb-notes').value || null
+      };
+
+      const { data: reservation, error: reservationError } = await supabase
+        .from('reservations')
+        .insert(reservationPayload)
+        .select()
+        .single();
+
+      if (reservationError) throw reservationError;
+
+      // Now insert extras into reservation_extras table if any selected
+      if (selectedExtras.length > 0 && reservation) {
+        const extrasPayload = selectedExtras.map(extra => ({
+          reservation_id: reservation.id,
+          extra_id: extra.extra_id,
+          extra_code: extra.extra_code,
+          extra_name: extra.extra_name,
+          price: extra.price,
+          quantity: extra.quantity,
+          subtotal: extra.price * extra.quantity
+        }));
+
+        const { error: extrasError } = await supabase
+          .from('reservation_extras')
+          .insert(extrasPayload);
+
+        if (extrasError) {
+          console.error('Error saving extras:', extrasError);
+        }
+      }
+
+      // Update coupon usage if applied
+      if (appliedCoupon && reservation) {
+        await supabase
+          .from('coupons')
+          .update({ current_uses: (appliedCoupon.current_uses || 0) + 1 })
+          .eq('id', appliedCoupon.id);
+      }
+
+      toast('Reservation created');
+      wrap.remove();
+      initReservations?.();
+    } catch (e) {
+      alert('Error saving: ' + (e.message || e));
+    }
+  });
+}
+
+/* ---------- Book New Package ---------- */
+async function openBookPackageModal() {
+  const wrap = document.createElement('div');
+  // Reuse package modal styling
+  wrap.id = 'package-modal';
+  wrap.className = 'modal show';
+  document.body.appendChild(wrap);
+
+  // fetch active packages with room type information
+  const { data: pkgs, error } = await supabase
+    .from('packages')
+    .select(`
+      id,code,name,package_price,currency,nights,room_type_id,is_active,
+      room_types(id,code,name)
+    `)
+    .eq('is_active', true)
+    .order('name', { ascending: true });
+
+  if (error) {
+    wrap.remove();
+    alert('Error loading packages: ' + error.message);
+    return;
+  }
+
+  const options = (pkgs || []).map(p =>
+    `<option value="${p.id}" 
+             data-price="${p.package_price || 0}" 
+             data-cur="${p.currency || 'GHS'}" 
+             data-nights="${p.nights || 1}" 
+             data-room-id="${p.room_type_id || ''}"
+             data-room-code="${p.room_types?.code || ''}"
+             data-room-name="${p.room_types?.name || ''}">
+      ${(p.code || '').toUpperCase()} — ${p.name}
+    </option>`
+  ).join('');
+
+  const today = toDateInput(new Date());
+
+  wrap.innerHTML = `
+    <div class="content" onclick="event.stopPropagation()">
+      <div class="hd">
+        <h3>Book New Package</h3>
+        <button class="btn" onclick="document.getElementById('package-modal').remove()">×</button>
+      </div>
+
+      <div class="bd">
+        <div class="form-group">
+          <label>Package</label>
+          <select id="bp-pkg">${options}</select>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>First Name</label>
+            <input id="bp-first" type="text" />
+          </div>
+          <div class="form-group">
+            <label>Last Name</label>
+            <input id="bp-last" type="text" />
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Email</label>
+            <input id="bp-email" type="email" />
+          </div>
+          <div class="form-group">
+            <label>Phone</label>
+            <input id="bp-phone" type="text" />
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Check-in</label>
+            <input id="bp-in" type="date" value="${today}" />
+          </div>
+          <div class="form-group">
+            <label>Check-out</label>
+            <input id="bp-out" type="date" value="${today}" />
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Total</label>
+            <input id="bp-total" type="number" step="0.01" />
+          </div>
+          <div class="form-group">
+            <label>Currency</label>
+            <input id="bp-currency" type="text" value="GHS" />
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Adults</label>
+            <input id="bp-adults" type="number" min="1" step="1" value="1" />
+          </div>
+          <div class="form-group">
+            <label>Children</label>
+            <input id="bp-children" type="number" min="0" step="1" value="0" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Notes</label>
+          <textarea id="bp-notes" rows="3"></textarea>
+        </div>
+      </div>
+
+      <div class="ft">
+        <button class="btn" onclick="document.getElementById('package-modal').remove()">Cancel</button>
+        <button class="btn btn-primary" id="bp-save">Save</button>
+      </div>
+    </div>
+  `;
+
+  const pkgSel = wrap.querySelector('#bp-pkg');
+  const inEl = wrap.querySelector('#bp-in');
+  const outEl = wrap.querySelector('#bp-out');
+  const totalEl = wrap.querySelector('#bp-total');
+  const curEl = wrap.querySelector('#bp-currency');
+
+  function hydrateFromPkg() {
+    const opt = pkgSel.selectedOptions[0];
+    if (!opt) return;
+    const nights = parseInt(opt.getAttribute('data-nights') || '1', 10);
+    const price = parseFloat(opt.getAttribute('data-price') || '0');
+    const cur = opt.getAttribute('data-cur') || 'GHS';
+    outEl.value = addDaysISO(inEl.value, nights);
+    totalEl.value = price || '';
+    curEl.value = cur;
+  }
+  pkgSel.addEventListener('change', hydrateFromPkg);
+  inEl.addEventListener('change', hydrateFromPkg);
+  hydrateFromPkg();
+
+  wrap.querySelector('#bp-save').addEventListener('click', async () => {
+    try {
+      const opt = pkgSel.selectedOptions[0];
+      const nights = parseInt(opt.getAttribute('data-nights') || '1', 10);
+      const roomTypeId = opt.getAttribute('data-room-id') || null;
+      const roomTypeCode = opt.getAttribute('data-room-code') || null;
+      const roomName = opt.getAttribute('data-room-name') || null;
+
+      if (!roomTypeId || !roomTypeCode) {
+        alert('Selected package does not have a valid room type assigned');
+        return;
+      }
+
+      const payload = {
+        confirmation_code: genConfCode(),
+        guest_first_name: wrap.querySelector('#bp-first').value.trim() || null,
+        guest_last_name:  wrap.querySelector('#bp-last').value.trim() || null,
+        guest_email:      wrap.querySelector('#bp-email').value.trim() || null,
+        guest_phone:      wrap.querySelector('#bp-phone').value.trim() || null,
+        check_in:         inEl.value || null,
+        check_out:        outEl.value || null,
+        nights,
+        adults:           parseInt(wrap.querySelector('#bp-adults').value || '0', 10) || 0,
+        children:         parseInt(wrap.querySelector('#bp-children').value || '0', 10) || 0,
+        status:           'confirmed',
+        payment_status:   'unpaid',
+        currency:         curEl.value.trim() || 'GHS',
+        total:            totalEl.value === '' ? null : parseFloat(totalEl.value),
+        notes:            `Booked via package ${(opt.textContent || '').trim()}`,
+        room_type_id:     roomTypeId,
+        room_type_code:   roomTypeCode,
+        room_name:        roomName
+      };
+
+      const { error } = await supabase.from('reservations').insert(payload);
+      if (error) throw error;
+      toast('Package booking created');
+      wrap.remove();
+      initReservations?.();
+    } catch (e) {
+      alert('Error saving: ' + (e.message || e));
+    }
+  });
+}
+
 // optional: hook a button with id="package-add-btn"
 document.getElementById("package-add-btn")?.addEventListener("click", () => openPackageModal("add"));
+
+// ---------- New Booking Buttons ----------
+// ---- New Booking buttons: resilient binding (delegation + observer)
+(function () {
+  function onNewBookingClick(e) {
+    const customBtn = e.target.closest('#new-custom-booking-btn, #mobile-custom-booking-btn');
+    if (customBtn) {
+      e.preventDefault();
+      openNewCustomBookingModal();
+      return;
+    }
+    const pkgBtn = e.target.closest('#book-package-btn, #mobile-package-btn');
+    if (pkgBtn) {
+      e.preventDefault();
+      openBookPackageModal();
+    }
+  }
+
+  // Delegation handles dynamically-added buttons
+  document.addEventListener('click', onNewBookingClick, true);
+
+  // Safety net: if the header is re-rendered later, attach direct listeners too
+  const attachDirect = () => {
+    const a = document.getElementById('new-custom-booking-btn');
+    if (a && !a.__wired) {
+      a.__wired = true;
+      a.addEventListener('click', (e) => { e.preventDefault(); openNewCustomBookingModal(); });
+    }
+    const b = document.getElementById('book-package-btn');
+    if (b && !b.__wired) {
+      b.__wired = true;
+      b.addEventListener('click', (e) => { e.preventDefault(); openBookPackageModal(); });
+    }
+    const mobileA = document.getElementById('mobile-custom-booking-btn');
+    if (mobileA && !mobileA.__wired) {
+      mobileA.__wired = true;
+      mobileA.addEventListener('click', (e) => { e.preventDefault(); openNewCustomBookingModal(); });
+    }
+    const mobileB = document.getElementById('mobile-package-btn');
+    if (mobileB && !mobileB.__wired) {
+      mobileB.__wired = true;
+      mobileB.addEventListener('click', (e) => { e.preventDefault(); openBookPackageModal(); });
+    }
+  };
+
+  // Run once now and whenever DOM changes (header re-mounts)
+  attachDirect();
+  new MutationObserver(attachDirect).observe(document.body, { childList: true, subtree: true });
+})();
+
 
 // keep your existing app bootstrap
 if (document.readyState === 'loading') {

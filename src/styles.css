@@ -100,6 +100,14 @@ body {
   min-width: 0;
 }
 
+/* Booking Buttons Container */
+.booking-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -2017,5 +2025,99 @@ label {
   }
   #package-modal .form-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* ===== Additional Mobile Fixes for Calendar and Room Types ===== */
+@media (max-width: 767px) {
+  /* Ensure booking buttons are hidden on mobile (use mobile menu instead) */
+  .booking-buttons {
+    display: none !important;
+  }
+  
+  /* Calendar View Mobile Fix - Critical for horizontal scrolling */
+  #res-calendar.calendar-view {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 10px;
+  }
+  
+  .calendar-grid {
+    min-width: 700px;
+    width: max-content;
+  }
+  
+  .calendar-day {
+    min-height: 80px;
+    font-size: 0.75rem;
+    padding: 4px;
+  }
+  
+  .calendar-day-header {
+    font-size: 0.688rem;
+    padding: 8px 4px;
+  }
+  
+  .calendar-guest {
+    font-size: 0.688rem;
+    padding: 2px 6px;
+    margin: 2px 0;
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  
+  /* Room footer buttons mobile */
+  .room-footer,
+  .extra-footer,
+  .pkg-footer {
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: stretch;
+  }
+  
+  .room-footer .btn,
+  .extra-footer .btn,
+  .pkg-footer .btn {
+    flex: 1 1 auto;
+    min-width: calc(33.333% - 4px);
+    font-size: 0.75rem;
+    padding: 7px 8px;
+    white-space: nowrap;
+  }
+  
+  /* Extras mobile layout */
+  #view-extras .item .row {
+    flex-direction: column;
+  }
+  
+  #view-extras .item .row img {
+    width: 100% !important;
+    max-width: 100%;
+    height: auto;
+    aspect-ratio: 16/9;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Extra small screens - even more compact calendar */
+  .calendar-day {
+    min-height: 70px;
+    font-size: 0.688rem;
+    padding: 2px;
+  }
+  
+  .calendar-guest {
+    font-size: 0.625rem;
+    padding: 1px 4px;
+  }
+  
+  .room-footer .btn,
+  .extra-footer .btn,
+  .pkg-footer .btn {
+    min-width: calc(50% - 3px);
+    font-size: 0.688rem;
+    padding: 6px 6px;
   }
 }
