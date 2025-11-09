@@ -398,33 +398,46 @@ export function initApp() {
     }
   }
 
-  // ---------- Quick Stats ----------
-  loadStats();
-  async function loadStats() {
-    try {
-      const today = new Date().toISOString().slice(0, 10);
-      const { data: a } = await supabase.from('reservations').select('id').gte('check_in', today).lte('check_in', today);
-      $('#stat-checkins').textContent = a?.length ?? 0;
+// ---------- Quick Stats ----------
+loadStats();
+async function loadStats() {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const n = new Date();
+    const y = n.getFullYear();
+    const m = String(n.getMonth() + 1).padStart(2, '0');
 
-      const { data: b } = await supabase.from('reservations').select('id').eq('status', 'confirmed');
-      $('#stat-total').textContent = b?.length ?? 0;
+    const [
+      checkins,  // count only (no rows)
+      confirmed, // count only (no rows)
+      monthCnt,  // count only (no rows)
+      nightsSum  // minimal columns to sum
+    ] = await Promise.all([
+      supabase.from('reservations')
+        .select('id', { count: 'exact', head: true })
+        .gte('check_in', today).lte('check_in', today),
 
-      const n = new Date(),
-        y = n.getFullYear(),
-        m = String(n.getMonth() + 1).padStart(2, '0');
-      const { data: c } = await supabase
-        .from('reservations')
-        .select('id')
+      supabase.from('reservations')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'confirmed'),
+
+      supabase.from('reservations')
+        .select('id', { count: 'exact', head: true })
         .gte('check_in', `${y}-${m}-01`)
-        .lte('check_in', `${y}-${m}-31`);
-      $('#stat-month').textContent = c?.length ?? 0;
+        .lte('check_in', `${y}-${m}-31`),
 
-      const { data: d } = await supabase.from('reservations').select('nights');
-      $('#stat-nights').textContent = (d || []).reduce((t, r) => t + (r.nights || 0), 0);
-    } catch (e) {
-      console.warn('stats error', e);
-    }
+      supabase.from('reservations')
+        .select('nights')
+    ]);
+
+    $('#stat-checkins').textContent = checkins?.count ?? 0;
+    $('#stat-total').textContent    = confirmed?.count ?? 0;
+    $('#stat-month').textContent    = monthCnt?.count ?? 0;
+    $('#stat-nights').textContent   = (nightsSum?.data || []).reduce((t, r) => t + (r.nights || 0), 0);
+  } catch (e) {
+    console.warn('stats error', e);
   }
+}
 
   // ---------- Recent Bookings ----------
   loadRecent();
@@ -465,7 +478,7 @@ export function initApp() {
     try {
       const { data, error } = await supabase
         .from('reservations')
-        .select('*')
+        .select('id,guest_first_name,guest_last_name,guest_email,guest_phone,confirmation_code,room_name,check_in,check_out,nights,adults,status,payment_status,total,currency,notes')
         .order('check_in', { ascending: false });
       
       if (error) {
@@ -480,7 +493,19 @@ export function initApp() {
       list.innerHTML = `<div style="color:#b91c1c">Error loading reservations</div>`;
     }
   }
-  
+  const debounce = (fn, ms = 150) => {
+  let t;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), ms);
+  };
+};
+
+// Search input filter
+if (searchInput) {
+  searchInput.addEventListener('input', debounce(() => renderReservations(), 180));
+}
+
   function setupReservationFilters() {
     const searchInput = $('#res-search');
     const monthSelect = $('#res-month');
