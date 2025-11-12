@@ -15,6 +15,7 @@ import {
   closeModal,
   toast,
 } from './utils/helpers.js';
+import { initAnalytics } from './analytics.js';
 
 export function initApp() {
   const root =
@@ -51,6 +52,7 @@ export function initApp() {
             <button class="tab" data-view="extras">✨ Extras</button>
             <button class="tab" data-view="coupons">🎟️ Coupons</button>
             <button class="tab" data-view="packages">📦 Packages</button>
+            <button class="tab" data-view="analytics">📊 Analytics</button>
           </div>
 
           <div class="booking-buttons">
@@ -83,6 +85,7 @@ export function initApp() {
               <li><button data-view="extras"       class="btn" style="width:100%">✨ Extras</button></li>
               <li><button data-view="coupons"      class="btn" style="width:100%">🎟️ Coupons</button></li>
               <li><button data-view="packages"     class="btn" style="width:100%">📦 Packages</button></li>
+              <li><button data-view="analytics"    class="btn" style="width:100%">📊 Analytics</button></li>
               <li><hr style="border:0;border-top:1px solid var(--ring);margin:6px 0"></li>
               <li><button id="mobile-custom-booking-btn" class="btn btn-primary" style="width:100%">+ New Custom Booking</button></li>
               <li><button id="mobile-package-btn" class="btn btn-primary" style="width:100%">+ Book New Package</button></li>
@@ -165,6 +168,12 @@ export function initApp() {
                   <button id="add-package-btn" class="btn">+ Add Package</button>
                 </div>
                 <div id="packages-list" class="list">Loading…</div>
+              </div>
+            </div>
+
+            <div id="view-analytics" class="card panel">
+              <div class="card-bd">
+                <!-- Content will be injected by analytics.js -->
               </div>
             </div>
           </div>
@@ -311,6 +320,7 @@ function stackBookingButtons() {
         extras: 'Extras',
         coupons: 'Coupons',
         packages: 'Packages',
+        analytics: 'Analytics',
       };
       $('#section-title').textContent = titles[btn.dataset.view] || 'Dashboard';
 
@@ -319,6 +329,7 @@ function stackBookingButtons() {
       if (btn.dataset.view === 'extras') initExtras();
       if (btn.dataset.view === 'coupons') initCoupons();
       if (btn.dataset.view === 'packages') initPackages();
+      if (btn.dataset.view === 'analytics') initAnalytics();
     })
   );
 
@@ -385,6 +396,7 @@ function stackBookingButtons() {
           extras: 'Extras',
           coupons: 'Coupons',
           packages: 'Packages',
+          analytics: 'Analytics',
         };
         $('#section-title').textContent = titles[view] || 'Dashboard';
 
@@ -1236,9 +1248,19 @@ window.reservationDelete = async function (id) {
 
           <div class="form-group">
             <label>Image URL</label>
-            <input id="r-image" type="url" placeholder="https://..." />
+            <div style="display:flex; gap:8px; align-items:center">
+              <input id="r-image" type="url" placeholder="https://..." style="flex:1" />
+              <input id="r-image-file" type="file" accept="image/*" style="width:auto" />
+            </div>
+            <div id="r-image-preview" style="margin-top:8px; display:none">
+              <img id="r-image-preview-img" src="" alt="preview" style="max-width:100%; border-radius:10px"/>
+            </div>
+            <div id="r-image-help" class="muted" style="margin-top:6px">
+              Choose an image to upload; the URL will be filled automatically.
+            </div>
           </div>
         </div>
+
         <div class="ft">
           <button class="btn" id="room-cancel">Cancel</button>
           <button class="btn btn-primary" id="room-save">${id ? 'Update' : 'Create'}</button>
@@ -1246,6 +1268,41 @@ window.reservationDelete = async function (id) {
       </div>
     `;
     document.body.appendChild(modal);
+    // ---- image upload wiring (rooms) ----
+    const fileInput        = modal.querySelector('#r-image-file');
+    const imageUrlInput    = modal.querySelector('#r-image');
+    const imagePreview     = modal.querySelector('#r-image-preview');
+    const imagePreviewImg  = modal.querySelector('#r-image-preview-img');
+
+    fileInput?.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const code = (modal.querySelector('#r-code')?.value || 'ROOM').toString().toUpperCase();
+      try {
+        const publicUrl = await uploadRoomImage(file, code);  // helper below
+        imageUrlInput.value = publicUrl;
+        if (imagePreviewImg) {
+          imagePreviewImg.src = publicUrl;
+          imagePreview.style.display = 'block';
+        }
+
+        // If editing an existing room, persist immediately
+        if (id) {
+          const { error } = await supabase.from('room_types')
+            .update({ image_url: publicUrl })
+            .eq('id', id);
+          if (error) throw error;
+          toast('Image uploaded and room updated');
+          await initRooms();
+        } else {
+          // In create mode, the URL will be saved when the user clicks "Create"
+      toast('Image uploaded — URL filled. Save the room to persist.');
+    }
+  } catch (err) {
+    alert('Upload failed: ' + (err.message || err));
+  }
+});
 
     // Close handlers
     const close = () => modal.remove();
@@ -1325,7 +1382,15 @@ window.reservationDelete = async function (id) {
     $('#r-max-adults').value = r.max_adults ?? 2;
     $('#r-active').value = (r.is_active !== false) ? 'true' : 'false';
     $('#r-image').value = r.image_url || '';
-  }
+    }
+    if (r.image_url) {
+      const prev = modal.querySelector('#r-image-preview');
+      const img  = modal.querySelector('#r-image-preview-img');
+      if (img && prev) {
+        img.src = r.image_url;
+        prev.style.display = 'block';
+      }
+    }
 
   async function toggleRoomStatus(id, currentStatus) {
     const newStatus = !currentStatus;
@@ -2053,6 +2118,8 @@ function openPackageModal(mode = "add", id = null) {
     }
     return data;
   };
+ 
+
 
   (async () => {
     const p = (await loadExisting()) || {};
@@ -2254,6 +2321,21 @@ function addDaysISO(isoDate, nights) {
   d.setDate(d.getDate() + (Number(nights)||0));
   return toDateInput(d);
 }
+// ---- shared helper: upload room image to Supabase Storage ----
+async function uploadRoomImage(file, code) {
+  const bucket = 'cabin-images'; // your existing bucket
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+  const path = `rooms/${String(code || 'ROOM').toUpperCase()}/${Date.now()}.${ext}`;
+
+  const { error: upErr } = await supabase.storage
+    .from(bucket)
+    .upload(path, file, { upsert: true, cacheControl: '3600' });
+
+  if (upErr) throw upErr;
+
+  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+  return data.publicUrl; // final public URL
+}
 
 /* ---------- New Custom Booking ---------- */
 async function openNewCustomBookingModal() {
@@ -2266,10 +2348,10 @@ async function openNewCustomBookingModal() {
   // Fetch room types for dropdown
   const { data: rooms } = await supabase
     .from('room_types')
-    .select('id,code,name')
+    .select('id,code,name,base_price_per_night_weekday,base_price_per_night_weekend,currency')
     .eq('is_active', true)
     .order('name', { ascending: true });
-
+    
   // Fetch extras for selection
   const { data: extras } = await supabase
     .from('extras')
@@ -2354,9 +2436,9 @@ async function openNewCustomBookingModal() {
             <label>Nights (auto-calculated)</label>
             <input id="nb-nights" type="number" min="1" step="1" value="1" readonly style="background:#f5f5f5" />
           </div>
-          <div class="form-group">
-            <label>Room Subtotal</label>
-            <input id="nb-room-subtotal" type="number" step="0.01" value="" placeholder="Room cost" />
+          <!-- keep subtotal only as a hidden input so save logic still works -->
+          <div class="form-group" style="display:none">
+            <input id="nb-room-subtotal" type="hidden" value="" />
           </div>
         </div>
 
@@ -2448,19 +2530,65 @@ async function openNewCustomBookingModal() {
   const outEl = wrap.querySelector('#nb-out');
   const nightsEl = wrap.querySelector('#nb-nights');
   const roomSubtotalEl = wrap.querySelector('#nb-room-subtotal');
+ 
+    // --- Auto-calc Room Subtotal (weekday/weekend split like the widget) ---
+  const roomSel = wrap.querySelector('#nb-room');
+  const roomMap = Object.fromEntries((rooms || []).map(r => [String(r.id), r]));
+
+  function isWeekend(d) {
+    // Friday (5) and Saturday (6) are weekend nights in the widget logic
+    const dow = d.getDay();
+    return dow === 5 || dow === 6;
+  }
+
+  function computeRoomSubtotal() {
+    const roomId = roomSel.value;
+    const info = roomMap[roomId];
+    const ci = new Date(inEl.value);
+    const co = new Date(outEl.value);
+
+    if (!info || !inEl.value || !outEl.value || !(co > ci)) {
+      // nothing to do / invalid; keep whatever is currently there but still refresh totals
+      updatePriceBreakdown();
+      return;
+    }
+
+    let weekdayN = 0;
+    let weekendN = 0;
+
+    // Count each *night* starting from check-in date up to night before check-out
+    for (let d = new Date(ci); d < co; d.setDate(d.getDate() + 1)) {
+      if (isWeekend(d)) weekendN++;
+      else weekdayN++;
+    }
+
+    const wkdPrice = Number(info.base_price_per_night_weekday || 0);
+    const wkePrice = Number(info.base_price_per_night_weekend || 0);
+    const subtotal = (weekdayN * wkdPrice) + (weekendN * wkePrice);
+
+    // Put the computed value into the Room Subtotal input (leave editable)
+    roomSubtotalEl.value = String(subtotal.toFixed(2));
+
+    // Ensure nights field stays in sync too
+    nightsEl.value = String(weekdayN + weekendN);
+
+    updatePriceBreakdown();
+  }
 
   // Auto-calculate nights when dates change
   function calculateNights() {
-    const checkIn = new Date(inEl.value);
-    const checkOut = new Date(outEl.value);
-    if (checkIn && checkOut && checkOut > checkIn) {
-      const nights = Math.ceil((checkOut - checkIn) / (1000 * 60 * 60 * 24));
-      nightsEl.value = nights;
-    } else {
-      nightsEl.value = 1;
-    }
-    updatePriceBreakdown();
+  const checkIn = new Date(inEl.value);
+  const checkOut = new Date(outEl.value);
+
+  if (checkIn && checkOut && checkOut > checkIn) {
+    nightsEl.value = Math.ceil((checkOut - checkIn) / (1000 * 60 * 60 * 24));
+  } else {
+    nightsEl.value = 1;
   }
+  
+  // Recompute pricing after nights change
+  computeRoomSubtotal();
+}
 
   // Calculate price breakdown
   function updatePriceBreakdown() {
@@ -2564,6 +2692,13 @@ async function openNewCustomBookingModal() {
   inEl.addEventListener('change', calculateNights);
   outEl.addEventListener('change', calculateNights);
   roomSubtotalEl.addEventListener('input', updatePriceBreakdown);
+    // Recalculate subtotal whenever the room or dates change
+  roomSel.addEventListener('change', computeRoomSubtotal);
+  inEl.addEventListener('change', computeRoomSubtotal);
+  outEl.addEventListener('change', computeRoomSubtotal);
+
+  // Initial compute after modal opens
+  computeRoomSubtotal();
   
   // Extras checkboxes
   wrap.querySelectorAll('input[type="checkbox"]').forEach(cb => {
