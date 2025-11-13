@@ -1804,10 +1804,44 @@ async function coupons_delete(id) {
 }
 
 // ---- Modal form (Add / Edit) ----
-function coupons_openForm(id /* optional */) {
+async function coupons_openForm(id /* optional */) {
   const modal = document.createElement('div');
   modal.className = 'modal show';
   modal.id = 'coupon-modal';
+
+  // --- fetch active extras so coupon can target them ---
+  let extrasList = [];
+  try {
+    const { data } = await supabase
+      .from('extras')
+      .select('id,name,price,currency,is_active')
+      .eq('is_active', true)
+      .order('name', { ascending: true });
+    extrasList = data || [];
+  } catch (e) {
+    console.warn('Error loading extras for coupon modal:', e);
+  }
+
+  const extrasHtml = extrasList.length
+    ? extrasList
+        .map((ex) => {
+          const price = ex.price != null ? ex.price : 0;
+          const cur = ex.currency || 'GHS';
+          return `
+            <label style="display:flex;align-items:center;gap:6px;font-size:0.85rem">
+              <input
+                type="checkbox"
+                name="c-extra-target"
+                id="c-extra-${ex.id}"
+                value="${ex.id}"
+                style="width:auto"
+              />
+              <span>${ex.name || ''} <span style="color:#6b7280">(${cur} ${price})</span></span>
+            </label>
+          `;
+        })
+        .join('')
+    : `<div class="muted">No active extras available to target.</div>`;
 
   // basic once-off styles (only if you don’t already have .modal)
   if (!$sel('#coupon-modal-inline-styles')) {
@@ -1905,6 +1939,16 @@ function coupons_openForm(id /* optional */) {
           <label>Min Booking Amount (GHS)</label>
           <input id="c-min" type="number" step="0.01" />
         </div>
+
+        <div class="form-group">
+          <label>Limit coupon to specific extras (optional)</label>
+          <div id="c-extra-list" style="border:1px solid #e5e7eb;border-radius:10px;padding:10px;max-height:160px;overflow-y:auto;display:grid;gap:4px">
+            ${extrasHtml}
+          </div>
+          <div class="muted" style="margin-top:4px;font-size:0.8rem">
+            If none are selected, the coupon will apply to all eligible extras (when "Applies To" includes extras).
+          </div>
+        </div>
       </div>
       <div class="ft">
         <button class="btn" id="coupon-cancel">Cancel</button>
@@ -1933,9 +1977,19 @@ function coupons_openForm(id /* optional */) {
       const payload = coupons_collectForm();
       let result;
       if (id) {
-        result = await supabase.from('coupons').update({ ...payload, updated_at: coupons_nowISO() }).eq('id', id);
+        result = await supabase
+          .from('coupons')
+          .update({ ...payload, updated_at: coupons_nowISO() })
+          .eq('id', id);
       } else {
-        result = await supabase.from('coupons').insert({ ...payload, created_at: coupons_nowISO(), updated_at: coupons_nowISO(), current_uses: 0 });
+        result = await supabase
+          .from('coupons')
+          .insert({
+            ...payload,
+            created_at: coupons_nowISO(),
+            updated_at: coupons_nowISO(),
+            current_uses: 0,
+          });
       }
       if (result.error) throw result.error;
       close();
@@ -1956,12 +2010,20 @@ function coupons_collectForm() {
   const valid_until = $sel('#c-until').value || null;
   const is_active = $sel('#c-active').value === 'true';
   const max_uses = $sel('#c-max').value ? parseInt($sel('#c-max').value, 10) : null;
-  const max_uses_per_guest = $sel('#c-max-guest').value ? parseInt($sel('#c-max-guest').value, 10) : null;
-  const min_booking_amount = $sel('#c-min').value ? parseFloat($sel('#c-min').value) : null;
+  const max_uses_per_guest = $sel('#c-max-guest').value
+    ? parseInt($sel('#c-max-guest').value, 10)
+    : null;
+  const min_booking_amount = $sel('#c-min').value
+    ? parseFloat($sel('#c-min').value)
+    : null;
+
+  // NEW: collect targeted extras
+  const extra_ids = $$sel('input[name="c-extra-target"]:checked').map((cb) => cb.value);
 
   if (!code || Number.isNaN(discount_value)) {
     throw new Error('Code and Discount Value are required.');
   }
+
   return {
     code,
     description,
@@ -1973,7 +2035,8 @@ function coupons_collectForm() {
     is_active,
     max_uses,
     max_uses_per_guest,
-    min_booking_amount
+    min_booking_amount,
+    extra_ids: extra_ids.length ? extra_ids : null,
   };
 }
 
@@ -1997,6 +2060,14 @@ async function coupons_fillForm(id) {
   $sel('#c-max').value = c.max_uses ?? '';
   $sel('#c-max-guest').value = c.max_uses_per_guest ?? '';
   $sel('#c-min').value = c.min_booking_amount ?? '';
+
+  // NEW: pre-check targeted extras if any
+  if (Array.isArray(c.extra_ids) && c.extra_ids.length) {
+    c.extra_ids.forEach((eid) => {
+      const cb = document.querySelector(`#c-extra-${eid}`);
+      if (cb) cb.checked = true;
+    });
+  }
 }
 
 // ---------- Packages ----------
@@ -2591,102 +2662,157 @@ async function openNewCustomBookingModal() {
 }
 
   // Calculate price breakdown
+  // Calculate price breakdown
   function updatePriceBreakdown() {
     const roomSubtotal = parseFloat(roomSubtotalEl.value) || 0;
     const currency = wrap.querySelector('#nb-currency').value || 'GHS';
-    
-    // Calculate extras total
-    selectedExtras = Array.from(wrap.querySelectorAll('input[type="checkbox"]:checked'))
-      .map(cb => ({
-        extra_id: cb.value,
-        extra_code: cb.getAttribute('data-code') || '',
-        extra_name: cb.getAttribute('data-name') || '',
-        price: parseFloat(cb.getAttribute('data-price') || 0),
-        quantity: 1
-      }));
-    
+
+    // Calculate extras total + capture details
+    selectedExtras = Array.from(
+      wrap.querySelectorAll('input[type="checkbox"]:checked')
+    ).map((cb) => ({
+      extra_id: cb.value,
+      extra_code: cb.getAttribute('data-code') || '',
+      extra_name: cb.getAttribute('data-name') || '',
+      price: parseFloat(cb.getAttribute('data-price') || 0),
+      quantity: 1,
+    }));
+
     const extrasTotal = selectedExtras.reduce((sum, e) => sum + e.price, 0);
-    
+
+    // Total only for extras that this coupon targets (if defined)
+    let extrasTargetTotal = extrasTotal;
+    if (
+      appliedCoupon &&
+      Array.isArray(appliedCoupon.extra_ids) &&
+      appliedCoupon.extra_ids.length
+    ) {
+      const idSet = new Set(appliedCoupon.extra_ids.map(String));
+      extrasTargetTotal = selectedExtras
+        .filter((e) => idSet.has(String(e.extra_id)))
+        .reduce((sum, e) => sum + e.price, 0);
+    }
+
     // Calculate discount
     let discount = 0;
     if (appliedCoupon) {
       const subtotal = roomSubtotal + extrasTotal;
+
       if (appliedCoupon.applies_to === 'both') {
-        discount = appliedCoupon.discount_type === 'percentage' 
-          ? (subtotal * appliedCoupon.discount_value / 100)
-          : appliedCoupon.discount_value;
+        // ROOM + only the targeted extras (if any are configured);
+        // otherwise, room + all extras
+        let base;
+        if (
+          Array.isArray(appliedCoupon.extra_ids) &&
+          appliedCoupon.extra_ids.length
+        ) {
+          base = roomSubtotal + extrasTargetTotal;
+        } else {
+          base = roomSubtotal + extrasTotal;
+        }
+
+        discount =
+          appliedCoupon.discount_type === 'percentage'
+            ? (base * appliedCoupon.discount_value) / 100
+            : appliedCoupon.discount_value;
       } else if (appliedCoupon.applies_to === 'rooms') {
-        discount = appliedCoupon.discount_type === 'percentage'
-          ? (roomSubtotal * appliedCoupon.discount_value / 100)
-          : appliedCoupon.discount_value;
+        const base = roomSubtotal;
+        discount =
+          appliedCoupon.discount_type === 'percentage'
+            ? (base * appliedCoupon.discount_value) / 100
+            : appliedCoupon.discount_value;
       } else if (appliedCoupon.applies_to === 'extras') {
-        discount = appliedCoupon.discount_type === 'percentage'
-          ? (extrasTotal * appliedCoupon.discount_value / 100)
-          : appliedCoupon.discount_value;
+        const base = extrasTargetTotal; // only targeted extras
+        discount =
+          appliedCoupon.discount_type === 'percentage'
+            ? (base * appliedCoupon.discount_value) / 100
+            : appliedCoupon.discount_value;
       }
+
+      // Never discount more than the subtotal
       discount = Math.min(discount, subtotal);
     }
-    
+
     const finalTotal = Math.max(0, roomSubtotal + extrasTotal - discount);
-    
+
     // Update display
-    wrap.querySelector('#calc-room-subtotal').textContent = `${currency} ${roomSubtotal.toFixed(2)}`;
-    wrap.querySelector('#calc-extras-total').textContent = `${currency} ${extrasTotal.toFixed(2)}`;
-    
-    if (discount > 0) {
+    wrap.querySelector('#calc-room-subtotal').textContent =
+      `${currency} ${roomSubtotal.toFixed(2)}`;
+    wrap.querySelector('#calc-extras-total').textContent =
+      `${currency} ${extrasTotal.toFixed(2)}`;
+
+    if (discount > 0 && appliedCoupon) {
       wrap.querySelector('#calc-discount-row').style.display = 'flex';
       wrap.querySelector('#calc-discount-label').textContent = appliedCoupon.code;
-      wrap.querySelector('#calc-discount').textContent = `−${currency} ${discount.toFixed(2)}`;
+      wrap.querySelector('#calc-discount').textContent =
+        `−${currency} ${discount.toFixed(2)}`;
     } else {
       wrap.querySelector('#calc-discount-row').style.display = 'none';
     }
-    
-    wrap.querySelector('#calc-total').textContent = `${currency} ${finalTotal.toFixed(2)}`;
+
+    wrap.querySelector('#calc-total').textContent =
+      `${currency} ${finalTotal.toFixed(2)}`;
   }
 
   // Validate and apply coupon
-  async function validateCoupon(code) {
-    try {
-      const { data: coupons } = await supabase
-        .from('coupons')
-        .select('*')
-        .eq('code', code.toUpperCase());
-      
-      if (!coupons || coupons.length === 0) {
-        return { valid: false, error: 'Invalid coupon code' };
-      }
-      
-      const coupon = coupons[0];
-      
-      if (!coupon.is_active) {
-        return { valid: false, error: 'This coupon is no longer active' };
-      }
-      
-      const today = new Date().toISOString().split('T')[0];
-      if (coupon.valid_until && coupon.valid_until < today) {
-        return { valid: false, error: 'This coupon has expired' };
-      }
-      
-      if (coupon.max_uses && (coupon.current_uses || 0) >= coupon.max_uses) {
-        return { valid: false, error: 'This coupon has reached its usage limit' };
-      }
-      
-      const roomSubtotal = parseFloat(roomSubtotalEl.value) || 0;
-      const extrasTotal = selectedExtras.reduce((sum, e) => sum + e.price, 0);
-      const subtotal = roomSubtotal + extrasTotal;
-      
-      if (coupon.min_booking_amount && subtotal < coupon.min_booking_amount) {
-        return { 
-          valid: false, 
-          error: `Minimum booking amount of GHS ${coupon.min_booking_amount} required` 
+async function validateCoupon(code) {
+  try {
+    const { data: coupons } = await supabase
+      .from('coupons')
+      .select('*')
+      .eq('code', code.toUpperCase());
+
+    if (!coupons || coupons.length === 0) {
+      return { valid: false, error: 'Invalid coupon code' };
+    }
+
+    const coupon = coupons[0];
+
+    if (!coupon.is_active) {
+      return { valid: false, error: 'This coupon is no longer active' };
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+    if (coupon.valid_until && coupon.valid_until < today) {
+      return { valid: false, error: 'This coupon has expired' };
+    }
+
+    if (coupon.max_uses && (coupon.current_uses || 0) >= coupon.max_uses) {
+      return { valid: false, error: 'This coupon has reached its usage limit' };
+    }
+
+    const roomSubtotal = parseFloat(roomSubtotalEl.value) || 0;
+    const extrasTotal = selectedExtras.reduce((sum, e) => sum + e.price, 0);
+    const subtotal = roomSubtotal + extrasTotal;
+
+    if (coupon.min_booking_amount && subtotal < coupon.min_booking_amount) {
+      return {
+        valid: false,
+        error: `Minimum booking amount of GHS ${coupon.min_booking_amount} required`,
+      };
+    }
+
+    // NEW: if coupon targets specific extras, ensure at least one is selected
+    if (
+      (coupon.applies_to === 'extras' || coupon.applies_to === 'both') &&
+      Array.isArray(coupon.extra_ids) &&
+      coupon.extra_ids.length
+    ) {
+      const selectedIds = new Set(selectedExtras.map((e) => String(e.extra_id)));
+      const anyMatch = coupon.extra_ids.some((id) => selectedIds.has(String(id)));
+      if (!anyMatch) {
+        return {
+          valid: false,
+          error: 'This coupon does not apply to the selected extras',
         };
       }
-      
-      return { valid: true, coupon: coupon };
-    } catch (err) {
-      return { valid: false, error: 'Error validating coupon: ' + err.message };
     }
+
+    return { valid: true, coupon: coupon };
+  } catch (err) {
+    return { valid: false, error: 'Error validating coupon: ' + err.message };
   }
+}
 
   // Event listeners
   inEl.addEventListener('change', calculateNights);
@@ -2784,9 +2910,25 @@ async function openNewCustomBookingModal() {
       if (appliedCoupon) {
         const subtotal = roomSubtotal + extrasTotal;
         if (appliedCoupon.applies_to === 'both') {
-          discount = appliedCoupon.discount_type === 'percentage' 
-            ? (subtotal * appliedCoupon.discount_value / 100)
-            : appliedCoupon.discount_value;
+          let base;
+          if (
+            Array.isArray(appliedCoupon.extra_ids) &&
+            appliedCoupon.extra_ids.length
+          ) {
+            const idSet = new Set(appliedCoupon.extra_ids.map(String));
+            const targetedExtrasTotal = selectedExtras
+              .filter(e => idSet.has(String(e.extra_id)))
+              .reduce((sum, e) => sum + e.price, 0);
+
+            base = roomSubtotal + targetedExtrasTotal;
+          } else {
+            base = roomSubtotal + extrasTotal;
+          }
+          discount =
+            appliedCoupon.discount_type === 'percentage'
+              ? (base * appliedCoupon.discount_value) / 100
+              : appliedCoupon.discount_value;
+
         } else if (appliedCoupon.applies_to === 'rooms') {
           discount = appliedCoupon.discount_type === 'percentage'
             ? (roomSubtotal * appliedCoupon.discount_value / 100)
