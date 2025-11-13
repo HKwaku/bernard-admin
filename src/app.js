@@ -1718,7 +1718,7 @@ async function coupons_renderList() {
 
     r.innerHTML = rows.map(c => {
       const discountLabel = c.discount_type === 'percentage' ? `${c.discount_value}%` : `GHS${c.discount_value}`;
-      const appliesToLabel = c.applies_to === 'both' ? 'both' : c.applies_to;
+      const appliesToLabel = c.applies_to === 'Room and Extras' ? 'Room and Extras' : c.applies_to;
       const isActive = c.is_active;
       
       return `
@@ -2429,6 +2429,10 @@ async function openNewCustomBookingModal() {
     .select('id,code,name,price,category')
     .eq('is_active', true)
     .order('category,name');
+      const extraNameMap = Object.fromEntries(
+    (extras || []).map(e => [String(e.id), e.name])
+  );
+
 
   const roomOptions = (rooms || []).map(r =>
     `<option value="${r.id}" data-code="${r.code}">${r.name} (${r.code})</option>`
@@ -2858,11 +2862,58 @@ async function validateCoupon(code) {
       const discountText = appliedCoupon.discount_type === 'percentage'
         ? `${appliedCoupon.discount_value}% off`
         : `GHS ${appliedCoupon.discount_value} off`;
-      
+
+    // Human-friendly scope label (with specific extra names)
+    let scopeLabel;
+    if (appliedCoupon.applies_to === 'both') {
+      // Room + specific extras if configured
+      let labels = [];
+
+      if (Array.isArray(appliedCoupon.extra_ids) && appliedCoupon.extra_ids.length) {
+        labels = appliedCoupon.extra_ids
+          .map(id => extraNameMap[String(id)])
+          .filter(Boolean);
+      }
+
+      if (labels.length === 0) {
+        // No specific extras configured → generic
+        scopeLabel = 'Room and Extras';
+      } else if (labels.length === 1) {
+        scopeLabel = `Room and ${labels[0]}`;
+      } else if (labels.length === 2) {
+        scopeLabel = `Room and ${labels[0]} and ${labels[1]}`;
+      } else {
+        scopeLabel = `Room and ${labels.slice(0, 2).join(', ')} and others`;
+      }
+    } else if (appliedCoupon.applies_to === 'rooms') {
+      scopeLabel = 'Room Only';
+    } else if (appliedCoupon.applies_to === 'extras') {
+      let labels = [];
+
+      if (Array.isArray(appliedCoupon.extra_ids) && appliedCoupon.extra_ids.length) {
+        labels = appliedCoupon.extra_ids
+          .map(id => extraNameMap[String(id)])
+          .filter(Boolean);
+      }
+
+      if (labels.length === 0) {
+        scopeLabel = 'Extras';
+      } else if (labels.length === 1) {
+        scopeLabel = labels[0];
+      } else if (labels.length === 2) {
+        scopeLabel = `${labels[0]} and ${labels[1]}`;
+      } else {
+        scopeLabel = `${labels.slice(0, 2).join(', ')} and others`;
+      }
+    } else {
+      scopeLabel = appliedCoupon.applies_to || '';
+    }
+
+
       displayEl.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#dcfce7;border:1px solid #86efac;border-radius:8px">
           <div style="font-size:0.875rem;color:#166534">
-            <strong>${appliedCoupon.code}</strong> - ${discountText} ${appliedCoupon.applies_to}
+            <strong>${appliedCoupon.code}</strong> - ${discountText} ${scopeLabel}
           </div>
           <button type="button" class="btn btn-sm" id="remove-coupon-btn" style="background:#fff;color:#b91c1c;border:1px solid #fecaca;padding:4px 8px;font-size:0.75rem">Remove</button>
         </div>
