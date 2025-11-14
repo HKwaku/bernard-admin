@@ -1678,6 +1678,9 @@ window.reservationDelete = async function (id) {
 function $$sel(s, root = document) { return Array.from(root.querySelectorAll(s)); }
 function $sel(s, root = document) { return root.querySelector(s); }
 function coupons_nowISO(){ return new Date().toISOString(); }
+// Global map of extra_id -> extra name for coupon labels
+var extrasNameMap = {};
+
 
 // ---- List + header ----
 async function initCoupons() {
@@ -1705,7 +1708,7 @@ async function coupons_renderList() {
   try {
     const { data, error } = await supabase
       .from('coupons')
-      .select('id,code,description,discount_type,discount_value,applies_to,valid_from,valid_until,max_uses,current_uses,max_uses_per_guest,min_booking_amount,is_active,created_at,updated_at')
+      .select('id,code,description,discount_type,discount_value,applies_to,extra_ids,valid_from,valid_until,max_uses,current_uses,max_uses_per_guest,min_booking_amount,is_active,created_at,updated_at')
       .order('created_at', { ascending: false });
 
     if (error) throw error;
@@ -1715,10 +1718,70 @@ async function coupons_renderList() {
       r.innerHTML = '<div class="muted" style="padding:20px">No coupons found.</div>';
       return;
     }
+    // Load active extras so we can show specific names in the labels
+    // Build a map of extra_id -> extra_name so we can show friendly labels
+    extrasNameMap = {};
+    try {
+      const { data: extrasData } = await supabase
+        .from('extras')
+        .select('id,name')
+        .eq('is_active', true);
+
+      extrasNameMap = Object.fromEntries(
+        (extrasData || []).map(e => [String(e.id), e.name])
+      );
+    } catch (e) {
+      console.warn('Could not load extras for coupon labels', e);
+      extrasNameMap = {};
+    }
 
     r.innerHTML = rows.map(c => {
       const discountLabel = c.discount_type === 'percentage' ? `${c.discount_value}%` : `GHS${c.discount_value}`;
-      const appliesToLabel = c.applies_to === 'Room and Extras' ? 'Room and Extras' : c.applies_to;
+      const appliesScopeLabel = (() => {
+      const applies = (c.applies_to || '').toLowerCase();
+      const getNames = () =>
+        Array.isArray(c.extra_ids)
+          ? c.extra_ids.map(id => extrasNameMap[String(id)]).filter(Boolean)
+          : [];
+
+      if (applies === 'both') {
+      const labels = Array.isArray(c.extra_ids)
+        ? c.extra_ids.map(id => extrasNameMap[String(id)]).filter(Boolean)
+        : [];
+
+      // No specific extras configured → generic
+      if (labels.length === 0) {
+        return 'Room and Extras';
+      }
+
+      // One specific extra
+      if (labels.length === 1) {
+        return `Room and ${labels[0]}`;
+      }
+
+      // Two extras
+      if (labels.length === 2) {
+        return `Room and ${labels[0]} and ${labels[1]}`;
+      }
+
+      // Three or more extras
+      return `Room and ${labels.slice(0, 2).join(', ')} and others`;
+}
+
+
+      if (applies === 'rooms') return 'Room Only';
+
+      if (applies === 'extras') {
+        const labels = getNames();
+        if (!labels.length) return 'Extras';
+        if (labels.length === 1) return labels[0];
+        if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
+        return `${labels.slice(0, 2).join(', ')} and others`;
+      }
+
+      return c.applies_to || '';
+    })();
+
       const isActive = c.is_active;
       
       return `
@@ -1726,7 +1789,7 @@ async function coupons_renderList() {
             <div class="row">
               <div style="flex:1">
                 <div class="title">${(c.code||'').toUpperCase()}</div>
-                <div class="meta"><strong style="color:#0f172a">${discountLabel} off</strong> · ${appliesToLabel}</div>
+                <div class="meta"><strong style="color:#0f172a">${discountLabel} off</strong> · ${appliesScopeLabel}</div>
                 ${c.description ? `<div class="meta" style="margin-top:6px;color:#6b7280">${c.description}</div>` : ''}
                 <div class="meta" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:16px">
                   <span>Used <strong style="color:#0f172a">${c.current_uses ?? 0}${c.max_uses ? `/${c.max_uses}` : ''}</strong></span>

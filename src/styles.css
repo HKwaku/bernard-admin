@@ -1153,6 +1153,8 @@ label {
 
 .calendar-view {
   width: 100%;
+  max-width: 100%;
+  overflow-x: auto;    /* allow horizontal scroll on narrow screens */
 }
 
 .calendar-container {
@@ -1160,6 +1162,7 @@ label {
   border: 1px solid var(--ring);
   border-radius: var(--radius-lg);
   box-shadow: 0 2px 8px rgba(0,0,0,.04);
+  min-width: 720px;    /* keeps columns readable on larger screens */
   overflow: hidden;
 }
 
@@ -1310,7 +1313,32 @@ label {
   border-color: transparent;
   box-shadow: 0 4px 12px rgba(108, 99, 255, 0.25);
 }
+/* Mobile layout for reservations calendar */
+@media (max-width: 768px) {
+  .calendar-container {
+    min-width: 0; /* let it shrink to fit mobile width */
+  }
 
+  .calendar-header {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .calendar-day {
+    min-height: 80px;  /* shorter cells on mobile */
+    padding: 6px;
+  }
+
+  .calendar-grid {
+    grid-auto-rows: minmax(70px, auto);
+  }
+
+  .calendar-booking {
+    font-size: 0.75rem;
+    padding: 4px 6px;
+    white-space: normal;  /* allow booking labels to wrap instead of overflowing */
+  }
+}
 /* ===== Calendar – Responsive ===== */
 @media (max-width: 1023px) {
   .calendar-day {
