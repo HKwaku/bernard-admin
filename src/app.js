@@ -899,7 +899,7 @@ async function openNewCustomBookingModal() {
               <input id="nb-phone" type="text" style="flex:1" />
             </div>
           </div>
-
+        </div>
 
         <div class="form-group">
           <label style="display:flex;align-items:center;gap:8px;">

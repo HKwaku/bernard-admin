@@ -2375,13 +2375,3 @@ label {
   background: #dbeafe; /* blue-100 */
   color: #1e3a8a;      /* blue-800 */
 }
-/* Force emoji flag rendering in the country selector */
-.country-select-box select,
-.country-select-box option {
-  font-family:
-    "Segoe UI Emoji",
-    "Twemoji Mozilla",
-    "Apple Color Emoji",
-    "Noto Color Emoji",
-    sans-serif !important;
-}
