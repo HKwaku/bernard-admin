@@ -1,7 +1,9 @@
 // src/app.js
 // Bernard Admin – main application script
 
-import './styles.css';
+// ❌ REMOVE the CSS import here – main.js handles it
+// import './styles.css';
+
 import { supabase } from './config/supabase.js';
 import { callOpenAI, conversationHistory } from './config/openai.js';
 import {
@@ -15,8 +17,16 @@ import {
   closeModal,
   toast,
 } from './utils/helpers.js';
-import { initAnalytics } from './analytics.js';
 
+import { initAnalytics } from './analytics.js';
+import { initReservations } from './reservations.js';
+import { initRooms } from './rooms.js';
+import { initExtras } from './extras.js';
+import { initCoupons } from './coupons.js';
+import { initPackages } from './packages.js';
+import { initChat } from './chat.js';
+
+// Main app initializer
 export function initApp() {
   const root =
     document.getElementById('root') || document.getElementById('admin-dashboard');
@@ -324,12 +334,14 @@ function stackBookingButtons() {
       };
       $('#section-title').textContent = titles[btn.dataset.view] || 'Dashboard';
 
+      if (btn.dataset.view === 'chat') initChat();
       if (btn.dataset.view === 'reservations') initReservations();
       if (btn.dataset.view === 'rooms') initRooms();
       if (btn.dataset.view === 'extras') initExtras();
       if (btn.dataset.view === 'coupons') initCoupons();
       if (btn.dataset.view === 'packages') initPackages();
       if (btn.dataset.view === 'analytics') initAnalytics();
+      
     })
   );
 
@@ -413,68 +425,6 @@ function stackBookingButtons() {
     });
   }
 
-  // ---------- Chat ----------
-  addMessage(`Hello! My name is <strong>Bernard</strong>. What would you like to do today?`);
-  $('#send-btn')?.addEventListener('click', send);
-  $('#user-input')?.addEventListener('keydown', (e) => e.key === 'Enter' && send());
-  
-  async function send() {
-    const el = $('#user-input');
-    const text = (el?.value || '').trim();
-    if (!text) return;
-    addMessage(text, true);
-    el.value = '';
-    
-    showTyping();
-    
-    // Create a status message element
-    const statusDiv = document.createElement('div');
-    statusDiv.className = 'msg bot';
-    statusDiv.id = 'status-indicator';
-    const statusBubble = document.createElement('div');
-    statusBubble.className = 'bubble';
-    statusBubble.style.fontStyle = 'italic';
-    statusBubble.style.opacity = '0.8';
-    statusBubble.textContent = '🤔 Thinking...';
-    statusDiv.appendChild(statusBubble);
-    
-    const messagesDiv = $('#messages');
-    if (messagesDiv) {
-      messagesDiv.appendChild(statusDiv);
-      messagesDiv.scrollTop = messagesDiv.scrollHeight;
-    }
-    
-    try {
-      const reply = await callOpenAI(conversationHistory, text, (status) => {
-        // Update status message
-        if (status) {
-          statusBubble.textContent = status;
-        }
-      });
-      
-      hideTyping();
-      
-      // Remove status indicator
-      const statusIndicator = $('#status-indicator');
-      if (statusIndicator) {
-        statusIndicator.remove();
-      }
-      
-      addMessage(reply || 'Done.');
-    } catch (e) {
-      hideTyping();
-      
-      // Remove status indicator
-      const statusIndicator = $('#status-indicator');
-      if (statusIndicator) {
-        statusIndicator.remove();
-      }
-      
-      addMessage('<span style="color:#b91c1c">✖ AI service temporarily unavailable.</span>');
-      console.error(e);
-    }
-  }
-
 // ---------- Quick Stats ----------
 loadStats();
 async function loadStats() {
@@ -544,1903 +494,6 @@ async function loadStats() {
     }
   }
 
-  // ---------- Reservations ----------
-  let allReservations = [];
-  let currentView = 'list'; // 'list' or 'calendar'
-  
-  async function initReservations() {
-    const list = $('#res-list');
-    list.textContent = 'Loading…';
-    
-    try {
-      const { data, error } = await supabase
-        .from('reservations')
-        .select('id,guest_first_name,guest_last_name,guest_email,guest_phone,confirmation_code,room_name,check_in,check_out,nights,adults,status,payment_status,total,currency,notes')
-        .order('check_in', { ascending: false });
-      
-      if (error) {
-        list.innerHTML = `<div style="color:#b91c1c">Error: ${error.message}</div>`;
-        return;
-      }
-      
-      allReservations = data || [];
-      setupReservationFilters();
-      renderReservations();
-    } catch (e) {
-      list.innerHTML = `<div style="color:#b91c1c">Error loading reservations</div>`;
-    }
-  }
-  const debounce = (fn, ms = 150) => {
-  let t;
-  return (...args) => {
-    clearTimeout(t);
-    t = setTimeout(() => fn(...args), ms);
-  };
-};
-
-// Search input filter
-if (searchInput) {
-  searchInput.addEventListener('input', debounce(() => renderReservations(), 180));
-}
-
-  function setupReservationFilters() {
-    const searchInput = $('#res-search');
-    const monthSelect = $('#res-month');
-    const yearSelect = $('#res-year');
-    const listBtn = $('#view-list-btn');
-    const calendarBtn = $('#view-calendar-btn');
-    
-    // Populate year dropdown
-    if (yearSelect) {
-      const currentYear = new Date().getFullYear();
-      const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
-      yearSelect.innerHTML = '<option value="">All years</option>' + 
-        years.map(y => `<option value="${y}">${y}</option>`).join('');
-    }
-    
-    // Search input filter
-    if (searchInput) {
-      searchInput.addEventListener('input', () => renderReservations());
-    }
-    
-    // Month filter
-    if (monthSelect) {
-      monthSelect.addEventListener('change', () => renderReservations());
-    }
-    
-    // Year filter
-    if (yearSelect) {
-      yearSelect.addEventListener('change', () => renderReservations());
-    }
-    
-    // View toggle
-    if (listBtn) {
-      listBtn.addEventListener('click', () => {
-        currentView = 'list';
-        listBtn.classList.add('active');
-        calendarBtn.classList.remove('active');
-        renderReservations();
-      });
-    }
-    
-    if (calendarBtn) {
-      calendarBtn.addEventListener('click', () => {
-        currentView = 'calendar';
-        calendarBtn.classList.add('active');
-        listBtn.classList.remove('active');
-        renderReservations();
-      });
-    }
-  }
-  
-  function filterReservations() {
-    const searchTerm = ($('#res-search')?.value || '').toLowerCase();
-    const selectedMonth = $('#res-month')?.value;
-    const selectedYear = $('#res-year')?.value;
-    
-    return allReservations.filter(r => {
-      // Search filter
-      if (searchTerm) {
-        const searchable = [
-          r.guest_first_name,
-          r.guest_last_name,
-          r.guest_email,
-          r.confirmation_code
-        ].join(' ').toLowerCase();
-        
-        if (!searchable.includes(searchTerm)) return false;
-      }
-      
-      // Month filter
-      if (selectedMonth !== '' && r.check_in) {
-        const checkInDate = new Date(r.check_in);
-        if (checkInDate.getMonth() !== parseInt(selectedMonth)) return false;
-      }
-      
-      // Year filter
-      if (selectedYear && r.check_in) {
-        const checkInDate = new Date(r.check_in);
-        if (checkInDate.getFullYear() !== parseInt(selectedYear)) return false;
-      }
-      
-      return true;
-    });
-  }
-  
-  function renderReservations() {
-    const filtered = filterReservations();
-    
-    if (currentView === 'list') {
-      renderListView(filtered);
-    } else {
-      renderCalendarView(filtered);
-    }
-  }
-  
-  function renderListView(data) {
-    const list = $('#res-list');
-    const calendar = $('#res-calendar');
-    
-    if (list) list.style.display = 'block';
-    if (calendar) calendar.style.display = 'none';
-    
-    if (!data || data.length === 0) {
-      list.innerHTML = '<div style="color:#6b7280;padding:20px;text-align:center">No reservations found</div>';
-      return;
-    }
-    
-    list.innerHTML = data
-      .map(r => `
-        <div class="item" onclick="showReservationDetails('${r.confirmation_code}')" style="cursor:pointer">
-          <div class="row">
-            <div>
-              <div class="title">${r.guest_first_name} ${r.guest_last_name}</div>
-              <div class="meta">${r.guest_email || ''}</div>
-              <div class="meta">Room: <strong>${r.room_name || ''}</strong></div>
-              <div class="meta">Check-in: ${r.check_in} • Check-out: ${r.check_out}</div>
-              <div class="meta">Guests: ${r.adults || 1} • Nights: ${r.nights || 1}</div>
-            </div>
-
-            <!-- right column – removed min-width to avoid stretch -->
-            <div style="text-align:right">
-              <div class="code">${r.confirmation_code}</div>
-              <div style="margin:6px 0">
-                <span class="badge ${r.status === 'confirmed' ? 'ok' : 'err'}">${r.status}</span>
-                <span class="badge ${r.payment_status === 'paid' ? 'ok' : 'err'}">${r.payment_status || 'unpaid'}</span>
-              </div>
-              <div class="price">${formatCurrency(r.total || 0, r.currency || 'GHS')}</div>
-            </div>
-          </div>
-
-          <!-- actions footer (same style as room types) -->
-          <div class="room-card-footer" onclick="event.stopPropagation()">
-            <button class="btn btn-sm" data-res-edit="${r.id}">Edit</button>
-            <button class="btn btn-sm" data-res-delete="${r.id}" style="color:#b91c1c">Delete</button>
-          </div>
-        </div>
-      `)
-      .join('');
-      list.querySelectorAll('[data-res-edit]').forEach(btn => {
-  btn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    reservationOpenEdit(btn.getAttribute('data-res-edit'));
-  });
-});
-list.querySelectorAll('[data-res-delete]').forEach(btn => {
-  btn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    reservationDelete(btn.getAttribute('data-res-delete'));
-  });
-});
-window.reservationOpenEdit = async function (id) {
-  // tiny helper to coerce date strings -> YYYY-MM-DD for <input type="date">
-  const toDateInput = (v) => {
-    if (!v) return '';
-    const d = new Date(v);
-    if (Number.isNaN(d.getTime())) return '';
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  };
-
-  try {
-    const { data: r, error } = await supabase
-      .from('reservations')
-      .select('*')
-      .eq('id', id)
-      .single();
-    if (error) throw error;
-
-    // pick whichever room field your schema uses
-    const roomFieldKey = ('room_type_code' in r) ? 'room_type_code'
-                        : ('room_code' in r) ? 'room_code'
-                        : ('room_name' in r) ? 'room_name'
-                        : null;
-
-    const modal = document.createElement('div');
-    modal.className = 'modal show';
-    modal.id = 'reservation-modal';
-    modal.innerHTML = `
-      <div class="content" onclick="event.stopPropagation()">
-        <div class="hd">
-          <h3>Edit Reservation</h3>
-          <button class="btn" onclick="this.closest('#reservation-modal').remove()">×</button>
-        </div>
-
-        <div class="bd">
-          <div class="form-grid">
-            <div class="form-group">
-              <label>First Name</label>
-              <input id="res-first" type="text" value="${r.guest_first_name || ''}" />
-            </div>
-            <div class="form-group">
-              <label>Last Name</label>
-              <input id="res-last" type="text" value="${r.guest_last_name || ''}" />
-            </div>
-          </div>
-
-          <div class="form-grid">
-            <div class="form-group">
-              <label>Email</label>
-              <input id="res-email" type="email" value="${r.guest_email || ''}" />
-            </div>
-            <div class="form-group">
-              <label>Phone</label>
-              <input id="res-phone" type="text" value="${r.guest_phone || ''}" />
-            </div>
-          </div>
-
-          <div class="form-grid">
-            <div class="form-group">
-              <label>Check-in</label>
-              <input id="res-in" type="date" value="${toDateInput(r.check_in)}" />
-            </div>
-            <div class="form-group">
-              <label>Check-out</label>
-              <input id="res-out" type="date" value="${toDateInput(r.check_out)}" />
-            </div>
-          </div>
-
-          <div class="form-grid">
-            <div class="form-group">
-              <label>Adults</label>
-              <input id="res-adults" type="number" min="1" step="1" value="${r.adults ?? 1}" />
-            </div>
-            <div class="form-group">
-              <label>Children</label>
-              <input id="res-children" type="number" min="0" step="1" value="${r.children ?? 0}" />
-            </div>
-          </div>
-
-          ${roomFieldKey ? `
-          <div class="form-group">
-            <label>${roomFieldKey.replace(/_/g,' ')}</label>
-            <input id="res-room" type="text" value="${r[roomFieldKey] || ''}" />
-          </div>` : ''}
-
-          <div class="form-grid">
-            <div class="form-group">
-              <label>Status</label>
-              <select id="res-status">
-                <option value="pending" ${r.status==='pending'?'selected':''}>pending</option>
-                <option value="confirmed" ${r.status==='confirmed'?'selected':''}>confirmed</option>
-                <option value="cancelled" ${r.status==='cancelled'?'selected':''}>cancelled</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Payment Status</label>
-              <select id="res-pay">
-                <option value="unpaid" ${r.payment_status==='unpaid'?'selected':''}>unpaid</option>
-                <option value="paid" ${r.payment_status==='paid'?'selected':''}>paid</option>
-                <option value="refunded" ${r.payment_status==='refunded'?'selected':''}>refunded</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="form-grid">
-            <div class="form-group">
-              <label>Currency</label>
-              <input id="res-currency" type="text" value="${r.currency || 'GHS'}" />
-            </div>
-            <div class="form-group">
-              <label>Total</label>
-              <input id="res-total" type="number" step="0.01" value="${r.total ?? ''}" />
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label>Notes</label>
-            <textarea id="res-notes" rows="3">${r.notes || ''}</textarea>
-          </div>
-        </div>
-
-        <div class="ft">
-          <button class="btn" onclick="this.closest('#reservation-modal').remove()">Cancel</button>
-          <button class="btn btn-primary" id="res-edit-save">Save</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(modal);
-
-    modal.querySelector('#res-edit-save').addEventListener('click', async () => {
-      const payload = {
-        guest_first_name: modal.querySelector('#res-first').value.trim() || null,
-        guest_last_name:  modal.querySelector('#res-last').value.trim() || null,
-        guest_email:      modal.querySelector('#res-email').value.trim() || null,
-        guest_phone:      modal.querySelector('#res-phone').value.trim() || null,
-        check_in:         modal.querySelector('#res-in').value || null,
-        check_out:        modal.querySelector('#res-out').value || null,
-        adults:           parseInt(modal.querySelector('#res-adults').value || '0', 10) || 0,
-        children:         parseInt(modal.querySelector('#res-children').value || '0', 10) || 0,
-        status:           modal.querySelector('#res-status').value,
-        payment_status:   modal.querySelector('#res-pay').value,
-        currency:         modal.querySelector('#res-currency').value.trim() || null,
-        total:            (modal.querySelector('#res-total').value === '' ? null : parseFloat(modal.querySelector('#res-total').value)),
-        notes:            modal.querySelector('#res-notes').value || null
-      };
-
-      if (roomFieldKey) {
-        payload[roomFieldKey] = modal.querySelector('#res-room').value.trim() || null;
-      }
-
-      const { error: upErr } = await supabase.from('reservations').update(payload).eq('id', id);
-      if (upErr) { alert('Error saving: ' + upErr.message); return; }
-      modal.remove();
-      toast('Reservation updated');
-      initReservations();
-    });
-  } catch (e) {
-    console.error(e);
-    alert('Error loading reservation: ' + (e.message || e));
-  }
-};
-
-window.reservationDelete = async function (id) {
-  if (!confirm('Delete this reservation? This cannot be undone.')) return;
-  try {
-    const { error } = await supabase.from('reservations').delete().eq('id', id);
-    if (error) throw error;
-    toast('Reservation deleted');
-    initReservations();
-  } catch (e) {
-    console.error(e);
-    alert('Error deleting reservation: ' + (e.message || e));
-  }
-};
-
-  }
-  
-  function renderCalendarView(data) {
-    const list = $('#res-list');
-    const calendar = $('#res-calendar');
-    
-    if (list) list.style.display = 'none';
-    if (calendar) calendar.style.display = 'block';
-    
-    // Determine which month to show
-    const selectedMonth = $('#res-month')?.value;
-    const selectedYear = $('#res-year')?.value;
-    
-    let displayDate;
-    if (selectedMonth !== '' && selectedYear) {
-      displayDate = new Date(parseInt(selectedYear), parseInt(selectedMonth), 1);
-    } else if (selectedYear) {
-      displayDate = new Date(parseInt(selectedYear), new Date().getMonth(), 1);
-    } else if (selectedMonth !== '') {
-      displayDate = new Date(new Date().getFullYear(), parseInt(selectedMonth), 1);
-    } else {
-      displayDate = new Date();
-    }
-    
-    renderCalendar(displayDate, data);
-  }
-  
-  function renderCalendar(date, reservations) {
-    const calendar = $('#res-calendar');
-    if (!calendar) return;
-    
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    const startingDayOfWeek = firstDay.getDay();
-    const monthDays = lastDay.getDate();
-    
-    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
-                        'July', 'August', 'September', 'October', 'November', 'December'];
-    
-    // Group reservations by date
-    const reservationsByDate = {};
-    reservations.forEach(r => {
-      const checkIn = new Date(r.check_in);
-      const checkOut = new Date(r.check_out);
-      
-      // Add reservation to all dates it spans
-      for (let d = new Date(checkIn); d <= checkOut; d.setDate(d.getDate() + 1)) {
-        if (d.getMonth() === month && d.getFullYear() === year) {
-          const dateKey = d.getDate();
-          if (!reservationsByDate[dateKey]) reservationsByDate[dateKey] = [];
-          reservationsByDate[dateKey].push(r);
-        }
-      }
-    });
-    
-    let calendarHTML = `
-      <div class="calendar-container">
-        <div class="calendar-header">
-          <button class="btn" id="prev-month">‹</button>
-          <h3 style="margin:0;flex:1;text-align:center">${monthNames[month]} ${year}</h3>
-          <button class="btn" id="next-month">›</button>
-        </div>
-        <div class="calendar-grid">
-          <div class="calendar-day-header">Sun</div>
-          <div class="calendar-day-header">Mon</div>
-          <div class="calendar-day-header">Tue</div>
-          <div class="calendar-day-header">Wed</div>
-          <div class="calendar-day-header">Thu</div>
-          <div class="calendar-day-header">Fri</div>
-          <div class="calendar-day-header">Sat</div>
-    `;
-    
-    // Empty cells before first day
-    for (let i = 0; i < startingDayOfWeek; i++) {
-      calendarHTML += '<div class="calendar-day empty"></div>';
-    }
-    
-    // Days of the month
-    for (let day = 1; day <= monthDays; day++) {
-      const bookings = reservationsByDate[day] || [];
-      const isToday = new Date().toDateString() === new Date(year, month, day).toDateString();
-      
-      calendarHTML += `
-        <div class="calendar-day ${isToday ? 'today' : ''}" data-date="${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}">
-          <div class="calendar-day-number">${day}</div>
-          <div class="calendar-bookings">
-            ${bookings.slice(0, 3).map(b => {
-              const checkIn = new Date(b.check_in);
-              const isCheckIn = checkIn.getDate() === day && checkIn.getMonth() === month;
-              return `
-                <div class="calendar-booking ${isCheckIn ? 'check-in' : 'staying'}" 
-                     onclick="showReservationDetails('${b.confirmation_code}')"
-                     title="${b.guest_first_name} ${b.guest_last_name} - ${b.room_name}">
-                  ${isCheckIn ? '→ ' : ''}${b.guest_first_name} ${b.guest_last_name.charAt(0)}.
-                </div>
-              `;
-            }).join('')}
-            ${bookings.length > 3 ? `<div class="calendar-more">+${bookings.length - 3} more</div>` : ''}
-          </div>
-        </div>
-      `;
-    }
-    
-    calendarHTML += `
-        </div>
-      </div>
-    `;
-    
-    calendar.innerHTML = calendarHTML;
-    
-    // Add navigation handlers
-    $('#prev-month')?.addEventListener('click', () => {
-      const prevMonth = new Date(year, month - 1, 1);
-      renderCalendar(prevMonth, reservations);
-    });
-    
-    $('#next-month')?.addEventListener('click', () => {
-      const nextMonth = new Date(year, month + 1, 1);
-      renderCalendar(nextMonth, reservations);
-    });
-  }
-  
-  // Global function to show reservation details
-  window.showReservationDetails = async (confirmationCode) => {
-    const reservation = allReservations.find(r => r.confirmation_code === confirmationCode);
-    if (!reservation) return;
-    
-    const details = `
-      <div style="line-height:1.8">
-        <h3 style="margin:0 0 15px 0">${reservation.guest_first_name} ${reservation.guest_last_name}</h3>
-        <p><strong>Email:</strong> ${reservation.guest_email || 'N/A'}</p>
-        <p><strong>Phone:</strong> ${reservation.guest_phone || 'N/A'}</p>
-        <p><strong>Confirmation Code:</strong> <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px">${reservation.confirmation_code}</code></p>
-        <p><strong>Room:</strong> ${reservation.room_name || 'N/A'}</p>
-        <p><strong>Check-in:</strong> ${reservation.check_in}</p>
-        <p><strong>Check-out:</strong> ${reservation.check_out}</p>
-        <p><strong>Nights:</strong> ${reservation.nights || 1}</p>
-        <p><strong>Guests:</strong> ${reservation.adults || 1} adults</p>
-        <p><strong>Status:</strong> <span class="badge ${reservation.status === 'confirmed' ? 'ok' : 'err'}">${reservation.status}</span></p>
-        <p><strong>Payment:</strong> <span class="badge ${reservation.payment_status === 'paid' ? 'ok' : 'err'}">${reservation.payment_status || 'unpaid'}</span></p>
-        <p><strong>Total:</strong> ${formatCurrency(reservation.total || 0, reservation.currency || 'GHS')}</p>
-        ${reservation.notes ? `<p><strong>Notes:</strong> ${reservation.notes}</p>` : ''}
-      </div>
-    `;
-    
-    // Show in a simple alert for now (you can enhance this with a modal)
-    const modal = document.createElement('div');
-    modal.innerHTML = `
-      <div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center" onclick="this.remove()">
-        <div style="background:white;padding:30px;border-radius:12px;max-width:500px;width:90%;max-height:80vh;overflow-y:auto" onclick="event.stopPropagation()">
-          ${details}
-          <button class="btn" onclick="this.closest('div[style*=fixed]').remove()" style="margin-top:20px;width:100%">Close</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(modal);
-  };
-
-
-  // ---------- Rooms ----------
-  async function initRooms() {
-    // Add event listener for Add Room button
-    const addBtn = $('#add-room-btn');
-    if (addBtn) {
-      // Remove existing listener to avoid duplicates
-      const newBtn = addBtn.cloneNode(true);
-      addBtn.parentNode.replaceChild(newBtn, addBtn);
-      newBtn.addEventListener('click', () => openRoomModal());
-    }
-
-    const el = $('#rooms-list');
-    el.textContent = 'Loading…';
-
-    const { data, error } = await supabase
-      .from('room_types')
-      .select('*')
-      .order('code', { ascending: true });
-
-    if (error) {
-      el.innerHTML = `<div style="color:#b91c1c">Error: ${error.message}</div>`;
-      return;
-    }
-    if (!data?.length) {
-      el.innerHTML = `<div style="color:#6b7280">No room types found.</div>`;
-      return;
-    }
-
-    const fmt = (n, cur) => formatCurrency(Number(n || 0), cur || 'GBP');
-
-    el.innerHTML = data
-      .map((r) => {
-        const img = r.image_url
-          ? `<img src="${r.image_url}" alt="${r.name}" style="width:80px;height:60px;object-fit:cover;border-radius:8px;margin-right:10px;border:1px solid #e5e7eb" />`
-          : '';
-        const adults = `<div class="meta" style="margin-top:6px;opacity:.8">Sleeps up to <strong>${r.max_adults || 1}</strong></div>`;
-        const isActive = r.is_active !== false;
-
-        return `
-  <div class="item">
-    <!-- Top section: image + content -->
-    <div class="room-card-top">
-      <div class="room-card-media">
-        ${r.image_url ? `<img src="${r.image_url}" alt="${r.name || ''}">` : ''}
-      </div>
-      <div>
-        <div class="room-card-header">
-          <div>
-            <h3 class="room-card-title">${r.name ?? ''}</h3>
-            <div class="meta" style="margin-top:6px;opacity:.8">
-              Sleeps up to <strong>${r.max_adults || 1}</strong>
-            </div>
-          </div>
-          <span class="badge ${isActive ? 'ok' : 'err'}">
-            ${isActive ? 'Active' : 'Inactive'}
-          </span>
-        </div>
-
-        <div class="room-card-body">
-          <div class="room-card-price-row">
-            <span>Weekday:</span>
-            <strong>${
-              r.base_price_per_night_weekday != null
-                ? fmt(r.base_price_per_night_weekday, r.currency)
-                : 'n/a'
-            }</strong>
-          </div>
-          <div class="room-card-price-row">
-            <span>Weekend:</span>
-            <strong>${
-              r.base_price_per_night_weekend != null
-                ? fmt(r.base_price_per_night_weekend, r.currency)
-                : 'n/a'
-            }</strong>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Footer actions -->
-    <div class="room-card-footer">
-      <button class="btn btn-sm" data-room-edit="${r.id}">Edit</button>
-      <button
-        class="btn btn-sm"
-        data-room-toggle="${r.id}"
-        data-room-active="${isActive}"
-      >
-        ${isActive ? 'Deactivate' : 'Activate'}
-      </button>
-      <button
-        class="btn btn-sm"
-        data-room-delete="${r.id}"
-        style="color:#b91c1c"
-      >
-        Delete
-      </button>
-    </div>
-  </div>`;
-      })
-      .join('');
-
-    // Attach event listeners
-    el.querySelectorAll('[data-room-edit]').forEach(btn => {
-      btn.addEventListener('click', () => openRoomModal(btn.dataset.roomEdit));
-    });
-    el.querySelectorAll('[data-room-toggle]').forEach(btn => {
-      btn.addEventListener('click', () => toggleRoomStatus(btn.dataset.roomToggle, btn.dataset.roomActive === 'true'));
-    });
-    el.querySelectorAll('[data-room-delete]').forEach(btn => {
-      btn.addEventListener('click', () => deleteRoom(btn.dataset.roomDelete));
-    });
-  }
-
-  // Room Modal
-  function openRoomModal(id = null) {
-    const modal = document.createElement('div');
-    modal.id = 'room-modal';
-    modal.className = 'modal';
-    modal.style.display = 'flex';
-
-    modal.innerHTML = `
-      <div class="content">
-        <div class="hd">
-          <h3 id="room-modal-title" style="margin:0">${id ? 'Edit Room Type' : 'Add Room Type'}</h3>
-          <button id="room-close" class="btn">×</button>
-        </div>
-        <div class="bd">
-          <div id="room-error" class="muted" style="min-height:18px"></div>
-
-          <div class="form-grid">
-            <div class="form-group">
-              <label>Code *</label>
-              <input id="r-code" required style="text-transform:uppercase" />
-            </div>
-            <div class="form-group">
-              <label>Name *</label>
-              <input id="r-name" required />
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label>Description</label>
-            <textarea id="r-desc" rows="3" style="resize:vertical"></textarea>
-          </div>
-
-          <div class="form-grid-3">
-            <div class="form-group">
-              <label>Weekday Price *</label>
-              <input id="r-weekday" type="number" step="0.01" required />
-            </div>
-            <div class="form-group">
-              <label>Weekend Price *</label>
-              <input id="r-weekend" type="number" step="0.01" required />
-            </div>
-            <div class="form-group">
-              <label>Currency</label>
-              <select id="r-currency">
-                <option value="GBP">GBP (£)</option>
-                <option value="USD">USD ($)</option>
-                <option value="EUR">EUR (€)</option>
-                <option value="GHS">GHS (₵)</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="form-grid">
-            <div class="form-group">
-              <label>Max Adults</label>
-              <input id="r-max-adults" type="number" min="1" value="2" />
-            </div>
-            <div class="form-group">
-              <label>Active</label>
-              <select id="r-active">
-                <option value="true" selected>Yes</option>
-                <option value="false">No</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label>Image URL</label>
-            <div style="display:flex; gap:8px; align-items:center">
-              <input id="r-image" type="url" placeholder="https://..." style="flex:1" />
-              <input id="r-image-file" type="file" accept="image/*" style="width:auto" />
-            </div>
-            <div id="r-image-preview" style="margin-top:8px; display:none">
-              <img id="r-image-preview-img" src="" alt="preview" style="max-width:100%; border-radius:10px"/>
-            </div>
-            <div id="r-image-help" class="muted" style="margin-top:6px">
-              Choose an image to upload; the URL will be filled automatically.
-            </div>
-          </div>
-        </div>
-
-        <div class="ft">
-          <button class="btn" id="room-cancel">Cancel</button>
-          <button class="btn btn-primary" id="room-save">${id ? 'Update' : 'Create'}</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(modal);
-    // ---- image upload wiring (rooms) ----
-    const fileInput        = modal.querySelector('#r-image-file');
-    const imageUrlInput    = modal.querySelector('#r-image');
-    const imagePreview     = modal.querySelector('#r-image-preview');
-    const imagePreviewImg  = modal.querySelector('#r-image-preview-img');
-
-    fileInput?.addEventListener('change', async (e) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-
-      const code = (modal.querySelector('#r-code')?.value || 'ROOM').toString().toUpperCase();
-      try {
-        const publicUrl = await uploadRoomImage(file, code);  // helper below
-        imageUrlInput.value = publicUrl;
-        if (imagePreviewImg) {
-          imagePreviewImg.src = publicUrl;
-          imagePreview.style.display = 'block';
-        }
-
-        // If editing an existing room, persist immediately
-        if (id) {
-          const { error } = await supabase.from('room_types')
-            .update({ image_url: publicUrl })
-            .eq('id', id);
-          if (error) throw error;
-          toast('Image uploaded and room updated');
-          await initRooms();
-        } else {
-          // In create mode, the URL will be saved when the user clicks "Create"
-      toast('Image uploaded — URL filled. Save the room to persist.');
-    }
-  } catch (err) {
-    alert('Upload failed: ' + (err.message || err));
-  }
-});
-
-    // Close handlers
-    const close = () => modal.remove();
-    $('#room-close').addEventListener('click', close);
-    $('#room-cancel').addEventListener('click', close);
-    modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
-
-    // If editing, fetch & populate
-    if (id) {
-      fillRoomForm(id).catch(err => {
-        $('#room-error').textContent = 'Error loading room: ' + (err.message || err);
-      });
-    }
-
-    // Save
-    $('#room-save').addEventListener('click', async () => {
-      try {
-        const payload = collectRoomForm();
-        let result;
-        if (id) {
-          result = await supabase.from('room_types').update(payload).eq('id', id);
-        } else {
-          result = await supabase.from('room_types').insert(payload);
-        }
-        if (result.error) throw result.error;
-        close();
-        await initRooms();
-        toast(`Room type ${id ? 'updated' : 'created'} successfully`);
-      } catch (e) {
-        $('#room-error').textContent = 'Error saving: ' + (e.message || e);
-      }
-    });
-  }
-
-  function collectRoomForm() {
-    const code = $('#r-code').value.trim().toUpperCase();
-    const name = $('#r-name').value.trim();
-    const description = $('#r-desc').value.trim() || null;
-    const base_price_per_night_weekday = parseFloat($('#r-weekday').value);
-    const base_price_per_night_weekend = parseFloat($('#r-weekend').value);
-    const currency = $('#r-currency').value;
-    const max_adults = parseInt($('#r-max-adults').value, 10) || 2;
-    const active = $('#r-active').value === 'true';
-    const image_url = $('#r-image').value.trim() || null;
-
-    if (!code || !name || Number.isNaN(base_price_per_night_weekday) || Number.isNaN(base_price_per_night_weekend)) {
-      throw new Error('Code, Name, and Prices are required.');
-    }
-    return {
-      code,
-      name,
-      description,
-      base_price_per_night_weekday,
-      base_price_per_night_weekend,
-      currency,
-      max_adults,
-      is_active: active, // map local `active` to DB column
-      image_url
-    };
-  }
-
-  async function fillRoomForm(id) {
-    const { data, error } = await supabase
-      .from('room_types')
-      .select('*')
-      .eq('id', id)
-      .single();
-    if (error) throw error;
-    const r = data;
-
-    $('#r-code').value = (r.code || '').toUpperCase();
-    $('#r-name').value = r.name || '';
-    $('#r-desc').value = r.description || '';
-    $('#r-weekday').value = r.base_price_per_night_weekday ?? '';
-    $('#r-weekend').value = r.base_price_per_night_weekend ?? '';
-    $('#r-currency').value = r.currency || 'GBP';
-    $('#r-max-adults').value = r.max_adults ?? 2;
-    $('#r-active').value = (r.is_active !== false) ? 'true' : 'false';
-    $('#r-image').value = r.image_url || '';
-    }
-    if (r.image_url) {
-      const prev = modal.querySelector('#r-image-preview');
-      const img  = modal.querySelector('#r-image-preview-img');
-      if (img && prev) {
-        img.src = r.image_url;
-        prev.style.display = 'block';
-      }
-    }
-
-  async function toggleRoomStatus(id, currentStatus) {
-    const newStatus = !currentStatus;
-    try {
-      const { error } = await supabase
-        .from('room_types')
-        .update({ is_active: newStatus })
-        .eq('id', id);
-      
-      if (error) throw error;
-      await initRooms();
-      toast(`Room ${newStatus ? 'activated' : 'deactivated'} successfully`);
-    } catch (e) {
-      console.error('Toggle room status error:', e);
-      alert('Error updating room status: ' + (e.message || e));
-    }
-  }
-
-  async function deleteRoom(id) {
-    if (!confirm('Are you sure you want to delete this room type? This action cannot be undone.')) {
-      return;
-    }
-    const { error } = await supabase.from('room_types').delete().eq('id', id);
-    if (error) {
-      toast('Error deleting room: ' + error.message, 'error');
-      return;
-    }
-    await initRooms();
-    toast('Room type deleted successfully');
-  }
-
-  // ---------- Extras ----------
-  async function initExtras() {
-    // Add event listener for Add Extra button
-    const addBtn = $('#add-extra-btn');
-    if (addBtn) {
-      // Remove existing listener to avoid duplicates
-      const newBtn = addBtn.cloneNode(true);
-      addBtn.parentNode.replaceChild(newBtn, addBtn);
-      newBtn.addEventListener('click', () => openExtraModal());
-    }
-
-    const el = $('#extras-list');
-    el.textContent = 'Loading…';
-    const { data, error } = await supabase.from('extras').select('*').order('name', { ascending: true });
-    if (error) {
-      el.innerHTML = `<div style="color:#b91c1c">Error: ${error.message}</div>`;
-      return;
-    }
-    if (!data?.length) {
-      el.innerHTML = `<div style="color:#6b7280">No extras found.</div>`;
-      return;
-    }
-    el.innerHTML = data
-      .map((x) => {
-        const isActive = x.is_active !== false;
-        return `
-        <div class="item">
-          <div class="row" style="align-items:flex-start;gap:12px">
-            <div style="flex:1">
-              <div class="title">${x.name || ''}</div>
-              <div class="meta">${x.category || ''}</div>
-              ${x.description ? `<div class="meta" style="margin-top:6px;color:#6b7280">${x.description}</div>` : ''}
-              <div class="meta" style="margin-top:8px">
-                Price: <strong>${formatCurrency(x.price || 0, x.currency || 'GHS')}</strong> • ${x.unit_type || ''}
-              </div>
-            </div>
-            <div style="text-align:right">
-              <span class="badge ${isActive ? 'ok' : 'err'}">${isActive ? 'Active' : 'Inactive'}</span>
-            </div>
-          </div>
-
-          <div class="room-card-footer">
-            <button class="btn btn-sm" data-extra-edit="${x.id}">Edit</button>
-            <button class="btn btn-sm" data-extra-toggle="${x.id}" data-extra-active="${isActive}">${isActive ? 'Deactivate' : 'Activate'}</button>
-            <button class="btn btn-sm" data-extra-delete="${x.id}" style="color:#b91c1c">Delete</button>
-          </div>
-        </div>
-      </div>`;
-      })
-      .join('');
-
-    // Attach event listeners
-    el.querySelectorAll('[data-extra-edit]').forEach(btn => {
-      btn.addEventListener('click', () => openExtraModal(btn.dataset.extraEdit));
-    });
-    el.querySelectorAll('[data-extra-toggle]').forEach(btn => {
-      btn.addEventListener('click', () => toggleExtraStatus(btn.dataset.extraToggle, btn.dataset.extraActive === 'true'));
-    });
-    el.querySelectorAll('[data-extra-delete]').forEach(btn => {
-      btn.addEventListener('click', () => deleteExtra(btn.dataset.extraDelete));
-    });
-  }
-
-  // Extra Modal
-  function openExtraModal(id = null) {
-    const modal = document.createElement('div');
-    modal.id = 'extra-modal';
-    modal.className = 'modal';
-    modal.style.display = 'flex';
-
-    modal.innerHTML = `
-      <div class="content">
-        <div class="hd">
-          <h3 id="extra-modal-title" style="margin:0">${id ? 'Edit Extra' : 'Add Extra'}</h3>
-          <button id="extra-close" class="btn">×</button>
-        </div>
-        <div class="bd">
-          <div id="extra-error" class="muted" style="min-height:18px"></div>
-
-          <div class="form-grid">
-            <div class="form-group">
-              <label>Name *</label>
-              <input id="e-name" required />
-            </div>
-            <div class="form-group">
-              <label>Category</label>
-              <input id="e-category" placeholder="e.g., Food, Activity, Service" />
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label>Description</label>
-            <textarea id="e-desc" rows="3" style="resize:vertical"></textarea>
-          </div>
-
-          <div class="form-grid">
-            <div class="form-group">
-              <label>Price *</label>
-              <input id="e-price" type="number" step="0.01" required />
-            </div>
-            <div class="form-group">
-              <label>Currency</label>
-              <select id="e-currency">
-                <option value="GBP">GBP (£)</option>
-                <option value="USD">USD ($)</option>
-                <option value="EUR">EUR (€)</option>
-                <option value="GHS">GHS (₵)</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="form-grid">
-            <div class="form-group">
-              <label>Unit Type</label>
-              <select id="e-unit-type">
-                <option value="per_booking">Per Booking</option>
-                <option value="per_night">Per Night</option>
-                <option value="per_person">Per Person</option>
-                <option value="per_person_per_night">Per Person Per Night</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Active</label>
-              <select id="e-active">
-                <option value="true" selected>Yes</option>
-                <option value="false">No</option>
-              </select>
-            </div>
-          </div>
-        </div>
-        <div class="ft">
-          <button class="btn" id="extra-cancel">Cancel</button>
-          <button class="btn btn-primary" id="extra-save">${id ? 'Update' : 'Create'}</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(modal);
-
-    // Close handlers
-    const close = () => modal.remove();
-    $('#extra-close').addEventListener('click', close);
-    $('#extra-cancel').addEventListener('click', close);
-    modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
-
-    // If editing, fetch & populate
-    if (id) {
-      fillExtraForm(id).catch(err => {
-        $('#extra-error').textContent = 'Error loading extra: ' + (err.message || err);
-      });
-    }
-
-    // Save
-    $('#extra-save').addEventListener('click', async () => {
-      try {
-        const payload = collectExtraForm();
-        let result;
-        if (id) {
-          result = await supabase.from('extras').update(payload).eq('id', id);
-        } else {
-          result = await supabase.from('extras').insert(payload);
-        }
-        if (result.error) throw result.error;
-        close();
-        await initExtras();
-        toast(`Extra ${id ? 'updated' : 'created'} successfully`);
-      } catch (e) {
-        $('#extra-error').textContent = 'Error saving: ' + (e.message || e);
-      }
-    });
-  }
-
-  function collectExtraForm() {
-    const root = document.getElementById('extra-modal') || document;
-    const name = root.querySelector('#e-name').value.trim();
-    const category = root.querySelector('#e-category').value.trim() || null;
-    const description = root.querySelector('#e-desc').value.trim() || null;
-    const price = parseFloat(root.querySelector('#e-price').value);
-    const currency = root.querySelector('#e-currency').value;
-    const unit_type = root.querySelector('#e-unit-type').value;
-    const active = root.querySelector('#e-active').value === 'true';
-
-    if (!name || Number.isNaN(price)) {
-      throw new Error('Name and Price are required.');
-    }
-    return {
-      name,
-      category,
-      description,
-      price,
-      currency,
-      unit_type,
-      is_active: active     // map local `active` to DB column
-    };
-  }
-
-  async function fillExtraForm(id) {
-    const { data, error } = await supabase
-      .from('extras')
-      .select('*')
-      .eq('id', id)
-      .single();
-    if (error) throw error;
-    const e = data;
-    const root = document.getElementById('extra-modal') || document;
-    root.querySelector('#e-name').value = e.name || '';
-    root.querySelector('#e-category').value = e.category || '';
-    root.querySelector('#e-desc').value = e.description || '';
-    root.querySelector('#e-price').value = e.price ?? '';
-     root.querySelector('#e-currency').value = e.currency || 'GBP';
-     root.querySelector('#e-unit-type').value = e.unit_type || 'per_booking';
-     root.querySelector('#e-active').value = (e.is_active !== false) ? 'true' : 'false';
-  }
-
-  async function toggleExtraStatus(id, currentStatus) {
-    const newStatus = !currentStatus;
-    try {
-      const { error } = await supabase
-        .from('extras')
-        .update({ is_active: newStatus })
-        .eq('id', id);
-      
-      if (error) throw error;
-      await initExtras();
-      toast(`Extra ${newStatus ? 'activated' : 'deactivated'} successfully`);
-    } catch (e) {
-      console.error('Toggle extra status error:', e);
-      alert('Error updating extra status: ' + (e.message || e));
-    }
-  }
-
-  async function deleteExtra(id) {
-    if (!confirm('Are you sure you want to delete this extra? This action cannot be undone.')) {
-      return;
-    }
-    const { error } = await supabase.from('extras').delete().eq('id', id);
-    if (error) {
-      toast('Error deleting extra: ' + error.message, 'error');
-      return;
-    }
-    await initExtras();
-    toast('Extra deleted successfully');
-  }
-
-/* =========================
-   COUPONS (self-contained)
-   Supabase columns:
-   id, code, description, discount_type, discount_value,
-   applies_to, valid_from, valid_until,
-   max_uses, current_uses, max_uses_per_guest,
-   min_booking_amount, is_active, created_at, updated_at, created_by
-   ========================= */
-
-// ---- Utilities local to this module ----
-function $$sel(s, root = document) { return Array.from(root.querySelectorAll(s)); }
-function $sel(s, root = document) { return root.querySelector(s); }
-function coupons_nowISO(){ return new Date().toISOString(); }
-// Global map of extra_id -> extra name for coupon labels
-var extrasNameMap = {};
-
-
-// ---- List + header ----
-async function initCoupons() {
-  const panel = $sel('#view-coupons');
-  if (!panel) return;
-
-  panel.innerHTML = `
-    <div style="display: flex; justify-content: flex-end; margin: 4px 14px 4px 0; padding-top: 2px;">
-  <button class="btn" id="coupon-add-btn" style="margin-top: 8px;">+ Add Coupon</button>
-    </div>
-    <div id="coupons-list"><div class="muted">Loading…</div></div>
-  `;
-
-  $sel('#coupon-add-btn')?.addEventListener('click', () => coupons_openForm()); // ADD
-
-  await coupons_renderList();
-}
-
-async function coupons_renderList() {
-  const r = $sel('#coupons-list');
-  if (!r) return;
-
-  r.innerHTML = '<div class="muted" style="padding:12px">Loading…</div>';
-
-  try {
-    const { data, error } = await supabase
-      .from('coupons')
-      .select('id,code,description,discount_type,discount_value,applies_to,extra_ids,valid_from,valid_until,max_uses,current_uses,max_uses_per_guest,min_booking_amount,is_active,created_at,updated_at')
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
-
-    const rows = data ?? [];
-    if (!rows.length) {
-      r.innerHTML = '<div class="muted" style="padding:20px">No coupons found.</div>';
-      return;
-    }
-    // Load active extras so we can show specific names in the labels
-    // Build a map of extra_id -> extra_name so we can show friendly labels
-    extrasNameMap = {};
-    try {
-      const { data: extrasData } = await supabase
-        .from('extras')
-        .select('id,name')
-        .eq('is_active', true);
-
-      extrasNameMap = Object.fromEntries(
-        (extrasData || []).map(e => [String(e.id), e.name])
-      );
-    } catch (e) {
-      console.warn('Could not load extras for coupon labels', e);
-      extrasNameMap = {};
-    }
-
-    r.innerHTML = rows.map(c => {
-      const discountLabel = c.discount_type === 'percentage' ? `${c.discount_value}%` : `GHS${c.discount_value}`;
-      const appliesScopeLabel = (() => {
-      const applies = (c.applies_to || '').toLowerCase();
-      const getNames = () =>
-        Array.isArray(c.extra_ids)
-          ? c.extra_ids.map(id => extrasNameMap[String(id)]).filter(Boolean)
-          : [];
-
-      if (applies === 'both') {
-      const labels = Array.isArray(c.extra_ids)
-        ? c.extra_ids.map(id => extrasNameMap[String(id)]).filter(Boolean)
-        : [];
-
-      // No specific extras configured → generic
-      if (labels.length === 0) {
-        return 'Room and Extras';
-      }
-
-      // One specific extra
-      if (labels.length === 1) {
-        return `Room and ${labels[0]}`;
-      }
-
-      // Two extras
-      if (labels.length === 2) {
-        return `Room and ${labels[0]} and ${labels[1]}`;
-      }
-
-      // Three or more extras
-      return `Room and ${labels.slice(0, 2).join(', ')} and others`;
-}
-
-
-      if (applies === 'rooms') return 'Room Only';
-
-      if (applies === 'extras') {
-        const labels = getNames();
-        if (!labels.length) return 'Extras';
-        if (labels.length === 1) return labels[0];
-        if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
-        return `${labels.slice(0, 2).join(', ')} and others`;
-      }
-
-      return c.applies_to || '';
-    })();
-
-      const isActive = c.is_active;
-      
-      return `
-          <div class="item coupon-card" data-id="${c.id}">
-            <div class="row">
-              <div style="flex:1">
-                <div class="title">${(c.code||'').toUpperCase()}</div>
-                <div class="meta"><strong style="color:#0f172a">${discountLabel} off</strong> · ${appliesScopeLabel}</div>
-                ${c.description ? `<div class="meta" style="margin-top:6px;color:#6b7280">${c.description}</div>` : ''}
-                <div class="meta" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:16px">
-                  <span>Used <strong style="color:#0f172a">${c.current_uses ?? 0}${c.max_uses ? `/${c.max_uses}` : ''}</strong></span>
-                  ${c.max_uses_per_guest ? `<span>Max <strong style="color:#0f172a">${c.max_uses_per_guest}</strong>/guest</span>` : ''}
-                  ${c.min_booking_amount ? `<span>Min <strong style="color:#0f172a">£${c.min_booking_amount}</strong></span>` : ''}
-                  ${c.valid_from || c.valid_until ? `<span>${c.valid_from ? new Date(c.valid_from).toLocaleDateString() : '∞'} → ${c.valid_until ? new Date(c.valid_until).toLocaleDateString() : '∞'}</span>` : ''}
-                </div>
-              </div>
-              <div style="text-align:right">
-                <span class="badge ${isActive ? 'ok' : 'err'}">${isActive ? 'Active' : 'Inactive'}</span>
-              </div>
-            </div>
-
-            <div class="room-card-footer">
-              <button class="btn btn-sm" data-action="edit" data-id="${c.id}">Edit</button>
-              <button class="btn btn-sm" data-action="toggle" data-id="${c.id}" data-active="${isActive}">${isActive ? 'Deactivate' : 'Activate'}</button>
-              <button class="btn btn-sm" data-action="delete" data-id="${c.id}" style="color:#b91c1c">Delete</button>
-            </div>
-          </div>
-        </div>
-      `;
-    }).join('');
-
-    // wire row actions
-    $$sel('button[data-action="edit"]', r).forEach(btn =>
-      btn.addEventListener('click', () => coupons_openForm(btn.dataset.id)) // EDIT
-    );
-    $$sel('button[data-action="toggle"]', r).forEach(btn =>
-      btn.addEventListener('click', () => coupons_toggleStatus(btn.dataset.id, btn.dataset.active === 'true')) // TOGGLE
-    );
-    $$sel('button[data-action="delete"]', r).forEach(btn =>
-      btn.addEventListener('click', () => coupons_delete(btn.dataset.id)) // DELETE
-    );
-
-  } catch (e) {
-    console.error(e);
-    r.innerHTML = `<div style="color:#b91c1c">Error: ${e.message || e}</div>`;
-  }
-}
-
-// ---- Toggle status (activate/deactivate) ----
-async function coupons_toggleStatus(id, currentStatus) {
-  if (!id) return;
-  const newStatus = !currentStatus;
-  const action = newStatus ? 'activate' : 'deactivate';
-  if (!confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} this coupon?`)) return;
-
-  try {
-    const { error } = await supabase
-      .from('coupons')
-      .update({ is_active: newStatus, updated_at: coupons_nowISO() })
-      .eq('id', id);
-    if (error) throw error;
-    await coupons_renderList();
-  } catch (e) {
-    alert('Failed: ' + (e.message || e));
-  }
-}
-
-// ---- Delete coupon ----
-async function coupons_delete(id) {
-  if (!id) return;
-  if (!confirm('Are you sure you want to delete this coupon? This action cannot be undone.')) return;
-
-  try {
-    const { error } = await supabase
-      .from('coupons')
-      .delete()
-      .eq('id', id);
-    if (error) throw error;
-    await coupons_renderList();
-  } catch (e) {
-    alert('Failed to delete: ' + (e.message || e));
-  }
-}
-
-// ---- Modal form (Add / Edit) ----
-async function coupons_openForm(id /* optional */) {
-  const modal = document.createElement('div');
-  modal.className = 'modal show';
-  modal.id = 'coupon-modal';
-
-  // --- fetch active extras so coupon can target them ---
-  let extrasList = [];
-  try {
-    const { data } = await supabase
-      .from('extras')
-      .select('id,name,price,currency,is_active')
-      .eq('is_active', true)
-      .order('name', { ascending: true });
-    extrasList = data || [];
-  } catch (e) {
-    console.warn('Error loading extras for coupon modal:', e);
-  }
-
-  const extrasHtml = extrasList.length
-    ? extrasList
-        .map((ex) => {
-          const price = ex.price != null ? ex.price : 0;
-          const cur = ex.currency || 'GHS';
-          return `
-            <label style="display:flex;align-items:center;gap:6px;font-size:0.85rem">
-              <input
-                type="checkbox"
-                name="c-extra-target"
-                id="c-extra-${ex.id}"
-                value="${ex.id}"
-                style="width:auto"
-              />
-              <span>${ex.name || ''} <span style="color:#6b7280">(${cur} ${price})</span></span>
-            </label>
-          `;
-        })
-        .join('')
-    : `<div class="muted">No active extras available to target.</div>`;
-
-  // basic once-off styles (only if you don’t already have .modal)
-  if (!$sel('#coupon-modal-inline-styles')) {
-    const style = document.createElement('style');
-    style.id = 'coupon-modal-inline-styles';
-    style.textContent = `
-      .modal.show{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(15,23,42,.35);z-index:999}
-      .modal .content{background:#fff;border-radius:12px;max-width:680px;width:92vw;box-shadow:0 10px 30px rgba(0,0,0,.15)}
-      .modal .hd{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid #e5e7eb}
-      .modal .bd{padding:16px}
-      .modal .ft{padding:12px 16px;border-top:1px solid #e5e7eb;display:flex;gap:8px;justify-content:flex-end}
-      .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-      .form-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-      .form-group{display:flex;flex-direction:column;gap:6px}
-      .form-group input, .form-group select{padding:8px 10px;border:1px solid #e5e7eb;border-radius:10px}
-      .muted{color:#64748b}
-      @media (max-width:720px){.form-grid,.form-grid-3{grid-template-columns:1fr}}
-    `;
-    document.head.appendChild(style);
-  }
-
-  modal.innerHTML = `
-    <div class="content">
-      <div class="hd">
-        <h3 id="coupon-modal-title" style="margin:0">${id ? 'Edit Coupon' : 'Add Coupon'}</h3>
-        <button id="coupon-close" class="btn">×</button>
-      </div>
-      <div class="bd">
-        <div id="coupon-error" class="muted" style="min-height:18px"></div>
-
-        <div class="form-grid">
-          <div class="form-group">
-            <label>Code *</label>
-            <input id="c-code" required style="text-transform:uppercase" />
-          </div>
-          <div class="form-group">
-            <label>Applies To *</label>
-            <select id="c-applies">
-              <option value="both">Both</option>
-              <option value="rooms">Rooms Only</option>
-              <option value="extras">Extras Only</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="form-grid">
-          <div class="form-group">
-            <label>Discount Type *</label>
-            <select id="c-type">
-              <option value="percentage">Percentage</option>
-              <option value="fixed">Fixed amount</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Discount Value *</label>
-            <input id="c-value" type="number" step="0.01" required />
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label>Description</label>
-          <input id="c-desc" />
-        </div>
-
-        <div class="form-grid-3">
-          <div class="form-group">
-            <label>Valid From</label>
-            <input id="c-from" type="date" />
-          </div>
-          <div class="form-group">
-            <label>Valid Until</label>
-            <input id="c-until" type="date" />
-          </div>
-          <div class="form-group">
-            <label>Active</label>
-            <select id="c-active">
-              <option value="true" selected>Yes</option>
-              <option value="false">No</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="form-grid">
-          <div class="form-group">
-            <label>Max Uses (overall)</label>
-            <input id="c-max" type="number" />
-          </div>
-          <div class="form-group">
-            <label>Max Uses per Guest</label>
-            <input id="c-max-guest" type="number" />
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label>Min Booking Amount (GHS)</label>
-          <input id="c-min" type="number" step="0.01" />
-        </div>
-
-        <div class="form-group">
-          <label>Limit coupon to specific extras (optional)</label>
-          <div id="c-extra-list" style="border:1px solid #e5e7eb;border-radius:10px;padding:10px;max-height:160px;overflow-y:auto;display:grid;gap:4px">
-            ${extrasHtml}
-          </div>
-          <div class="muted" style="margin-top:4px;font-size:0.8rem">
-            If none are selected, the coupon will apply to all eligible extras (when "Applies To" includes extras).
-          </div>
-        </div>
-      </div>
-      <div class="ft">
-        <button class="btn" id="coupon-cancel">Cancel</button>
-        <button class="btn btn-primary" id="coupon-save">${id ? 'Update' : 'Create'}</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(modal);
-
-  // Close handlers
-  const close = () => modal.remove();
-  $sel('#coupon-close', modal).addEventListener('click', close);
-  $sel('#coupon-cancel', modal).addEventListener('click', close);
-  modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
-
-  // If editing, fetch & populate
-  if (id) {
-    coupons_fillForm(id).catch(err => {
-      $sel('#coupon-error').textContent = 'Error loading coupon: ' + (err.message || err);
-    });
-  }
-
-  // Save
-  $sel('#coupon-save', modal).addEventListener('click', async () => {
-    try {
-      const payload = coupons_collectForm();
-      let result;
-      if (id) {
-        result = await supabase
-          .from('coupons')
-          .update({ ...payload, updated_at: coupons_nowISO() })
-          .eq('id', id);
-      } else {
-        result = await supabase
-          .from('coupons')
-          .insert({
-            ...payload,
-            created_at: coupons_nowISO(),
-            updated_at: coupons_nowISO(),
-            current_uses: 0,
-          });
-      }
-      if (result.error) throw result.error;
-      close();
-      await coupons_renderList();
-    } catch (e) {
-      $sel('#coupon-error').textContent = 'Error saving: ' + (e.message || e);
-    }
-  });
-}
-
-function coupons_collectForm() {
-  const code = $sel('#c-code').value.trim().toUpperCase();
-  const description = $sel('#c-desc').value.trim() || null;
-  const discount_type = $sel('#c-type').value;
-  const discount_value = parseFloat($sel('#c-value').value);
-  const applies_to = $sel('#c-applies').value;
-  const valid_from = $sel('#c-from').value || null;
-  const valid_until = $sel('#c-until').value || null;
-  const is_active = $sel('#c-active').value === 'true';
-  const max_uses = $sel('#c-max').value ? parseInt($sel('#c-max').value, 10) : null;
-  const max_uses_per_guest = $sel('#c-max-guest').value
-    ? parseInt($sel('#c-max-guest').value, 10)
-    : null;
-  const min_booking_amount = $sel('#c-min').value
-    ? parseFloat($sel('#c-min').value)
-    : null;
-
-  // NEW: collect targeted extras
-  const extra_ids = $$sel('input[name="c-extra-target"]:checked').map((cb) => cb.value);
-
-  if (!code || Number.isNaN(discount_value)) {
-    throw new Error('Code and Discount Value are required.');
-  }
-
-  return {
-    code,
-    description,
-    discount_type,
-    discount_value,
-    applies_to,
-    valid_from,
-    valid_until,
-    is_active,
-    max_uses,
-    max_uses_per_guest,
-    min_booking_amount,
-    extra_ids: extra_ids.length ? extra_ids : null,
-  };
-}
-
-async function coupons_fillForm(id) {
-  const { data, error } = await supabase
-    .from('coupons')
-    .select('*')
-    .eq('id', id)
-    .single();
-  if (error) throw error;
-  const c = data;
-
-  $sel('#c-code').value = (c.code || '').toUpperCase();
-  $sel('#c-desc').value = c.description || '';
-  $sel('#c-type').value = c.discount_type || 'percentage';
-  $sel('#c-value').value = c.discount_value ?? '';
-  $sel('#c-applies').value = c.applies_to || 'both';
-  $sel('#c-from').value = c.valid_from || '';
-  $sel('#c-until').value = c.valid_until || '';
-  $sel('#c-active').value = c.is_active ? 'true' : 'false';
-  $sel('#c-max').value = c.max_uses ?? '';
-  $sel('#c-max-guest').value = c.max_uses_per_guest ?? '';
-  $sel('#c-min').value = c.min_booking_amount ?? '';
-
-  // NEW: pre-check targeted extras if any
-  if (Array.isArray(c.extra_ids) && c.extra_ids.length) {
-    c.extra_ids.forEach((eid) => {
-      const cb = document.querySelector(`#c-extra-${eid}`);
-      if (cb) cb.checked = true;
-    });
-  }
-}
-
-// ---------- Packages ----------
-async function initPackages() {
-  // Add event listener for Add Package button
-  const addBtn = $('#add-package-btn');
-  if (addBtn) {
-    // Remove existing listener to avoid duplicates
-    const newBtn = addBtn.cloneNode(true);
-    addBtn.parentNode.replaceChild(newBtn, addBtn);
-    newBtn.addEventListener('click', () => openPackageModal());
-  }
-
-  const list = document.getElementById("packages-list");
-  if (!list) return;
-
-  const { data, error } = await supabase
-    .from("packages")
-    .select("*")
-    .order("sort_order", { ascending: true })
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    list.innerHTML = `<div class="muted">Error loading packages: ${error.message}</div>`;
-    return;
-  }
-  if (!data || !data.length) {
-    list.innerHTML = `<div class="muted">No packages yet.</div>`;
-    return;
-  }
-
-  const html = data
-    .map((p) => {
-      const isActive = p.is_active !== false;
-      return `
-        <div class="item">
-          <div class="row" style="align-items:flex-start;gap:12px">
-            ${p.image_url ? `<img class="pkg-thumb" src="${p.image_url}" alt="${p.name || ""}">` : ""}
-            <div style="flex:1">
-              <div class="title">${p.name || ""}</div>
-              ${p.description ? `<div class="pkg-meta" style="margin-top:4px">${p.description}</div>` : ""}
-              <div class="meta" style="margin-top:8px;display:flex;gap:16px;flex-wrap:wrap">
-                <span>Code: <strong>${(p.code || "").toUpperCase()}</strong></span>
-                <span>Price: <strong>${formatCurrency(p.package_price || 0, p.currency || "GHS")}</strong></span>
-                ${p.nights ? `<span>Nights: <strong>${p.nights}</strong></span>` : ""}
-                ${
-                  p.valid_from || p.valid_until
-                    ? `<span>Valid: <strong>${p.valid_from || "—"}</strong> → <strong>${p.valid_until || "—"}</strong></span>`
-                    : ""
-                }
-                ${p.is_featured ? `<span>Featured</span>` : ""}
-              </div>
-            </div>
-            <div style="text-align:right">
-              <span class="badge ${isActive ? "ok" : "err"}">${isActive ? "Active" : "Inactive"}</span>
-            </div>
-          </div>
-
-          <div class="room-card-footer">
-            <button class="btn btn-sm" data-pkg-edit="${p.id}">Edit</button>
-            <button class="btn btn-sm" data-pkg-toggle="${p.id}" data-pkg-active="${isActive}">
-              ${isActive ? "Deactivate" : "Activate"}
-            </button>
-            <button class="btn btn-sm" data-pkg-delete="${p.id}" style="color:#b91c1c">Delete</button>
-          </div>
-        </div>
-      `;
-    })
-    .join("");
-
-  list.innerHTML = html;
-
-  // wire actions
-  list.querySelectorAll("[data-pkg-edit]").forEach((b) =>
-    b.addEventListener("click", (e) => {
-      e.stopPropagation();
-      openPackageModal("edit", b.getAttribute("data-pkg-edit"));
-    })
-  );
-
-  list.querySelectorAll("[data-pkg-toggle]").forEach((b) =>
-    b.addEventListener("click", async (e) => {
-      e.stopPropagation();
-      const id = b.getAttribute("data-pkg-toggle");
-      const isActive = b.getAttribute("data-pkg-active") === "true";
-      await togglePackageStatus(id, !isActive);
-    })
-  );
-
-  list.querySelectorAll("[data-pkg-delete]").forEach((b) =>
-    b.addEventListener("click", async (e) => {
-      e.stopPropagation();
-      await deletePackage(b.getAttribute("data-pkg-delete"));
-    })
-  );
-}
-
-function openPackageModal(mode = "add", id = null) {
-  const wrap = document.createElement("div");
-  wrap.id = "package-modal";
-  wrap.className = "modal show";
-  document.body.appendChild(wrap);
-
-  const toDateInput = (v) => {
-    if (!v) return "";
-    const d = new Date(v);
-    if (Number.isNaN(d.getTime())) return "";
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${d.getFullYear()}-${m}-${day}`;
-  };
-
-  const loadExisting = async () => {
-    if (mode !== "edit" || !id) return null;
-    const { data, error } = await supabase.from("packages").select("*").eq("id", id).single();
-    if (error) {
-      alert("Error loading package: " + error.message);
-      return null;
-    }
-    return data;
-  };
- 
-
-
-  (async () => {
-    const p = (await loadExisting()) || {};
-    wrap.innerHTML = `
-      <div class="content" onclick="event.stopPropagation()">
-        <div class="hd">
-          <h3>${mode === "edit" ? "Edit" : "Add"} Package</h3>
-          <button class="btn" onclick="document.getElementById('package-modal').remove()">×</button>
-        </div>
-
-        <div class="bd">
-          <div class="form-grid">
-            <div class="form-group">
-              <label>Code *</label>
-              <input id="pkg-code" type="text" value="${p.code || ""}">
-            </div>
-            <div class="form-group">
-              <label>Name *</label>
-              <input id="pkg-name" type="text" value="${p.name || ""}">
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label>Description</label>
-            <textarea id="pkg-desc" rows="3">${p.description || ""}</textarea>
-          </div>
-
-          <div class="form-grid">
-            <div class="form-group">
-              <label>Package Price *</label>
-              <input id="pkg-price" type="number" step="0.01" value="${p.package_price ?? ""}">
-            </div>
-            <div class="form-group">
-              <label>Currency *</label>
-              <select id="pkg-currency">
-                <option value="GHS" ${p.currency === "GHS" ? "selected" : ""}>GHS (₵)</option>
-                <option value="USD" ${p.currency === "USD" ? "selected" : ""}>USD ($)</option>
-                <option value="GBP" ${p.currency === "GBP" ? "selected" : ""}>GBP (£)</option>
-                <option value="${p.currency || "GHS"}" ${
-      p.currency && !["GHS", "USD", "GBP"].includes(p.currency) ? "selected" : ""
-    }>${p.currency || "GHS"}</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="form-grid">
-            <div class="form-group">
-              <label>Room Type ID</label>
-              <input id="pkg-room" type="text" value="${p.room_type_id || ""}">
-            </div>
-            <div class="form-group">
-              <label>Nights</label>
-              <input id="pkg-nights" type="number" min="1" step="1" value="${p.nights ?? ""}">
-            </div>
-          </div>
-
-          <div class="form-grid">
-            <div class="form-group">
-              <label>Valid From</label>
-              <input id="pkg-from" type="date" value="${toDateInput(p.valid_from)}">
-            </div>
-            <div class="form-group">
-              <label>Valid Until</label>
-              <input id="pkg-until" type="date" value="${toDateInput(p.valid_until)}">
-            </div>
-          </div>
-
-          <div class="form-grid">
-            <div class="form-group">
-              <label>Image URL</label>
-              <input id="pkg-image" type="text" value="${p.image_url || ""}">
-            </div>
-            <div class="form-group">
-              <label>Sort Order</label>
-              <input id="pkg-sort" type="number" step="1" value="${p.sort_order ?? ""}">
-            </div>
-          </div>
-
-          <div class="form-grid">
-            <div class="form-group">
-              <label>Featured</label>
-              <select id="pkg-featured">
-                <option value="false" ${p.is_featured ? "" : "selected"}>No</option>
-                <option value="true" ${p.is_featured ? "selected" : ""}>Yes</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Active</label>
-              <select id="pkg-active">
-                <option value="false" ${p.is_active ? "" : "selected"}>No</option>
-                <option value="true" ${p.is_active ? "selected" : ""}>Yes</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        <div class="ft">
-          <button class="btn" onclick="document.getElementById('package-modal').remove()">Cancel</button>
-          <button class="btn btn-primary" id="pkg-save">Save</button>
-        </div>
-      </div>
-    `;
-
-    wrap.querySelector("#pkg-save").addEventListener("click", async () => {
-      try {
-        const payload = collectPackageForm();
-        if (mode === "edit") {
-          const { error: upErr } = await supabase.from("packages").update(payload).eq("id", id);
-          if (upErr) throw upErr;
-          toast("Package updated");
-        } else {
-          const { error: insErr } = await supabase.from("packages").insert(payload);
-          if (insErr) throw insErr;
-          toast("Package created");
-        }
-        wrap.remove();
-        initPackages();
-      } catch (e) {
-        alert("Error saving: " + (e.message || e));
-      }
-    });
-  })();
-}
-
-function collectPackageForm() {
-  const root = document.getElementById("package-modal") || document;
-  const code = root.querySelector("#pkg-code").value.trim();
-  const name = root.querySelector("#pkg-name").value.trim();
-  const description = root.querySelector("#pkg-desc").value.trim() || null;
-  const priceEl = root.querySelector("#pkg-price").value;
-  const package_price = priceEl === "" ? null : parseFloat(priceEl);
-  const currency = root.querySelector("#pkg-currency").value;
-  const room_type_id = root.querySelector("#pkg-room").value.trim() || null;
-  const nightsEl = root.querySelector("#pkg-nights").value;
-  const nights = nightsEl === "" ? null : parseInt(nightsEl, 10);
-  const valid_from = root.querySelector("#pkg-from").value || null;
-  const valid_until = root.querySelector("#pkg-until").value || null;
-  const image_url = root.querySelector("#pkg-image").value.trim() || null;
-  const sortEl = root.querySelector("#pkg-sort").value;
-  const sort_order = sortEl === "" ? null : parseInt(sortEl, 10);
-  const is_featured = root.querySelector("#pkg-featured").value === "true";
-  const is_active = root.querySelector("#pkg-active").value === "true";
-
-  if (!code || !name || package_price == null || !currency) {
-    throw new Error("Code, Name, Price and Currency are required.");
-  }
-
-  return {
-    code,
-    name,
-    description,
-    package_price,
-    currency,
-    room_type_id,
-    nights,
-    valid_from,
-    valid_until,
-    image_url,
-    sort_order,
-    is_featured,
-    is_active
-  };
-}
-
-async function togglePackageStatus(id, newStatus) {
-  try {
-    const { error } = await supabase.from("packages").update({ is_active: newStatus }).eq("id", id);
-    if (error) throw error;
-    toast(newStatus ? "Package activated" : "Package deactivated");
-    initPackages();
-  } catch (e) {
-    alert("Error updating: " + (e.message || e));
-  }
-}
-
-async function deletePackage(id) {
-  if (!confirm("Delete this package? This cannot be undone.")) return;
-  try {
-    const { error } = await supabase.from("packages").delete().eq("id", id);
-    if (error) throw error;
-    toast("Package deleted");
-    initPackages();
-  } catch (e) {
-    alert("Error deleting: " + (e.message || e));
-  }
-}
-
 function genConfCode() {
   return ('B' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4)).toUpperCase();
 }
@@ -2471,13 +524,301 @@ async function uploadRoomImage(file, code) {
   return data.publicUrl; // final public URL
 }
 
+
+// ----- Prevent double booking: correct date overlap check -----
+// Checks overlap against BOTH room_type_id and room_type_code so older rows are included.
+async function isRoomAvailable(roomTypeId, roomTypeCode, checkInISO, checkOutISO) {
+  if (!roomTypeId && !roomTypeCode) return false;
+  if (!checkInISO || !checkOutISO) return false;
+
+  const newStart = new Date(checkInISO);
+  const newEnd   = new Date(checkOutISO);
+
+  if (
+    Number.isNaN(newStart.getTime()) ||
+    Number.isNaN(newEnd.getTime())
+  ) {
+    console.error('Invalid dates passed to isRoomAvailable', {
+      checkInISO,
+      checkOutISO,
+    });
+    return false;
+  }
+
+  // safety net – check-out must be after check-in
+  if (newEnd <= newStart) {
+    return false;
+  }
+
+  let data, error;
+  try {
+    const res = await supabase
+      .from('reservations')
+      .select('id, check_in, check_out, status, room_type_id, room_type_code')
+      .not('status', 'in', '("cancelled","no_show")'); // include all active stays
+
+    data = res.data || [];
+    error = res.error;
+  } catch (err) {
+    console.error('Availability check exception:', err);
+    return false;
+  }
+
+  if (error) {
+    console.error('Availability check error:', error);
+    return false;
+  }
+
+  const idNum = roomTypeId != null ? Number(roomTypeId) : null;
+
+  // Only compare bookings for this specific cabin (same id OR same code)
+  const relevant = data.filter((r) => {
+    const sameId   = idNum !== null && Number(r.room_type_id) === idNum;
+    const sameCode = roomTypeCode && r.room_type_code === roomTypeCode;
+    return sameId || sameCode;
+  });
+
+  // Treat stays as half-open ranges [check_in, check_out)
+  // Overlap if: existing_start < new_end AND existing_end > new_start
+  const hasOverlap = relevant.some((r) => {
+    if (!r.check_in || !r.check_out) return false;
+
+    const existingStart = new Date(r.check_in);
+    const existingEnd   = new Date(r.check_out);
+
+    if (
+      Number.isNaN(existingStart.getTime()) ||
+      Number.isNaN(existingEnd.getTime())
+    ) {
+      return false;
+    }
+
+    return existingStart < newEnd && existingEnd > newStart;
+  });
+
+  // Available only if there is NO overlapping stay
+  return !hasOverlap;
+}
+
+// ---- Region-sorted ISO country dial code list with emoji flags ----
+const COUNTRY_OPTIONS = [
+  // AFRICA
+  { region: "Africa", code: "+213", label: "🇩🇿 Algeria (+213)" },
+  { region: "Africa", code: "+244", label: "🇦🇴 Angola (+244)" },
+  { region: "Africa", code: "+229", label: "🇧🇯 Benin (+229)" },
+  { region: "Africa", code: "+267", label: "🇧🇼 Botswana (+267)" },
+  { region: "Africa", code: "+226", label: "🇧🇫 Burkina Faso (+226)" },
+  { region: "Africa", code: "+257", label: "🇧🇮 Burundi (+257)" },
+  { region: "Africa", code: "+237", label: "🇨🇲 Cameroon (+237)" },
+  { region: "Africa", code: "+238", label: "🇨🇻 Cape Verde (+238)" },
+  { region: "Africa", code: "+236", label: "🇨🇫 Central African Republic (+236)" },
+  { region: "Africa", code: "+235", label: "🇹🇩 Chad (+235)" },
+  { region: "Africa", code: "+269", label: "🇰🇲 Comoros (+269)" },
+  { region: "Africa", code: "+242", label: "🇨🇬 Congo (+242)" },
+  { region: "Africa", code: "+243", label: "🇨🇩 Congo (DRC) (+243)" },
+  { region: "Africa", code: "+225", label: "🇨🇮 Côte d’Ivoire (+225)" },
+  { region: "Africa", code: "+253", label: "🇩🇯 Djibouti (+253)" },
+  { region: "Africa", code: "+20",  label: "🇪🇬 Egypt (+20)" },
+  { region: "Africa", code: "+240", label: "🇬🇶 Equatorial Guinea (+240)" },
+  { region: "Africa", code: "+291", label: "🇪🇷 Eritrea (+291)" },
+  { region: "Africa", code: "+251", label: "🇪🇹 Ethiopia (+251)" },
+  { region: "Africa", code: "+241", label: "🇬🇦 Gabon (+241)" },
+  { region: "Africa", code: "+220", label: "🇬🇲 Gambia (+220)" },
+  { region: "Africa", code: "+233", label: "🇬🇭 Ghana (+233)" },
+  { region: "Africa", code: "+224", label: "🇬🇳 Guinea (+224)" },
+  { region: "Africa", code: "+245", label: "🇬🇼 Guinea-Bissau (+245)" },
+  { region: "Africa", code: "+254", label: "🇰🇪 Kenya (+254)" },
+  { region: "Africa", code: "+266", label: "🇱🇸 Lesotho (+266)" },
+  { region: "Africa", code: "+231", label: "🇱🇷 Liberia (+231)" },
+  { region: "Africa", code: "+218", label: "🇱🇾 Libya (+218)" },
+  { region: "Africa", code: "+261", label: "🇲🇬 Madagascar (+261)" },
+  { region: "Africa", code: "+265", label: "🇲🇼 Malawi (+265)" },
+  { region: "Africa", code: "+223", label: "🇲🇱 Mali (+223)" },
+  { region: "Africa", code: "+222", label: "🇲🇷 Mauritania (+222)" },
+  { region: "Africa", code: "+230", label: "🇲🇺 Mauritius (+230)" },
+  { region: "Africa", code: "+212", label: "🇲🇦 Morocco (+212)" },
+  { region: "Africa", code: "+258", label: "🇲🇿 Mozambique (+258)" },
+  { region: "Africa", code: "+264", label: "🇳🇦 Namibia (+264)" },
+  { region: "Africa", code: "+227", label: "🇳🇪 Niger (+227)" },
+  { region: "Africa", code: "+234", label: "🇳🇬 Nigeria (+234)" },
+  { region: "Africa", code: "+250", label: "🇷🇼 Rwanda (+250)" },
+  { region: "Africa", code: "+239", label: "🇸🇹 Sao Tome & Principe (+239)" },
+  { region: "Africa", code: "+221", label: "🇸🇳 Senegal (+221)" },
+  { region: "Africa", code: "+248", label: "🇸🇨 Seychelles (+248)" },
+  { region: "Africa", code: "+232", label: "🇸🇱 Sierra Leone (+232)" },
+  { region: "Africa", code: "+252", label: "🇸🇴 Somalia (+252)" },
+  { region: "Africa", code: "+27",  label: "🇿🇦 South Africa (+27)" },
+  { region: "Africa", code: "+211", label: "🇸🇸 South Sudan (+211)" },
+  { region: "Africa", code: "+249", label: "🇸🇩 Sudan (+249)" },
+  { region: "Africa", code: "+268", label: "🇸🇿 Eswatini (+268)" },
+  { region: "Africa", code: "+255", label: "🇹🇿 Tanzania (+255)" },
+  { region: "Africa", code: "+216", label: "🇹🇳 Tunisia (+216)" },
+  { region: "Africa", code: "+256", label: "🇺🇬 Uganda (+256)" },
+  { region: "Africa", code: "+260", label: "🇿🇲 Zambia (+260)" },
+  { region: "Africa", code: "+263", label: "🇿🇼 Zimbabwe (+263)" },
+
+  // EUROPE
+  { region: "Europe", code: "+355", label: "🇦🇱 Albania (+355)" },
+  { region: "Europe", code: "+43",  label: "🇦🇹 Austria (+43)" },
+  { region: "Europe", code: "+32",  label: "🇧🇪 Belgium (+32)" },
+  { region: "Europe", code: "+359", label: "🇧🇬 Bulgaria (+359)" },
+  { region: "Europe", code: "+385", label: "🇭🇷 Croatia (+385)" },
+  { region: "Europe", code: "+357", label: "🇨🇾 Cyprus (+357)" },
+  { region: "Europe", code: "+420", label: "🇨🇿 Czechia (+420)" },
+  { region: "Europe", code: "+45",  label: "🇩🇰 Denmark (+45)" },
+  { region: "Europe", code: "+372", label: "🇪🇪 Estonia (+372)" },
+  { region: "Europe", code: "+358", label: "🇫🇮 Finland (+358)" },
+  { region: "Europe", code: "+33",  label: "🇫🇷 France (+33)" },
+  { region: "Europe", code: "+49",  label: "🇩🇪 Germany (+49)" },
+  { region: "Europe", code: "+30",  label: "🇬🇷 Greece (+30)" },
+  { region: "Europe", code: "+36",  label: "🇭🇺 Hungary (+36)" },
+  { region: "Europe", code: "+354", label: "🇮🇸 Iceland (+354)" },
+  { region: "Europe", code: "+353", label: "🇮🇪 Ireland (+353)" },
+  { region: "Europe", code: "+39",  label: "🇮🇹 Italy (+39)" },
+  { region: "Europe", code: "+371", label: "🇱🇻 Latvia (+371)" },
+  { region: "Europe", code: "+370", label: "🇱🇹 Lithuania (+370)" },
+  { region: "Europe", code: "+352", label: "🇱🇺 Luxembourg (+352)" },
+  { region: "Europe", code: "+356", label: "🇲🇹 Malta (+356)" },
+  { region: "Europe", code: "+373", label: "🇲🇩 Moldova (+373)" },
+  { region: "Europe", code: "+377", label: "🇲🇨 Monaco (+377)" },
+  { region: "Europe", code: "+382", label: "🇲🇪 Montenegro (+382)" },
+  { region: "Europe", code: "+31",  label: "🇳🇱 Netherlands (+31)" },
+  { region: "Europe", code: "+47",  label: "🇳🇴 Norway (+47)" },
+  { region: "Europe", code: "+48",  label: "🇵🇱 Poland (+48)" },
+  { region: "Europe", code: "+351", label: "🇵🇹 Portugal (+351)" },
+  { region: "Europe", code: "+40",  label: "🇷🇴 Romania (+40)" },
+  { region: "Europe", code: "+7",   label: "🇷🇺 Russia (+7)" },
+  { region: "Europe", code: "+381", label: "🇷🇸 Serbia (+381)" },
+  { region: "Europe", code: "+421", label: "🇸🇰 Slovakia (+421)" },
+  { region: "Europe", code: "+386", label: "🇸🇮 Slovenia (+386)" },
+  { region: "Europe", code: "+34",  label: "🇪🇸 Spain (+34)" },
+  { region: "Europe", code: "+46",  label: "🇸🇪 Sweden (+46)" },
+  { region: "Europe", code: "+41",  label: "🇨🇭 Switzerland (+41)" },
+  { region: "Europe", code: "+44",  label: "🇬🇧 United Kingdom (+44)" },
+  { region: "Europe", code: "+380", label: "🇺🇦 Ukraine (+380)" },
+
+  // AMERICAS
+  { region: "Americas", code: "+1",   label: "🇺🇸 United States (+1)" },
+  { region: "Americas", code: "+1",   label: "🇨🇦 Canada (+1)" },
+  { region: "Americas", code: "+52",  label: "🇲🇽 Mexico (+52)" },
+  { region: "Americas", code: "+55",  label: "🇧🇷 Brazil (+55)" },
+  { region: "Americas", code: "+54",  label: "🇦🇷 Argentina (+54)" },
+  { region: "Americas", code: "+57",  label: "🇨🇴 Colombia (+57)" },
+  { region: "Americas", code: "+56",  label: "🇨🇱 Chile (+56)" },
+  { region: "Americas", code: "+51",  label: "🇵🇪 Peru (+51)" },
+  { region: "Americas", code: "+58",  label: "🇻🇪 Venezuela (+58)" },
+
+  // ASIA
+  { region: "Asia", code: "+93",  label: "🇦🇫 Afghanistan (+93)" },
+  { region: "Asia", code: "+374", label: "🇦🇲 Armenia (+374)" },
+  { region: "Asia", code: "+994", label: "🇦🇿 Azerbaijan (+994)" },
+  { region: "Asia", code: "+880", label: "🇧🇩 Bangladesh (+880)" },
+  { region: "Asia", code: "+975", label: "🇧🇹 Bhutan (+975)" },
+  { region: "Asia", code: "+673", label: "🇧🇳 Brunei (+673)" },
+  { region: "Asia", code: "+855", label: "🇰🇭 Cambodia (+855)" },
+  { region: "Asia", code: "+86",  label: "🇨🇳 China (+86)" },
+  { region: "Asia", code: "+91",  label: "🇮🇳 India (+91)" },
+  { region: "Asia", code: "+62",  label: "🇮🇩 Indonesia (+62)" },
+  { region: "Asia", code: "+98",  label: "🇮🇷 Iran (+98)" },
+  { region: "Asia", code: "+964", label: "🇮🇶 Iraq (+964)" },
+  { region: "Asia", code: "+972", label: "🇮🇱 Israel (+972)" },
+  { region: "Asia", code: "+81",  label: "🇯🇵 Japan (+81)" },
+  { region: "Asia", code: "+962", label: "🇯🇴 Jordan (+962)" },
+  { region: "Asia", code: "+7",   label: "🇰🇿 Kazakhstan (+7)" },
+  { region: "Asia", code: "+965", label: "🇰🇼 Kuwait (+965)" },
+  { region: "Asia", code: "+996", label: "🇰🇬 Kyrgyzstan (+996)" },
+  { region: "Asia", code: "+856", label: "🇱🇦 Laos (+856)" },
+  { region: "Asia", code: "+961", label: "🇱🇧 Lebanon (+961)" },
+  { region: "Asia", code: "+60",  label: "🇲🇾 Malaysia (+60)" },
+  { region: "Asia", code: "+960", label: "🇲🇻 Maldives (+960)" },
+  { region: "Asia", code: "+976", label: "🇲🇳 Mongolia (+976)" },
+  { region: "Asia", code: "+977", label: "🇳🇵 Nepal (+977)" },
+  { region: "Asia", code: "+92",  label: "🇵🇰 Pakistan (+92)" },
+  { region: "Asia", code: "+63",  label: "🇵🇭 Philippines (+63)" },
+  { region: "Asia", code: "+65",  label: "🇸🇬 Singapore (+65)" },
+  { region: "Asia", code: "+94",  label: "🇱🇰 Sri Lanka (+94)" },
+  { region: "Asia", code: "+82",  label: "🇰🇷 South Korea (+82)" },
+  { region: "Asia", code: "+886", label: "🇹🇼 Taiwan (+886)" },
+  { region: "Asia", code: "+66",  label: "🇹🇭 Thailand (+66)" },
+  { region: "Asia", code: "+90",  label: "🇹🇷 Turkey (+90)" },
+  { region: "Asia", code: "+971", label: "🇦🇪 United Arab Emirates (+971)" },
+  { region: "Asia", code: "+998", label: "🇺🇿 Uzbekistan (+998)" },
+  { region: "Asia", code: "+84",  label: "🇻🇳 Vietnam (+84)" },
+
+  // OCEANIA
+  { region: "Oceania", code: "+61", label: "🇦🇺 Australia (+61)" },
+  { region: "Oceania", code: "+64", label: "🇳🇿 New Zealand (+64)" },
+  { region: "Oceania", code: "+679", label: "🇫🇯 Fiji (+679)" },
+  { region: "Oceania", code: "+685", label: "🇼🇸 Samoa (+685)" },
+  { region: "Oceania", code: "+676", label: "🇹🇴 Tonga (+676)" }
+];
+
+// ---- Build searchable country dropdown ----
+function buildCountrySelectHtml(selectId, currentValue = "+233") {
+  const regions = ["Africa", "Europe", "Asia", "Americas", "Oceania"];
+
+  const groupedHtml = regions
+    .map(region => {
+      const items = COUNTRY_OPTIONS.filter(c => c.region === region);
+      if (!items.length) return "";
+
+      const optionsHtml = items
+        .map(c => `<option value="${c.code}" ${c.code === currentValue ? "selected" : ""}>
+            ${c.label}
+          </option>`)
+        .join("");
+
+      return `
+        <optgroup label="${region}">
+          ${optionsHtml}
+        </optgroup>
+      `;
+    })
+    .join("");
+
+  return `
+    <div class="country-select-box" style="display:flex;flex-direction:column;gap:6px;width:100%">
+      <input type="text" id="${selectId}-search" placeholder="Search country..." 
+        style="padding:6px;border:1px solid #ccc;border-radius:6px;font-size:14px"/>
+      <select id="${selectId}" style="padding:6px;border:1px solid #ccc;border-radius:6px;">
+        ${groupedHtml}
+      </select>
+    </div>
+  `;
+}
+
+// ---- Enable search behaviour ----
+function attachCountrySearch(selectId) {
+  const searchEl = document.getElementById(`${selectId}-search`);
+  const selectEl = document.getElementById(selectId);
+  if (!searchEl || !selectEl) return;
+
+  searchEl.addEventListener("input", () => {
+    const q = searchEl.value.toLowerCase();
+
+    [...selectEl.options].forEach(opt => {
+      opt.style.display = opt.textContent.toLowerCase().includes(q) ? "block" : "none";
+    });
+  });
+}
+
+
 /* ---------- New Custom Booking ---------- */
 async function openNewCustomBookingModal() {
+    // Ensure DEV never stacks multiple modals
+  const old = document.getElementById('reservation-modal');
+  if (old) old.remove();
+
   const wrap = document.createElement('div');
   // Reuse reservation modal styling so you don't need new CSS
   wrap.id = 'reservation-modal';
   wrap.className = 'modal show';
   document.body.appendChild(wrap);
+  // clicking the backdrop closes the modal
+  wrap.addEventListener('click', (e) => {
+    if (e.target === wrap) wrap.remove();
+  });
+
 
   // Fetch room types for dropdown
   const { data: rooms } = await supabase
@@ -2498,15 +839,27 @@ async function openNewCustomBookingModal() {
 
 
   const roomOptions = (rooms || []).map(r =>
-    `<option value="${r.id}" data-code="${r.code}">${r.name} (${r.code})</option>`
-  ).join('');
+  `<option value="${r.id}" data-code="${r.code}" data-name="${r.name}">
+     ${r.name} (${r.code})
+   </option>`
+).join('');
 
   const extrasHtml = (extras || []).map(e =>
-    `<div style="display:flex;align-items:center;gap:8px;margin:4px 0">
-      <input type="checkbox" id="extra-${e.id}" value="${e.id}" data-price="${e.price}" data-name="${e.name}" data-code="${e.code || ''}" style="width:auto">
-      <label for="extra-${e.id}" style="margin:0;font-weight:400;cursor:pointer">${e.name} - GHS ${e.price}</label>
-    </div>`
-  ).join('');
+  `<label for="extra-${e.id}" style="display:flex;align-items:center;gap:8px;margin:4px 0;cursor:pointer">
+      <input type="checkbox"
+        id="extra-${e.id}"
+        value="${e.id}"
+        data-price="${e.price}"
+        data-name="${e.name}"
+        data-code="${e.code || ''}"
+        style="width:auto" />
+      <span>${e.name} - GHS ${e.price}</span>
+  </label>`
+).join('');
+  const countryOptionsHtml = COUNTRY_OPTIONS
+    .map(c => `<option value="${c.code}" ${c.code === '+233' ? 'selected' : ''}>${c.label}</option>`)
+    .join('');
+
 
   const today = toDateInput(new Date());
 
@@ -2538,10 +891,21 @@ async function openNewCustomBookingModal() {
             <label>Email</label>
             <input id="nb-email" type="email" />
           </div>
+
           <div class="form-group">
             <label>Phone</label>
-            <input id="nb-phone" type="text" />
+            <div style="display:flex;gap:8px;align-items:flex-start;width:100%">
+              ${buildCountrySelectHtml("nb-country-code", "+233")}
+              <input id="nb-phone" type="text" style="flex:1" />
+            </div>
           </div>
+
+
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:8px;">
+            <span>Influencer?</span>
+            <input type="checkbox" id="nb-influencer">
+          </label>
         </div>
 
         <div class="form-grid">
@@ -2664,6 +1028,9 @@ async function openNewCustomBookingModal() {
     </div>
   `;
 
+   // enable search on the country code selector
+  attachCountrySearch('nb-country-code');
+
   const inEl = wrap.querySelector('#nb-in');
   const outEl = wrap.querySelector('#nb-out');
   const nightsEl = wrap.querySelector('#nb-nights');
@@ -2736,7 +1103,7 @@ async function openNewCustomBookingModal() {
 
     // Calculate extras total + capture details
     selectedExtras = Array.from(
-      wrap.querySelectorAll('input[type="checkbox"]:checked')
+      wrap.querySelectorAll('input[type="checkbox"][id^="extra-"]:checked')
     ).map((cb) => ({
       extra_id: cb.value,
       extra_code: cb.getAttribute('data-code') || '',
@@ -2894,7 +1261,7 @@ async function validateCoupon(code) {
   computeRoomSubtotal();
   
   // Extras checkboxes
-  wrap.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+  wrap.querySelectorAll('input[type="checkbox"][id^="extra-"]').forEach(cb => {
     cb.addEventListener('change', updatePriceBreakdown);
   });
 
@@ -3003,21 +1370,55 @@ async function validateCoupon(code) {
 
   calculateNights(); // Initial calculation
 
-  wrap.querySelector('#nb-save').addEventListener('click', async () => {
+    wrap.querySelector('#nb-save').addEventListener('click', async () => {
     try {
       const roomSelect = wrap.querySelector('#nb-room');
       const selectedOption = roomSelect.selectedOptions[0];
       const roomTypeId = roomSelect.value || null;
       const roomTypeCode = selectedOption ? selectedOption.getAttribute('data-code') : null;
-      const roomName = selectedOption ? selectedOption.textContent : null;
+      const roomName = selectedOption
+        ? selectedOption.getAttribute("data-name")
+        : null;
 
+      
       if (!roomTypeId || !roomTypeCode) {
         alert('Please select a room type');
         return;
       }
 
+      // ---- DATE VALIDATION ----
+      if (!inEl.value || !outEl.value) {
+        alert('Please select both check-in and check-out dates.');
+        return;
+      }
+
+      const checkInDate = new Date(inEl.value);
+      const checkOutDate = new Date(outEl.value);
+
+      if (
+        Number.isNaN(checkInDate.getTime()) ||
+        Number.isNaN(checkOutDate.getTime())
+      ) {
+        alert('One or both dates are invalid.');
+        return;
+      }
+
+      if (checkOutDate <= checkInDate) {
+        alert('Check-out date must be after check-in date.');
+        return;
+      }
+
+      // ---- AVAILABILITY CHECK ----
+      const available = await isRoomAvailable(roomTypeId,roomTypeCode,inEl.value, outEl.value);
+      if (!available) {
+        alert('This cabin is NOT available for the selected dates.');
+        return;
+      }
+
       const roomSubtotal = parseFloat(roomSubtotalEl.value) || 0;
       const extrasTotal = selectedExtras.reduce((sum, e) => sum + e.price, 0);
+      // ... (rest of your save logic stays exactly the same)
+
       
       // Calculate final discount
       let discount = 0;
@@ -3056,6 +1457,7 @@ async function validateCoupon(code) {
       }
       
       const finalTotal = Math.max(0, roomSubtotal + extrasTotal - discount);
+      const isInfluencer = wrap.querySelector('#nb-influencer').checked;
 
       // Create the reservation first
       const reservationPayload = {
@@ -3063,6 +1465,7 @@ async function validateCoupon(code) {
         guest_first_name:  wrap.querySelector('#nb-first').value.trim() || null,
         guest_last_name:   wrap.querySelector('#nb-last').value.trim() || null,
         guest_email:       wrap.querySelector('#nb-email').value.trim() || null,
+        country_code:      wrap.querySelector('#nb-country-code')?.value || null,
         guest_phone:       wrap.querySelector('#nb-phone').value.trim() || null,
         room_name:         roomName,
         room_type_id:      roomTypeId,
@@ -3072,6 +1475,7 @@ async function validateCoupon(code) {
         nights:            parseInt(wrap.querySelector('#nb-nights').value || '0', 10) || 0,
         adults:            parseInt(wrap.querySelector('#nb-adults').value || '0', 10) || 0,
         children:          parseInt(wrap.querySelector('#nb-children').value || '0', 10) || 0,
+        is_influencer:     isInfluencer,
         status:            wrap.querySelector('#nb-status').value,
         payment_status:    wrap.querySelector('#nb-pay').value,
         currency:          wrap.querySelector('#nb-currency').value.trim() || 'GHS',
@@ -3122,6 +1526,14 @@ async function validateCoupon(code) {
 
       toast('Reservation created');
       wrap.remove();
+      toast('Reservation created');
+      wrap.remove();
+
+      // Refresh calendar/list
+      if (typeof initReservations === 'function') {
+        initReservations();
+      }
+
       initReservations?.();
     } catch (e) {
       alert('Error saving: ' + (e.message || e));
@@ -3136,6 +1548,12 @@ async function openBookPackageModal() {
   wrap.id = 'package-modal';
   wrap.className = 'modal show';
   document.body.appendChild(wrap);
+    // Close when clicking the dark background (but not the form itself)
+    wrap.addEventListener('click', (e) => {
+      if (e.target === wrap) {
+        wrap.remove();
+      }
+    });
 
   // fetch active packages with room type information
   const { data: pkgs, error } = await supabase
@@ -3364,12 +1782,4 @@ document.getElementById("package-add-btn")?.addEventListener("click", () => open
   attachDirect();
   new MutationObserver(attachDirect).observe(document.body, { childList: true, subtree: true });
 })();
-
-
-// keep your existing app bootstrap
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initApp);
-} else {
-  initApp();
-}
 }

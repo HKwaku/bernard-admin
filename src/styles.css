@@ -377,6 +377,17 @@ body {
   color: #991b1b;
 }
 
+/* Payment-specific badges */
+.badge.partial {
+  background: #fef3c7; /* amber-100 */
+  color: #b45309;      /* amber-700 */
+}
+
+.badge.refunded {
+  background: #e5e7eb; /* gray-200 */
+  color: #374151;      /* gray-700 */
+}
+
 /* ===== Buttons ===== */
 .btn {
   display: inline-flex;
@@ -844,20 +855,15 @@ label {
 /* Large devices (desktops, 1024px and up) */
 @media (min-width: 1024px) {
   .grid {
-    grid-template-columns: 1fr 1fr;
+    /* Calendar gets most of the width, sidebar has a reasonable fixed-ish min */
+    grid-template-columns: minmax(0, 2.4fr) minmax(280px, 0.9fr);
+    align-items: flex-start;
+    column-gap: var(--space-lg);
   }
-  
-  /* Show stats and recent bookings on desktop */
+
   #quick-stats-card,
   #recent-bookings-card {
     display: block !important;
-  }
-}
-
-/* Large devices (wide desktops, 1200px and up) */
-@media (min-width: 1200px) {
-  .grid {
-    grid-template-columns: 1.6fr 0.9fr;
   }
 }
 
@@ -1162,7 +1168,9 @@ label {
   border: 1px solid var(--ring);
   border-radius: var(--radius-lg);
   box-shadow: 0 2px 8px rgba(0,0,0,.04);
-  min-width: 720px;    /* keeps columns readable on larger screens */
+  width: 100%;       /* just fill the grid column */
+  max-width: 100%;   /* never overflow its column */
+  min-width: 0;      /* allow shrinking in tighter layouts */
   overflow: hidden;
 }
 
@@ -1297,6 +1305,19 @@ label {
   color: #64748b;
 }
 
+.calendar-chip {
+  font-size: 0.70rem !important;
+  line-height: 1.1;
+  color: #111827;       /* normal dark text */
+  font-weight: 600;     /* semi-bold, adjust if you like */
+}
+
+.calendar-chip.checkout-day {
+  color: var(--ok);     /* your green */
+  font-weight: 800;
+}
+
+
 /* Toggle buttons beside filters (List/Calendar) */
 .btn-view {
   border-radius: 10px;
@@ -1315,8 +1336,9 @@ label {
 }
 /* Mobile layout for reservations calendar */
 @media (max-width: 768px) {
-  .calendar-container {
-    min-width: 0; /* let it shrink to fit mobile width */
+  
+  .calendar-view {
+    overflow-x: visible; /* no horizontal scroll needed */
   }
 
   .calendar-header {
@@ -1337,6 +1359,97 @@ label {
     font-size: 0.75rem;
     padding: 4px 6px;
     white-space: normal;  /* allow booking labels to wrap instead of overflowing */
+  }
+  
+  /* Hide desktop booking details on mobile */
+  .calendar-bookings.desktop-only {
+    display: none !important;
+  }
+  
+  /* Show mobile indicator */
+  .mobile-indicator.mobile-only {
+    display: block !important;
+    font-size: 28px;
+    font-weight: bold;
+    color: #374151;
+    text-align: center;
+    line-height: 1;
+    margin-top: 8px;
+  }
+  
+  /* Mobile availability color coding */
+  .calendar-day.mobile-full {
+    background-color: #d1d5db !important; /* grey - all cabins booked */
+  }
+  
+  .calendar-day.mobile-partial {
+    background-color: #fbbf24 !important; /* amber - some cabins booked */
+  }
+  
+  /* Green background for available days (no mobile-full or mobile-partial class) */
+  .calendar-day:not(.mobile-full):not(.mobile-partial):not(.empty) {
+    background-color: #d1fae5 !important; /* light green - all available */
+  }
+  
+  /* Make calendar days with bookings more obviously clickable */
+  .calendar-day[onclick] {
+    cursor: pointer !important;
+  }
+  
+  .calendar-day[onclick]:active {
+    transform: scale(0.97);
+    transition: transform 0.1s;
+  }
+  
+  /* Ensure hover doesn't override the color coding */
+  .calendar-day.mobile-full:hover {
+    background-color: #c4c8cc !important;
+  }
+  
+  .calendar-day.mobile-partial:hover {
+    background-color: #f59e0b !important;
+  }
+  
+  .calendar-day:not(.mobile-full):not(.mobile-partial):not(.empty):hover {
+    background-color: #bbf7d0 !important;
+  }
+}
+
+/* Desktop view - hide mobile elements */
+@media (min-width: 769px) {
+  .mobile-indicator.mobile-only {
+    display: none !important;
+  }
+  
+  .calendar-bookings.desktop-only {
+    display: block !important;
+  }
+  
+  /* Desktop availability color coding */
+  .calendar-day.desktop-full {
+    background-color: #d1d5db !important; /* grey - all cabins booked */
+  }
+  
+  .calendar-day.desktop-partial {
+    background-color: #fbbf24 !important; /* amber - some cabins booked */
+  }
+  
+  /* Green background for available days (no desktop-full or desktop-partial class) */
+  .calendar-day:not(.desktop-full):not(.desktop-partial):not(.empty) {
+    background-color: #d1fae5 !important; /* light green - all available */
+  }
+  
+  /* Hover effects for desktop */
+  .calendar-day.desktop-full:hover {
+    background-color: #c4c8cc !important;
+  }
+  
+  .calendar-day.desktop-partial:hover {
+    background-color: #f59e0b !important;
+  }
+  
+  .calendar-day:not(.desktop-full):not(.desktop-partial):not(.empty):hover {
+    background-color: #bbf7d0 !important;
   }
 }
 /* ===== Calendar – Responsive ===== */
@@ -1529,66 +1642,21 @@ label {
   border-top: 1px solid var(--ring);
 }
 
-/* ===== COUPONS – refined styling to match Extras ===== */
+/* ===== COUPONS – match Extras tab styling ===== */
 
-/* Coupon code styling - prominent and monospace */
-#view-coupons .coupon-code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 1.125rem;
-  font-weight: 800;
-  color: #6366f1;
-  letter-spacing: 0.5px;
-  line-height: 1.2;
-}
-
-/* Header for coupons section */
-#view-coupons .view-header {
+/* Make coupon list behave like other .list views (rooms / extras) */
+#view-coupons .list {
   display: flex;
-  justify-content: flex-end;
-  margin: 0 0 var(--space-md) 0;
-}
-
-#view-coupons .view-header h2,
-#view-coupons .view-header h3 {
-  display: none;
-}
-
-/* List layout */
-#coupons-list {
-  display: grid;
+  flex-direction: column;
   gap: var(--space-md);
 }
 
-/* Button refinements */
-#view-coupons .btn {
-  padding: 10px 16px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--ring);
-  background: #fff;
-  font-weight: 700;
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-#view-coupons .btn:hover {
-  background: #f8fafc;
-  transform: translateY(-1px);
-}
-
-#view-coupons .btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-#view-coupons .btn.btn-danger {
-  background: #fef2f2;
-  color: #991b1b;
-  border-color: #fecaca;
-}
-
-#view-coupons .btn.btn-danger:hover {
-  background: #fee2e2;
+/* Coupon code styling aligned with extra/room titles */
+#view-coupons .coupon-code {
+  font-weight: 600;
+  font-size: 1rem;
+  color: #0f172a;
+  line-height: 1.3;
 }
 
 /* ===== COUPON MODAL ===== */
@@ -2055,6 +2123,33 @@ label {
     grid-template-columns: 1fr;
   }
 }
+/* ===== Edit Reservation – Extras checklist ===== */
+.extras-section {
+  margin-top: 1.25rem;
+}
+
+.extras-box {
+  margin-top: 0.35rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 0.75rem;
+  background: #f9fafb;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  padding: 0.25rem 0;
+}
+
+.checkbox-row input[type='checkbox'] {
+  margin-top: 0.2rem;
+}
 
 /* ===== Additional Mobile Fixes for Calendar and Room Types ===== */
 @media (max-width: 767px) {
@@ -2063,16 +2158,15 @@ label {
     display: none !important;
   }
   
-  /* Calendar View Mobile Fix - Critical for horizontal scrolling */
+  /* Calendar View Mobile Fix */
   #res-calendar.calendar-view {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
+    overflow-x: hidden;          /* no horizontal scroll */
     padding-bottom: 10px;
   }
   
   .calendar-grid {
-    min-width: 700px;
-    width: max-content;
+    min-width: 0;                /* let it shrink to screen */
+    width: 100%;                 /* fit within viewport */
   }
   
   .calendar-day {
@@ -2148,4 +2242,146 @@ label {
     font-size: 0.688rem;
     padding: 6px 6px;
   }
+}
+/* ---- Room Types: mobile layout fix ---- */
+@media (max-width: 767px) {
+  /* Prevent horizontal scroll on the rooms view */
+  #view-rooms {
+    overflow-x: hidden;
+  }
+
+  /* Make each room card fit the screen */
+  #view-rooms .item {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* Stack image above content instead of side-by-side grid */
+  #view-rooms .room-card-top {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--space-md);
+  }
+
+  /* Ensure media never overflows horizontally */
+  #view-rooms .room-card-media {
+    max-width: 100%;
+  }
+
+  #view-rooms .room-card-media img {
+    width: 100%;
+    height: auto;
+  }
+}
+#reservation-modal .extras-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#reservation-modal .extras-row {
+  display: grid;
+  grid-template-columns: 1.2fr 2fr 0.8fr 0.8fr 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+#reservation-modal .extras-row input {
+  width: 100%;
+}
+/* ===== Edit Reservation modal extras styling ===== */
+#reservation-modal .extras-section {
+  margin-top: 8px;
+}
+
+#reservation-modal .extras-box {
+  border: 1px solid var(--ring);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  max-height: 180px;
+  overflow-y: auto;
+  background: #f9fafb;
+}
+
+/* Reuse for any checkbox lists (new booking / edit reservation) */
+.checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 0.875rem;
+}
+
+.checkbox-row input[type="checkbox"] {
+  margin-top: 2px;
+}
+/* ===== Edit Reservation – Extras area tidy up ===== */
+
+/* Turn the extras list into a neat card */
+#reservation-modal #er-extras-list {
+  border: 1px solid var(--ring);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  max-height: 220px;
+  overflow-y: auto;
+  background: #f9fafb;
+}
+
+/* Nicely aligned checkbox rows */
+#reservation-modal #er-extras-list .checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 0.875rem;
+}
+
+#reservation-modal #er-extras-list .checkbox-row input[type="checkbox"] {
+  margin-top: 2px;
+}
+
+#reservation-modal #er-extras-list .checkbox-row span {
+  line-height: 1.4;
+}
+
+/* Hide the old free-form extras grid + button so layout stays clean */
+#reservation-modal #res-extras-rows,
+#reservation-modal #res-extras-add {
+  display: none;
+}
+/* ===== Calendar full occupancy (all cabins booked) ===== */
+.calendar-day.desktop-full,
+.calendar-day.mobile-full {
+  background: #e2e8f0 !important; /* soft grey */
+  color: #1e293b;
+}
+/* ===== Additional Status Badges ===== */
+
+/* Pending = grey */
+.badge.pending {
+  background: #e5e7eb; /* light grey */
+  color: #374151;      /* dark grey */
+}
+
+/* Checked-in = amber */
+.badge.checked-in {
+  background: #fef3c7; /* amber-100 */
+  color: #b45309;      /* amber-700 */
+}
+
+/* Checked-out = blue */
+.badge.checked-out {
+  background: #dbeafe; /* blue-100 */
+  color: #1e3a8a;      /* blue-800 */
+}
+/* Force emoji flag rendering in the country selector */
+.country-select-box select,
+.country-select-box option {
+  font-family:
+    "Segoe UI Emoji",
+    "Twemoji Mozilla",
+    "Apple Color Emoji",
+    "Noto Color Emoji",
+    sans-serif !important;
 }

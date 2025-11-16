@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bernard Admin - Diagnostic Test</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #f8fafc;
+    }
+    .test {
+      background: white;
+      padding: 20px;
+      margin: 10px 0;
+      border-radius: 8px;
+      border-left: 4px solid #cbd5e1;
+    }
+    .pass {
+      border-left-color: #22c55e;
+    }
+    .fail {
+      border-left-color: #ef4444;
+    }
+    h1 { color: #0f172a; }
+    h3 { margin: 0 0 10px 0; color: #475569; }
+    .status {
+      font-weight: 600;
+      font-size: 18px;
+    }
+    .pass .status { color: #22c55e; }
+    .fail .status { color: #ef4444; }
+    code {
+      background: #f1f5f9;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    pre {
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 15px;
+      border-radius: 6px;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔍 Bernard Admin - System Diagnostic</h1>
+  <p>This page tests if your basic setup is working correctly.</p>
+  
+  <div id="results"></div>
+  
+  <div class="test">
+    <h3>📋 Diagnostic Log</h3>
+    <pre id="log"></pre>
+  </div>
+  
+  <script type="module">
+    const results = document.getElementById('results');
+    const logEl = document.getElementById('log');
+    const logs = [];
+    
+    function log(msg) {
+      console.log(msg);
+      logs.push(msg);
+      logEl.textContent = logs.join('\n');
+    }
+    
+    function addTest(name, passed, details) {
+      const div = document.createElement('div');
+      div.className = `test ${passed ? 'pass' : 'fail'}`;
+      div.innerHTML = `
+        <h3>${name}</h3>
+        <div class="status">${passed ? '✓ PASS' : '✗ FAIL'}</div>
+        ${details ? `<p style="margin-top:10px;color:#64748b">${details}</p>` : ''}
+      `;
+      results.appendChild(div);
+    }
+    
+    log('Starting diagnostic tests...');
+    
+    // Test 1: Root element
+    log('Test 1: Checking for root element...');
+    const root = document.getElementById('root');
+    addTest(
+      'Root Element Check',
+      root !== null,
+      root ? 'Found <code>&lt;div id="root"&gt;&lt;/div&gt;</code>' : 'Missing <code>&lt;div id="root"&gt;&lt;/div&gt;</code> in HTML'
+    );
+    
+    // Test 2: Script type
+    log('Test 2: Checking if ES modules are supported...');
+    const supportsModules = 'noModule' in document.createElement('script');
+    addTest(
+      'ES Modules Support',
+      supportsModules,
+      supportsModules ? 'Browser supports ES6 modules' : 'Browser does not support ES6 modules'
+    );
+    
+    // Test 3: Try to import main.js
+    log('Test 3: Attempting to import main.js...');
+    let mainImported = false;
+    let importError = null;
+    
+    try {
+      await import('./src/main.js')
+        .then(() => {
+          mainImported = true;
+          log('✓ main.js imported successfully');
+        })
+        .catch(err => {
+          importError = err;
+          log('✗ Failed to import main.js: ' + err.message);
+        });
+    } catch (err) {
+      importError = err;
+      log('✗ Exception importing main.js: ' + err.message);
+    }
+    
+    addTest(
+      'Import main.js',
+      mainImported,
+      mainImported 
+        ? 'Successfully imported <code>./src/main.js</code>'
+        : `Error: <code>${importError?.message || 'Unknown error'}</code>`
+    );
+    
+    // Test 4: Check if initApp ran
+    log('Test 4: Checking if initApp executed...');
+    setTimeout(() => {
+      const appContent = root?.innerHTML || '';
+      const hasContent = appContent.length > 0;
+      
+      addTest(
+        'App Initialization',
+        hasContent,
+        hasContent 
+          ? `Root element has ${appContent.length} characters of content`
+          : 'Root element is still empty - initApp may not have run'
+      );
+      
+      if (!hasContent && mainImported) {
+        const suggestion = document.createElement('div');
+        suggestion.className = 'test';
+        suggestion.style.borderLeftColor = '#f59e0b';
+        suggestion.innerHTML = `
+          <h3>💡 Suggestion</h3>
+          <p>main.js imported successfully but app didn't initialize. Check:</p>
+          <ol>
+            <li>Does app.js have <code>export function initApp()</code>?</li>
+            <li>Does app.js call <code>initApp()</code> at the end?</li>
+            <li>Check browser console for errors</li>
+          </ol>
+        `;
+        results.appendChild(suggestion);
+      }
+      
+      log('Diagnostic complete!');
+      log('Check results above ^');
+    }, 1000);
+  </script>
+</body>
+</html>

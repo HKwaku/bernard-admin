@@ -1,8 +1,13 @@
 // src/main.js
-import '/src/styles.css';
-import '/src/utils/helpers.js';
-import { initApp } from '/src/app.js';
+import './styles.css';
+import './analytics.css';
+import { initApp } from './app.js';
 
-document.addEventListener('DOMContentLoaded', () => {
+// Single, central bootstrap
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    initApp();
+  });
+} else {
   initApp();
-});
+}
