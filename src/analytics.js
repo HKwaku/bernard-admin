@@ -988,18 +988,25 @@ async function loadExtrasCharts() {
         <div style="display: flex; flex-direction: column; gap: 6px;">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span style="font-size: 14px; color: #0f172a; font-weight: 500;">${name}</span>
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <span style="font-size: 13px; font-weight: 600; color: #64748b;">${percentage.toFixed(0)}%</span>
-              <span style="font-size: 14px; font-weight: 600; color: #0f172a;">${formatCurrencyCompact(revenue, 'GHS')}</span>
-            </div>
+            <span style="font-size: 14px; font-weight: 600; color: #0f172a;">${formatCurrencyCompact(revenue, 'GHS')}</span>
           </div>
-          <div style="width: 100%; height: 32px; background: #f1f5f9; border-radius: 6px; overflow: hidden;">
+          <div style="position: relative; width: 100%; height: 32px; background: #f1f5f9; border-radius: 6px; overflow: hidden;">
             <div style="
               width: ${barWidth}%;
               height: 100%;
               background: linear-gradient(90deg, #4f46e5 0%, #22c55e 100%);
               transition: width 0.3s ease;
             "></div>
+            <span style="
+              position: absolute;
+              left: 12px;
+              top: 50%;
+              transform: translateY(-50%);
+              font-size: 13px;
+              font-weight: 600;
+              color: #ffffff;
+              text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+            ">${percentage.toFixed(0)}%</span>
           </div>
         </div>
       `;
