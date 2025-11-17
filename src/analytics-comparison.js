@@ -259,6 +259,461 @@ async function getWeekdayWeekendComparison(start, end) {
   return { weekdayOccupancy, weekendOccupancy };
 }
 
+// Generate time series for occupancy comparison with granularity support
+async function generateOccupancyTimeSeries(periods, granularity = 'day') {
+  const NUM_CABINS = 3;
+  const datasets = [];
+
+  for (const [label, period] of Object.entries(periods)) {
+    const { data: reservations } = await supabase
+      .from('reservations')
+      .select('check_in, check_out, nights')
+      .gte('check_in', sqlDate(period.start))
+      .lte('check_in', sqlDate(period.end))
+      .in('status', ['confirmed', 'checked-in', 'checked-out']);
+
+    const occupancyByDate = {};
+    
+    (reservations || []).forEach(r => {
+      if (!r.check_in || !r.check_out) return;
+      const checkIn = new Date(r.check_in);
+      const checkOut = new Date(r.check_out);
+      let d = new Date(checkIn);
+      
+      while (d < checkOut) {
+        const key = sqlDate(d);
+        occupancyByDate[key] = (occupancyByDate[key] || 0) + 1;
+        d.setDate(d.getDate() + 1);
+      }
+    });
+
+    let points = [];
+
+    if (granularity === 'day') {
+      // Daily granularity
+      let currentDate = new Date(period.start);
+      const endDate = new Date(period.end);
+      
+      while (currentDate <= endDate) {
+        const key = sqlDate(currentDate);
+        const occupied = occupancyByDate[key] || 0;
+        const rate = (occupied / NUM_CABINS) * 100;
+        
+        points.push({
+          label: currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          value: rate
+        });
+        
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+    } else if (granularity === 'week') {
+      // Weekly granularity
+      const weekBuckets = {};
+      let currentDate = new Date(period.start);
+      const endDate = new Date(period.end);
+      
+      while (currentDate <= endDate) {
+        const key = sqlDate(currentDate);
+        const occupied = occupancyByDate[key] || 0;
+        const rate = (occupied / NUM_CABINS) * 100;
+        
+        // Get Monday of the week
+        const weekStart = new Date(currentDate);
+        const day = weekStart.getDay();
+        const diff = (day + 6) % 7;
+        weekStart.setDate(weekStart.getDate() - diff);
+        const weekKey = sqlDate(weekStart);
+        
+        if (!weekBuckets[weekKey]) {
+          weekBuckets[weekKey] = { sum: 0, count: 0, date: new Date(weekStart) };
+        }
+        weekBuckets[weekKey].sum += rate;
+        weekBuckets[weekKey].count += 1;
+        
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+      
+      points = Object.values(weekBuckets)
+        .sort((a, b) => a.date - b.date)
+        .map(bucket => ({
+          label: bucket.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          value: bucket.count > 0 ? bucket.sum / bucket.count : 0
+        }));
+    } else if (granularity === 'month') {
+      // Monthly granularity
+      const monthBuckets = {};
+      let currentDate = new Date(period.start);
+      const endDate = new Date(period.end);
+      
+      while (currentDate <= endDate) {
+        const key = sqlDate(currentDate);
+        const occupied = occupancyByDate[key] || 0;
+        const rate = (occupied / NUM_CABINS) * 100;
+        
+        const monthKey = `${currentDate.getFullYear()}-${currentDate.getMonth()}`;
+        
+        if (!monthBuckets[monthKey]) {
+          monthBuckets[monthKey] = { 
+            sum: 0, 
+            count: 0, 
+            date: new Date(currentDate.getFullYear(), currentDate.getMonth(), 1) 
+          };
+        }
+        monthBuckets[monthKey].sum += rate;
+        monthBuckets[monthKey].count += 1;
+        
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+      
+      points = Object.values(monthBuckets)
+        .sort((a, b) => a.date - b.date)
+        .map(bucket => ({
+          label: bucket.date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+          value: bucket.count > 0 ? bucket.sum / bucket.count : 0
+        }));
+    }
+    
+    datasets.push({ label, points });
+  }
+
+  return datasets;
+}
+
+// Generate time series for revenue comparison with granularity support
+async function generateRevenueTimeSeries(periods, granularity = 'day') {
+  const datasets = [];
+
+  for (const [label, period] of Object.entries(periods)) {
+    const { data: reservations } = await supabase
+      .from('reservations')
+      .select('total, check_in')
+      .gte('check_in', sqlDate(period.start))
+      .lte('check_in', sqlDate(period.end))
+      .in('status', ['confirmed', 'checked-in', 'checked-out']);
+
+    const revenueByDate = {};
+    
+    (reservations || []).forEach(r => {
+      if (!r.check_in) return;
+      const key = sqlDate(new Date(r.check_in));
+      revenueByDate[key] = (revenueByDate[key] || 0) + (parseFloat(r.total) || 0);
+    });
+
+    let points = [];
+
+    if (granularity === 'day') {
+      // Daily granularity
+      let currentDate = new Date(period.start);
+      const endDate = new Date(period.end);
+      
+      while (currentDate <= endDate) {
+        const key = sqlDate(currentDate);
+        const revenue = revenueByDate[key] || 0;
+        
+        points.push({
+          label: currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          value: revenue
+        });
+        
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+    } else if (granularity === 'week') {
+      // Weekly granularity
+      const weekBuckets = {};
+      let currentDate = new Date(period.start);
+      const endDate = new Date(period.end);
+      
+      while (currentDate <= endDate) {
+        const key = sqlDate(currentDate);
+        const revenue = revenueByDate[key] || 0;
+        
+        // Get Monday of the week
+        const weekStart = new Date(currentDate);
+        const day = weekStart.getDay();
+        const diff = (day + 6) % 7;
+        weekStart.setDate(weekStart.getDate() - diff);
+        const weekKey = sqlDate(weekStart);
+        
+        if (!weekBuckets[weekKey]) {
+          weekBuckets[weekKey] = { total: 0, date: new Date(weekStart) };
+        }
+        weekBuckets[weekKey].total += revenue;
+        
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+      
+      points = Object.values(weekBuckets)
+        .sort((a, b) => a.date - b.date)
+        .map(bucket => ({
+          label: bucket.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          value: bucket.total
+        }));
+    } else if (granularity === 'month') {
+      // Monthly granularity
+      const monthBuckets = {};
+      let currentDate = new Date(period.start);
+      const endDate = new Date(period.end);
+      
+      while (currentDate <= endDate) {
+        const key = sqlDate(currentDate);
+        const revenue = revenueByDate[key] || 0;
+        
+        const monthKey = `${currentDate.getFullYear()}-${currentDate.getMonth()}`;
+        
+        if (!monthBuckets[monthKey]) {
+          monthBuckets[monthKey] = { 
+            total: 0, 
+            date: new Date(currentDate.getFullYear(), currentDate.getMonth(), 1) 
+          };
+        }
+        monthBuckets[monthKey].total += revenue;
+        
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+      
+      points = Object.values(monthBuckets)
+        .sort((a, b) => a.date - b.date)
+        .map(bucket => ({
+          label: bucket.date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+          value: bucket.total
+        }));
+    }
+    
+    datasets.push({ label, points });
+  }
+
+  return datasets;
+}
+
+// Render multi-line comparison chart with period and granularity toggles
+function renderComparisonLineChart(containerId, datasets, options = {}) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  if (!datasets || datasets.length === 0) {
+    container.innerHTML = '<div class="analytics-empty">No data available</div>';
+    return;
+  }
+
+  // Default to MoM comparison and daily granularity
+  const comparisonMode = options.defaultMode || 'mom';
+  const granularity = options.defaultGranularity || 'day';
+  
+  // Store datasets for re-rendering
+  window[`${containerId}_datasets`] = datasets;
+  window[`${containerId}_options`] = options;
+  
+  // Create wrapper with toggle buttons
+  const wrapperId = `${containerId}-wrapper`;
+  
+  container.innerHTML = `
+    <div id="${wrapperId}">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+        <!-- Granularity Toggle -->
+        <div class="chart-controls">
+          <button class="chart-btn active" data-granularity="day" data-chart="${containerId}">D</button>
+          <button class="chart-btn" data-granularity="week" data-chart="${containerId}">W</button>
+          <button class="chart-btn" data-granularity="month" data-chart="${containerId}">M</button>
+        </div>
+        <!-- Comparison Period Toggle -->
+        <div class="chart-controls">
+          <button class="chart-btn active" data-mode="mom" data-chart="${containerId}">MoM</button>
+          <button class="chart-btn" data-mode="qoq" data-chart="${containerId}">QoQ</button>
+          <button class="chart-btn" data-mode="yoy" data-chart="${containerId}">YoY</button>
+        </div>
+      </div>
+      <div id="${containerId}-chart">Loading...</div>
+    </div>
+  `;
+
+  // Attach event listeners to granularity toggle buttons
+  container.querySelectorAll('.chart-btn[data-granularity]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const newGranularity = e.target.dataset.granularity;
+      const chartId = e.target.dataset.chart;
+      
+      // Update active state
+      container.querySelectorAll('.chart-btn[data-granularity]').forEach(b => {
+        b.classList.toggle('active', b.dataset.granularity === newGranularity);
+      });
+      
+      // Get current comparison mode
+      const currentMode = container.querySelector('.chart-btn[data-mode].active')?.dataset.mode || 'mom';
+      
+      // Show loading
+      document.getElementById(`${chartId}-chart`).innerHTML = '<div style="padding: 40px; text-align: center; color: #64748b;">Loading...</div>';
+      
+      // Re-fetch data with new granularity
+      await reloadChartData(chartId, currentMode, newGranularity);
+    });
+  });
+
+  // Attach event listeners to comparison mode toggle buttons
+  container.querySelectorAll('.chart-btn[data-mode]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const mode = e.target.dataset.mode;
+      const chartId = e.target.dataset.chart;
+      
+      // Update active state
+      container.querySelectorAll('.chart-btn[data-mode]').forEach(b => {
+        b.classList.toggle('active', b.dataset.mode === mode);
+      });
+      
+      // Get current granularity
+      const currentGranularity = container.querySelector('.chart-btn[data-granularity].active')?.dataset.granularity || 'day';
+      
+      // Re-render chart with new mode (no need to reload data)
+      const storedDatasets = window[`${chartId}_datasets`];
+      const storedOptions = window[`${chartId}_options`];
+      renderComparisonLineChartContent(`${chartId}-chart`, storedDatasets, mode, storedOptions);
+    });
+  });
+
+  // Initial render
+  renderComparisonLineChartContent(`${containerId}-chart`, datasets, comparisonMode, options);
+}
+
+// Reload chart data with new granularity
+async function reloadChartData(chartId, mode, granularity) {
+  try {
+    const storedOptions = window[`${chartId}_options`] || {};
+    
+    // Get periods from stored options or regenerate
+    const dateRange = storedOptions.dateRange || { 
+      start: new Date(new Date().getFullYear(), new Date().getMonth(), 1), 
+      end: new Date() 
+    };
+    
+    const periods = getComparisonPeriods(dateRange.start, dateRange.end);
+    
+    // Regenerate data based on chart type
+    let newDatasets;
+    if (chartId.includes('occupancy')) {
+      newDatasets = await generateOccupancyTimeSeries(periods, granularity);
+    } else if (chartId.includes('revenue')) {
+      newDatasets = await generateRevenueTimeSeries(periods, granularity);
+    }
+    
+    // Store new datasets
+    window[`${chartId}_datasets`] = newDatasets;
+    
+    // Re-render
+    renderComparisonLineChartContent(`${chartId}-chart`, newDatasets, mode, storedOptions);
+  } catch (error) {
+    console.error('Error reloading chart data:', error);
+    document.getElementById(`${chartId}-chart`).innerHTML = '<div class="analytics-empty">Error loading chart data</div>';
+  }
+}
+
+// Render the actual chart content for selected comparison mode
+function renderComparisonLineChartContent(containerId, datasets, mode, options = {}) {
+  const chartContainer = document.getElementById(containerId);
+  if (!chartContainer) return;
+
+  // Select which datasets to show based on mode
+  const currentDataset = datasets.find(ds => ds.label === 'current');
+  let comparisonDataset;
+  let comparisonLabel;
+
+  switch(mode) {
+    case 'mom':
+      comparisonDataset = datasets.find(ds => ds.label === 'mom');
+      comparisonLabel = 'Last Month';
+      break;
+    case 'qoq':
+      comparisonDataset = datasets.find(ds => ds.label === 'qoq');
+      comparisonLabel = 'Last Quarter';
+      break;
+    case 'yoy':
+      comparisonDataset = datasets.find(ds => ds.label === 'yoy');
+      comparisonLabel = 'Last Year';
+      break;
+  }
+
+  if (!currentDataset || !comparisonDataset) {
+    chartContainer.innerHTML = '<div class="analytics-empty">No data available</div>';
+    return;
+  }
+
+  const displayDatasets = [currentDataset, comparisonDataset];
+
+  // Find min/max across selected datasets
+  let allValues = [];
+  displayDatasets.forEach(ds => {
+    allValues = allValues.concat(ds.points.map(p => p.value));
+  });
+  
+  const minValue = options.min != null ? options.min : Math.min(...allValues, 0);
+  const maxValue = options.max != null ? options.max : Math.max(...allValues, minValue || 0);
+
+  const width = 100;
+  const height = 40;
+  const padX = 6;
+  const padY = 6;
+  const innerW = width - padX * 2;
+  const innerH = height - padY * 2;
+
+  const normalizeY = (val) => {
+    if (maxValue === minValue) return padY + innerH / 2;
+    return padY + innerH - ((val - minValue) / (maxValue - minValue)) * innerH;
+  };
+
+  const colors = ['#3B82F6', '#10b981']; // Blue for current, Green for comparison
+  const labels = ['Current Period', comparisonLabel];
+
+  // Use the first dataset's length for x-axis spacing
+  const numPoints = currentDataset.points.length;
+  const stepX = innerW / Math.max(numPoints - 1, 1);
+
+  // Generate paths for each dataset
+  let paths = '';
+  displayDatasets.forEach((ds, idx) => {
+    const color = colors[idx];
+    const pathD = ds.points
+      .map((p, i) => {
+        const x = padX + stepX * i;
+        const y = normalizeY(p.value);
+        return `${i === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)}`;
+      })
+      .join(' ');
+    
+    paths += `<path class="chart-line-path" d="${pathD}" style="stroke: ${color};" />`;
+  });
+
+  // Use current dataset's labels for x-axis
+  const xLabels = currentDataset.points
+    .map(p => `<div class="chart-x-label">${p.label}</div>`)
+    .join('');
+
+  // Create legend
+  const legend = displayDatasets
+    .map((ds, idx) => {
+      const color = colors[idx];
+      const label = labels[idx];
+      return `
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <div style="width: 12px; height: 3px; background: ${color}; border-radius: 2px;"></div>
+          <span style="font-size: 11px; color: #64748b;">${label}</span>
+        </div>
+      `;
+    })
+    .join('');
+
+  chartContainer.innerHTML = `
+    <div class="chart-line-wrapper">
+      <div style="display: flex; justify-content: center; gap: 16px; margin-bottom: 12px; flex-wrap: wrap;">
+        ${legend}
+      </div>
+      <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" class="chart-line-svg">
+        ${paths}
+      </svg>
+      <div class="chart-line-labels">
+        ${xLabels}
+      </div>
+    </div>
+  `;
+}
+
 // Main function to render comparison view
 export async function renderComparisonView(dateRange) {
   const container = document.getElementById('analytics-content');
@@ -329,6 +784,14 @@ export async function renderComparisonView(dateRange) {
         </div>
       </div>
 
+      <!-- Occupancy Trend Comparison Chart -->
+      <div class="analytics-section">
+        <h2 class="analytics-section-title">Occupancy Trend Comparison</h2>
+        <div class="chart-card">
+          <div id="occupancy-trend-comparison" style="height: 280px;">Loading chart...</div>
+        </div>
+      </div>
+
       <!-- Weekday vs Weekend -->
       <div class="analytics-section">
         <h2 class="analytics-section-title">Weekday vs Weekend Occupancy</h2>
@@ -393,6 +856,14 @@ export async function renderComparisonView(dateRange) {
         </div>
       </div>
 
+      <!-- Revenue Trend Comparison Chart -->
+      <div class="analytics-section">
+        <h2 class="analytics-section-title">Revenue Trend Comparison</h2>
+        <div class="chart-card">
+          <div id="revenue-trend-comparison" style="height: 280px;">Loading chart...</div>
+        </div>
+      </div>
+
       <!-- Extras Comparisons -->
       <div class="analytics-section">
         <h2 class="analytics-section-title">Extras Performance Comparisons</h2>
@@ -424,6 +895,20 @@ export async function renderComparisonView(dateRange) {
         </div>
       </div>
     `;
+
+    // Generate and render comparison charts with dateRange
+    const occupancyData = await generateOccupancyTimeSeries(periods, 'day');
+    renderComparisonLineChart('occupancy-trend-comparison', occupancyData, { 
+      min: 0, 
+      max: 100, 
+      dateRange: { start: dateRange.start, end: dateRange.end } 
+    });
+
+    const revenueData = await generateRevenueTimeSeries(periods, 'day');
+    renderComparisonLineChart('revenue-trend-comparison', revenueData, { 
+      min: 0,
+      dateRange: { start: dateRange.start, end: dateRange.end }
+    });
 
   } catch (error) {
     console.error('Error loading comparison view:', error);
