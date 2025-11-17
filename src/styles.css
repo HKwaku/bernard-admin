@@ -2597,21 +2597,3 @@ label {
     "Noto Color Emoji",
     sans-serif !important;
 }
-/* ---------- Analytics: mobile friendliness ---------- */
-#view-analytics .card-bd {
-  padding: 16px;
-  overflow-x: auto;        /* allow horizontal scroll if charts get wide */
-}
-
-#view-analytics canvas,
-#view-analytics .chart-container {
-  max-width: 100%;
-  height: auto;
-}
-
-/* Stack form grids inside modals on small screens */
-@media (max-width: 640px) {
-  .modal .form-grid {
-    grid-template-columns: 1fr !important;
-  }
-}
