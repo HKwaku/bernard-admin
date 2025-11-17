@@ -328,4 +328,38 @@
     grid-template-columns: 1fr !important;
   }
 }
+/* ===== Analytics: hard mobile layout overrides ===== */
+@media (max-width: 768px) {
+  /* Make sure the analytics card itself never overflows */
+  #view-analytics {
+    width: 100%;
+    overflow-x: hidden;
+  }
+
+  #view-analytics .card-bd {
+    padding: 12px;
+  }
+
+  /* Stack metric tiles on one column so they don't squeeze off-screen */
+  .metrics-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  /* Charts: keep them comfortably inside the viewport */
+  .chart-card {
+    padding: 16px;
+  }
+
+  .chart-line-container {
+    height: auto;
+    min-height: 200px;
+  }
+
+  /* Occupancy split: 3fr/1fr is too tight on mobile – stack it */
+  .occupancy-split {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
 
