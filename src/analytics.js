@@ -971,31 +971,42 @@ async function loadExtrasCharts() {
     });
     bookingsHtml += '</div>';
 
-    // Revenue pie chart (simplified as text percentages)
+    // Revenue horizontal bar chart
     const totalRevenue = Object.values(extraRevenue).reduce((sum, v) => sum + v, 0);
     const sortedRevenue = Object.entries(extraRevenue)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 4);
 
+    const maxRevenue = Math.max(...sortedRevenue.map(r => r[1]), 1);
+
     let revenueHtml = '<div style="display: flex; flex-direction: column; gap: 12px; padding: 20px 0;">';
     sortedRevenue.forEach(([name, revenue]) => {
       const percentage = totalRevenue > 0 ? (revenue / totalRevenue) * 100 : 0;
+      const barWidth = (revenue / maxRevenue) * 100;
+      
       revenueHtml += `
-        <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: #f9fafb; border-radius: 6px;">
-          <div style="display: flex; align-items: center; gap: 10px;">
-            <div style="width: 16px; height: 16px; border-radius: 4px; background: linear-gradient(135deg, #c9a86a 0%, #b89858 100%);"></div>
-            <span style="font-size: 14px; color: #0f172a;">${name}</span>
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 14px; color: #0f172a; font-weight: 500;">${name}</span>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 13px; font-weight: 600; color: #64748b;">${percentage.toFixed(0)}%</span>
+              <span style="font-size: 14px; font-weight: 600; color: #0f172a;">${formatCurrencyCompact(revenue, 'GHS')}</span>
+            </div>
           </div>
-          <div style="display: flex; align-items: center; gap: 12px;">
-            <span style="font-size: 14px; font-weight: 600; color: #64748b;">${percentage.toFixed(0)}%</span>
-            <span style="font-size: 14px; font-weight: 600; color: #0f172a;">${formatCurrencyCompact(revenue, 'GHS')}</span>
+          <div style="width: 100%; height: 32px; background: #f1f5f9; border-radius: 6px; overflow: hidden;">
+            <div style="
+              width: ${barWidth}%;
+              height: 100%;
+              background: linear-gradient(90deg, #4f46e5 0%, #22c55e 100%);
+              transition: width 0.3s ease;
+            "></div>
           </div>
         </div>
       `;
     });
     revenueHtml += `</div>
-      <div style="text-align: center; padding-top: 12px; border-top: 1px solid #e2e8f0; font-size: 14px; color: #64748b;">
-        Total: <strong style="color: #0f172a;">${formatCurrencyCompact(totalRevenue, 'GHS')}</strong>
+      <div style="text-align: center; padding-top: 16px; border-top: 2px solid #e2e8f0; font-size: 15px; color: #64748b;">
+        Total: <strong style="color: #0f172a; font-size: 16px;">${formatCurrencyCompact(totalRevenue, 'GHS')}</strong>
       </div>`;
 
     document.getElementById('extras-chart').innerHTML = bookingsHtml;
