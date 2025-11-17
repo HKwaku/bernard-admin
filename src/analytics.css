@@ -349,25 +349,29 @@
     font-size: 15px;
   }
   
-  /* Constrain all cards */
+  /* Constrain all cards and make them more compact */
   .chart-card,
   .metric-card {
     width: 100%;
     max-width: 100%;
     box-sizing: border-box;
-    padding: 12px;
+    padding: 10px;
   }
   
-  /* Stack metric tiles on one column */
+  /* Stack metric tiles in 2 columns on mobile (2x2 grid) */
   .metrics-grid {
-    grid-template-columns: 1fr !important;
-    gap: 12px;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px;
     width: 100%;
   }
   
-  /* Slightly smaller metric text on mobile */
+  /* Slightly smaller metric text for 2x2 grid */
   .metric-value {
-    font-size: 18px;
+    font-size: 16px;
+  }
+  
+  .metric-label {
+    font-size: 11px;
   }
   
   /* Stack two-column layouts */

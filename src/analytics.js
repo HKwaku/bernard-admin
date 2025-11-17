@@ -4,6 +4,29 @@
 import { supabase } from './config/supabase.js';
 import { formatCurrency, toast } from './utils/helpers.js';
 
+// Format currency with K/M suffix
+function formatCurrencyCompact(amount, currency = 'GHS') {
+  const absAmount = Math.abs(amount);
+  let value, suffix;
+  
+  if (absAmount >= 1000000) {
+    value = (amount / 1000000).toFixed(1);
+    suffix = 'M';
+  } else if (absAmount >= 1000) {
+    value = (amount / 1000).toFixed(1);
+    // Remove trailing .0
+    if (value.endsWith('.0')) value = value.slice(0, -2);
+    suffix = 'K';
+  } else {
+    return `${currency} ${amount.toFixed(2)}`;
+  }
+  
+  // Remove trailing .0
+  if (value.endsWith('.0')) value = value.slice(0, -2);
+  
+  return `${currency} ${value}${suffix}`;
+}
+
 // Date range state
 let dateRange = {
   start: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
@@ -396,27 +419,27 @@ async function loadRevenueMetrics() {
     const html = `
       <div class="metric-card">
         <div class="metric-label">Total Revenue</div>
-        <div class="metric-value">${formatCurrency(totalRevenue, 'GHS')}</div>
+        <div class="metric-value">${formatCurrencyCompact(totalRevenue, 'GHS')}</div>
       </div>
       <div class="metric-card">
         <div class="metric-label">Room Revenue</div>
-        <div class="metric-value">${formatCurrency(roomRevenue, 'GHS')}</div>
+        <div class="metric-value">${formatCurrencyCompact(roomRevenue, 'GHS')}</div>
       </div>
       <div class="metric-card">
         <div class="metric-label">Extras Revenue</div>
-        <div class="metric-value">${formatCurrency(extrasRevenue, 'GHS')}</div>
+        <div class="metric-value">${formatCurrencyCompact(extrasRevenue, 'GHS')}</div>
       </div>
       <div class="metric-card">
         <div class="metric-label">Avg Booking Value</div>
-        <div class="metric-value">${formatCurrency(avgBookingValue, 'GHS')}</div>
+        <div class="metric-value">${formatCurrencyCompact(avgBookingValue, 'GHS')}</div>
       </div>
       <div class="metric-card">
         <div class="metric-label">RevPAR</div>
-        <div class="metric-value">${formatCurrency(revPAR, 'GHS')}</div>
+        <div class="metric-value">${formatCurrencyCompact(revPAR, 'GHS')}</div>
       </div>
       <div class="metric-card">
         <div class="metric-label">ADR</div>
-        <div class="metric-value">${formatCurrency(adr, 'GHS')}</div>
+        <div class="metric-value">${formatCurrencyCompact(adr, 'GHS')}</div>
       </div>
     `;
 
@@ -877,7 +900,7 @@ async function loadExtrasMetrics() {
     const html = `
       <div class="metric-card">
         <div class="metric-label">Extras Revenue</div>
-        <div class="metric-value">${`GHS ${(totalRevenue).toFixed(2)}`}</div>
+        <div class="metric-value">${formatCurrencyCompact(totalRevenue, 'GHS')}</div>
       </div>
       <div class="metric-card">
         <div class="metric-label">Extras Attach Rate</div>
@@ -1102,11 +1125,11 @@ async function loadPackageMetrics() {
       </div>
       <div class="metric-card">
         <div class="metric-label">Package Revenue</div>
-        <div class="metric-value">${`GHS ${(packageRevenue).toFixed(2)}`}</div>
+        <div class="metric-value">${formatCurrencyCompact(packageRevenue, 'GHS')}</div>
       </div>
       <div class="metric-card">
         <div class="metric-label">Avg Package Value</div>
-        <div class="metric-value">${`GHS ${(avgPackageValue).toFixed(2)}`}</div>
+        <div class="metric-value">${formatCurrencyCompact(avgPackageValue, 'GHS')}</div>
       </div>
     `;
 
@@ -1272,23 +1295,23 @@ async function loadCouponMetrics() {
     const metricsHtml = `
       <div class="metric-card">
         <div class="metric-label">Total Discount Given</div>
-        <div class="metric-value">${formatCurrency(totalDiscount, 'GHS')}</div>
+        <div class="metric-value">${formatCurrencyCompact(totalDiscount, 'GHS')}</div>
       </div>
 
       <div class="metric-card">
         <div class="metric-label">Avg Discount</div>
-        <div class="metric-value">${formatCurrency(avgDiscount, 'GHS')}</div>
+        <div class="metric-value">${formatCurrencyCompact(avgDiscount, 'GHS')}</div>
       </div>
 
       <div class="metric-card">
         <div class="metric-label">Avg Booking with Coupon</div>
-        <div class="metric-value">${formatCurrency(avgWith, 'GHS')}</div>
+        <div class="metric-value">${formatCurrencyCompact(avgWith, 'GHS')}</div>
         <div class="metric-subtext">Based on ${withCouponRes.length} bookings</div>
       </div>
 
       <div class="metric-card">
         <div class="metric-label">Avg Booking without Coupon</div>
-        <div class="metric-value">${formatCurrency(avgWithout, 'GHS')}</div>
+        <div class="metric-value">${formatCurrencyCompact(avgWithout, 'GHS')}</div>
         <div class="metric-subtext">Based on ${withoutCouponRes.length} bookings</div>
       </div>
 
