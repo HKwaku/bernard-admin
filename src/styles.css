@@ -2043,6 +2043,218 @@ label {
   flex-direction: column;
 }
 
+/* ===== Package View Modal (read-only details) ===== */
+#package-view-modal.modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.4);
+  z-index: 999;
+  backdrop-filter: blur(4px);
+}
+
+#package-view-modal .content {
+  background: #fff;
+  border: 1px solid var(--ring);
+  border-radius: var(--radius-lg);
+  width: min(720px, 92vw);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: var(--space-xl);
+}
+
+/* ===== Package Booking Modal (Book New Package) ===== */
+#package-booking-modal.modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.4);
+  z-index: 999;
+  backdrop-filter: blur(4px);
+}
+
+/* Card shell */
+#package-booking-modal .content {
+  background: #fff;
+  border: 1px solid var(--ring);
+  border-radius: var(--radius-lg);
+  width: min(720px, 92vw);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header */
+#package-booking-modal .hd {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-lg) var(--space-xl);
+  border-bottom: 1px solid var(--ring);
+  background: linear-gradient(180deg, #fafbfc 0%, #f5f7fa 100%);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+#package-booking-modal .hd h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+#package-booking-modal .hd .btn {
+  font-size: 1.5rem;
+  line-height: 1;
+  padding: 4px 10px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+#package-booking-modal .hd .btn:hover {
+  color: var(--ink);
+}
+
+/* Body */
+#package-booking-modal .bd {
+  padding: var(--space-xl);
+  flex: 1;
+}
+
+#package-booking-modal .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: var(--space-md);
+}
+
+#package-booking-modal .form-group label {
+  font-weight: 700;
+  font-size: 0.875rem;
+  color: var(--ink);
+}
+
+#package-booking-modal .form-group input,
+#package-booking-modal .form-group select,
+#package-booking-modal .form-group textarea {
+  padding: 10px 12px;
+  border: 1px solid var(--ring);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  font-family: inherit;
+  transition: border-color var(--transition-fast);
+  width: 100%;
+}
+
+#package-booking-modal .form-group input:focus,
+#package-booking-modal .form-group select:focus,
+#package-booking-modal .form-group textarea:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.1);
+}
+
+/* Two-column layout reused from other modals */
+#package-booking-modal .form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-lg);
+}
+
+/* Footer */
+#package-booking-modal .ft {
+  padding: var(--space-lg) var(--space-xl);
+  border-top: 1px solid var(--ring);
+  background: #fafbfc;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+}
+
+/* Mobile tweaks */
+@media (max-width: 720px) {
+  #package-booking-modal .content {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  #package-booking-modal .bd {
+    padding: var(--space-lg);
+  }
+
+  #package-booking-modal .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Header + close button */
+#package-view-modal .hd {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-lg);
+}
+
+#package-view-modal .hd h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+#package-view-modal .hd .btn {
+  font-size: 1.5rem;
+  line-height: 1;
+  padding: 4px 10px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+#package-view-modal .hd .btn:hover {
+  color: var(--ink);
+  transform: none;
+}
+
+/* Body text tweaks */
+#package-view-modal .bd p {
+  margin-bottom: 4px;
+}
+
+#package-view-modal h4 {
+  margin-top: 16px;
+  margin-bottom: 4px;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+#package-view-modal .plain-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+/* Mobile */
+@media (max-width: 720px) {
+  #package-view-modal .content {
+    width: 100%;
+    max-width: 100%;
+    padding: var(--space-lg);
+  }
+}
+
+
 /* Header */
 #package-modal .hd {
   display: flex;
@@ -2374,4 +2586,32 @@ label {
 .badge.checked-out {
   background: #dbeafe; /* blue-100 */
   color: #1e3a8a;      /* blue-800 */
+}
+/* Force emoji flag rendering in the country selector */
+.country-select-box select,
+.country-select-box option {
+  font-family:
+    "Segoe UI Emoji",
+    "Twemoji Mozilla",
+    "Apple Color Emoji",
+    "Noto Color Emoji",
+    sans-serif !important;
+}
+/* ---------- Analytics: mobile friendliness ---------- */
+#view-analytics .card-bd {
+  padding: 16px;
+  overflow-x: auto;        /* allow horizontal scroll if charts get wide */
+}
+
+#view-analytics canvas,
+#view-analytics .chart-container {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Stack form grids inside modals on small screens */
+@media (max-width: 640px) {
+  .modal .form-grid {
+    grid-template-columns: 1fr !important;
+  }
 }

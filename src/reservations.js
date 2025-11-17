@@ -35,7 +35,7 @@ async function loadReservations() {
     const { data, error } = await supabase
       .from('reservations')
       .select(
-        'id,confirmation_code,room_type_id,room_type_code,room_name,check_in,check_out,nights,adults,children,status,payment_status,total,currency,guest_first_name,guest_last_name,guest_email,guest_phone,notes'
+        'id,confirmation_code,room_type_id,room_type_code,room_name,check_in,check_out,nights,adults,children,status,payment_status,total,currency,guest_first_name,guest_last_name,guest_email,guest_phone,country_code,notes'
       )
       .order('check_in', { ascending: false });
 
@@ -642,15 +642,29 @@ async function openEditModal(id) {
               <input id="er-email" type="email" value="${r.guest_email || ''}" />
             </div>
             <div class="form-group">
-              <label>Phone</label>
-              <input id="er-phone" type="text" value="${r.guest_phone || ''}" />
+            <label>Phone</label>
+            <div style="display:flex;gap:8px;align-items:center;width:100%">
+              <input
+                id="er-country-code"
+                type="text"
+                placeholder="+233"
+                style="max-width:80px"
+                value="${r.country_code || ''}"
+              />
+              <input
+                id="er-phone"
+                type="text"
+                style="flex:1"
+                value="${r.guest_phone || ''}"
+              />
             </div>
+          </div>
             <div class="form-group">
             <label style="display:flex;align-items:center;gap:8px;">
               <span>Influencer?</span>
               <input type="checkbox" id="res-influencer" />
             </label>
-  </div>
+          </div>
           </div>
 
           <div class="form-grid">
@@ -1275,6 +1289,7 @@ async function openEditModal(id) {
           guest_first_name: modal.querySelector('#er-first')?.value.trim() || null,
           guest_last_name: modal.querySelector('#er-last')?.value.trim() || null,
           guest_email: modal.querySelector('#er-email')?.value.trim() || null,
+          country_code: modal.querySelector('#er-country-code')?.value.trim() || null,
           guest_phone: modal.querySelector('#er-phone')?.value.trim() || null,
           is_influencer: !!$('#res-influencer')?.checked,
           room_name: roomName,
@@ -1414,7 +1429,12 @@ window.showReservationDetails = function (confirmationCode) {
         </h3>
 
         <p><strong>Email:</strong> ${reservation.guest_email || 'N/A'}</p>
-        <p><strong>Phone:</strong> ${reservation.guest_phone || 'N/A'}</p>
+        <p><strong>Phone:</strong> ${
+          reservation.guest_phone
+            ? `${reservation.country_code || ''} ${reservation.guest_phone}`
+            : 'N/A'
+        }</p>
+
 
         <p><strong>Confirmation Code:</strong>
           <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px">

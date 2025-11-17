@@ -1,5 +1,5 @@
 // src/packages.js
-// Package management (list, add/edit, activate/deactivate, delete)
+// Package management (list, add/edit, view, activate/deactivate, delete)
 
 import { supabase } from './config/supabase.js';
 import { $, formatCurrency, toast } from './utils/helpers.js';
@@ -15,14 +15,16 @@ async function initPackages() {
     newBtn.addEventListener('click', () => openPackageModal());
   }
 
-  const list = document.getElementById("packages-list");
+  const list = document.getElementById('packages-list');
   if (!list) return;
 
+  list.innerHTML = `<div class="muted">Loading…</div>`;
+
   const { data, error } = await supabase
-    .from("packages")
-    .select("*")
-    .order("sort_order", { ascending: true })
-    .order("created_at", { ascending: false });
+    .from('packages')
+    .select('*')
+    .order('sort_order', { ascending: true })
+    .order('created_at', { ascending: false });
 
   if (error) {
     list.innerHTML = `<div class="muted">Error loading packages: ${error.message}</div>`;
@@ -36,89 +38,119 @@ async function initPackages() {
   const html = data
     .map((p) => {
       const isActive = p.is_active !== false;
+
+      const validity =
+        p.valid_from || p.valid_until
+          ? `<span>Valid: <strong>${p.valid_from || '—'}</strong> → <strong>${
+              p.valid_until || '—'
+            }</strong></span>`
+          : '';
+
       return `
-        <div class="item">
+        <div class="item" data-pkg-id="${p.id}">
           <div class="row" style="align-items:flex-start;gap:12px">
-            ${p.image_url ? `<img class="pkg-thumb" src="${p.image_url}" alt="${p.name || ""}">` : ""}
+            ${
+              p.image_url
+                ? `<img class="pkg-thumb" src="${p.image_url}" alt="${p.name || ''}">`
+                : ''
+            }
             <div style="flex:1">
-              <div class="title">${p.name || ""}</div>
-              ${p.description ? `<div class="pkg-meta" style="margin-top:4px">${p.description}</div>` : ""}
+              <div class="title">${p.name || ''}</div>
+              ${
+                p.description
+                  ? `<div class="pkg-meta" style="margin-top:4px">${p.description}</div>`
+                  : ''
+              }
               <div class="meta" style="margin-top:8px;display:flex;gap:16px;flex-wrap:wrap">
-                <span>Code: <strong>${(p.code || "").toUpperCase()}</strong></span>
-                <span>Price: <strong>${formatCurrency(p.package_price || 0, p.currency || "GHS")}</strong></span>
-                ${p.nights ? `<span>Nights: <strong>${p.nights}</strong></span>` : ""}
-                ${
-                  p.valid_from || p.valid_until
-                    ? `<span>Valid: <strong>${p.valid_from || "—"}</strong> → <strong>${p.valid_until || "—"}</strong></span>`
-                    : ""
-                }
-                ${p.is_featured ? `<span>Featured</span>` : ""}
+                <span>Code: <strong>${(p.code || '').toUpperCase()}</strong></span>
+                <span>Price: <strong>${formatCurrency(
+                  p.package_price || 0,
+                  p.currency || 'GHS'
+                )}</strong></span>
+                ${p.nights ? `<span>Nights: <strong>${p.nights}</strong></span>` : ''}
+                ${validity}
+                ${p.is_featured ? `<span>Featured</span>` : ''}
               </div>
             </div>
             <div style="text-align:right">
-              <span class="badge ${isActive ? "ok" : "err"}">${isActive ? "Active" : "Inactive"}</span>
+              <span class="badge ${isActive ? 'ok' : 'err'}">
+                ${isActive ? 'Active' : 'Inactive'}
+              </span>
             </div>
           </div>
 
           <div class="room-card-footer">
             <button class="btn btn-sm" data-pkg-edit="${p.id}">Edit</button>
             <button class="btn btn-sm" data-pkg-toggle="${p.id}" data-pkg-active="${isActive}">
-              ${isActive ? "Deactivate" : "Activate"}
+              ${isActive ? 'Deactivate' : 'Activate'}
             </button>
-            <button class="btn btn-sm" data-pkg-delete="${p.id}" style="color:#b91c1c">Delete</button>
+            <button class="btn btn-sm" data-pkg-delete="${p.id}" style="color:#b91c1c">
+              Delete
+            </button>
           </div>
         </div>
       `;
     })
-    .join("");
+    .join('');
 
   list.innerHTML = html;
 
-  // wire actions
-  list.querySelectorAll("[data-pkg-edit]").forEach((b) =>
-    b.addEventListener("click", (e) => {
+  // --- wire actions inside cards ---
+  list.querySelectorAll('[data-pkg-edit]').forEach((b) =>
+    b.addEventListener('click', (e) => {
       e.stopPropagation();
-      openPackageModal("edit", b.getAttribute("data-pkg-edit"));
+      openPackageModal('edit', b.getAttribute('data-pkg-edit'));
     })
   );
 
-  list.querySelectorAll("[data-pkg-toggle]").forEach((b) =>
-    b.addEventListener("click", async (e) => {
+  list.querySelectorAll('[data-pkg-toggle]').forEach((b) =>
+    b.addEventListener('click', async (e) => {
       e.stopPropagation();
-      const id = b.getAttribute("data-pkg-toggle");
-      const isActive = b.getAttribute("data-pkg-active") === "true";
+      const id = b.getAttribute('data-pkg-toggle');
+      const isActive = b.getAttribute('data-pkg-active') === 'true';
       await togglePackageStatus(id, !isActive);
     })
   );
 
-  list.querySelectorAll("[data-pkg-delete]").forEach((b) =>
-    b.addEventListener("click", async (e) => {
+  list.querySelectorAll('[data-pkg-delete]').forEach((b) =>
+    b.addEventListener('click', async (e) => {
       e.stopPropagation();
-      await deletePackage(b.getAttribute("data-pkg-delete"));
+      await deletePackage(b.getAttribute('data-pkg-delete'));
     })
   );
+
+  // --- clicking the card opens view modal ---
+  list.querySelectorAll('.item').forEach((card) => {
+    const id = card.getAttribute('data-pkg-id');
+    if (!id) return;
+    card.addEventListener('click', () => openPackageViewModal(id));
+  });
 }
 
-function openPackageModal(mode = "add", id = null) {
-  const wrap = document.createElement("div");
-  wrap.id = "package-modal";
-  wrap.className = "modal show";
+function openPackageModal(mode = 'add', id = null) {
+  const wrap = document.createElement('div');
+  wrap.id = 'package-modal';
+  wrap.className = 'modal show';
   document.body.appendChild(wrap);
 
   const toDateInput = (v) => {
-    if (!v) return "";
+    if (!v) return '';
     const d = new Date(v);
-    if (Number.isNaN(d.getTime())) return "";
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
+    if (Number.isNaN(d.getTime())) return '';
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
     return `${d.getFullYear()}-${m}-${day}`;
   };
 
   const loadExisting = async () => {
-    if (mode !== "edit" || !id) return null;
-    const { data, error } = await supabase.from("packages").select("*").eq("id", id).single();
+    if (mode !== 'edit' || !id) return null;
+    const { data, error } = await supabase
+      .from('packages')
+      .select('*')
+      .eq('id', id)
+      .single();
     if (error) {
-      alert("Error loading package: " + error.message);
+      alert('Error loading package: ' + error.message);
       return null;
     }
     return data;
@@ -126,10 +158,92 @@ function openPackageModal(mode = "add", id = null) {
 
   (async () => {
     const p = (await loadExisting()) || {};
+
+    // room types
+    const { data: rooms } = await supabase
+      .from('room_types')
+      .select('id, code, name')
+      .eq('is_active', true)
+      .order('name', { ascending: true });
+
+    // existing packages_rooms
+    let selectedRoomIds = [];
+    if (mode === 'edit' && id) {
+      try {
+        const { data: pkgRooms } = await supabase
+          .from('packages_rooms')
+          .select('room_type_id')
+          .eq('package_id', id);
+        selectedRoomIds = (pkgRooms || []).map((r) => r.room_type_id);
+      } catch (e) {
+        console.warn('packages_rooms lookup failed (table may not exist yet):', e);
+      }
+    }
+
+    // existing package_extras
+    let selectedExtraIds = [];
+    if (mode === 'edit' && id) {
+      try {
+        const { data: pkgExtras } = await supabase
+          .from('package_extras')
+          .select('extra_id')
+          .eq('package_id', id);
+        selectedExtraIds = (pkgExtras || []).map((x) => x.extra_id);
+      } catch (e) {
+        console.warn('package_extras lookup failed (table may not exist yet):', e);
+      }
+    }
+
+    // extras list
+    const { data: extras } = await supabase
+      .from('extras')
+      .select('id, code, name, price, category')
+      .order('name', { ascending: true });
+
+    const roomCheckboxesHtml = (rooms || [])
+      .map((r) => {
+        const isSelected = selectedRoomIds.includes(r.id);
+        return `
+          <label style="display:flex;align-items:center;gap:8px;margin:4px 0;cursor:pointer">
+            <input
+              type="checkbox"
+              class="pkg-room-code"
+              value="${r.id}"
+              data-code="${r.code || ''}"
+              data-name="${r.name || ''}"
+              ${isSelected ? 'checked' : ''}
+              style="width:auto"
+            />
+            <span>${(r.code || '').toUpperCase()} – ${r.name || ''}</span>
+          </label>
+        `;
+      })
+      .join('');
+
+    const extrasHtml = (extras || [])
+      .map(
+        (e) => `
+        <label style="display:flex;align-items:center;gap:8px;margin:4px 0;cursor:pointer">
+          <input
+            type="checkbox"
+            class="pkg-extra"
+            value="${e.id}"
+            data-code="${e.code || ''}"
+            data-name="${e.name || ''}"
+            data-price="${e.price || 0}"
+            data-category="${e.category || ''}"
+            ${selectedExtraIds.includes(e.id) ? 'checked' : ''}
+            style="width:auto"
+          />
+          <span>${e.name} - GHS ${e.price ?? 0}</span>
+        </label>`
+      )
+      .join('');
+
     wrap.innerHTML = `
       <div class="content" onclick="event.stopPropagation()">
         <div class="hd">
-          <h3>${mode === "edit" ? "Edit" : "Add"} Package</h3>
+          <h3>${mode === 'edit' ? 'Edit' : 'Add'} Package</h3>
           <button class="btn" onclick="document.getElementById('package-modal').remove()">×</button>
         </div>
 
@@ -137,38 +251,56 @@ function openPackageModal(mode = "add", id = null) {
           <div class="form-grid">
             <div class="form-group">
               <label>Code *</label>
-              <input id="pkg-code" type="text" value="${p.code || ""}">
+              <input id="pkg-code" type="text" value="${p.code || ''}">
             </div>
             <div class="form-group">
               <label>Name *</label>
-              <input id="pkg-name" type="text" value="${p.name || ""}">
+              <input id="pkg-name" type="text" value="${p.name || ''}">
             </div>
           </div>
 
           <div class="form-group">
             <label>Description</label>
-            <textarea id="pkg-desc" rows="3">${p.description || ""}</textarea>
+            <textarea id="pkg-desc" rows="3">${p.description || ''}</textarea>
           </div>
 
           <div class="form-grid">
             <div class="form-group">
               <label>Package Price *</label>
-              <input id="pkg-price" type="number" step="0.01" value="${p.package_price ?? ""}">
+              <input id="pkg-price" type="number" step="0.01" value="${p.package_price ?? ''}">
             </div>
             <div class="form-group">
               <label>Currency *</label>
-              <input id="pkg-currency" type="text" value="${p.currency || "GHS"}">
+              <input id="pkg-currency" type="text" value="${p.currency || 'GHS'}">
             </div>
           </div>
 
           <div class="form-grid">
             <div class="form-group">
-              <label>Room Type ID</label>
-              <input id="pkg-room" type="text" value="${p.room_type_id || ""}">
+              <label>Room Types</label>
+              <div id="pkg-room-types">
+                ${
+                  roomCheckboxesHtml ||
+                  '<div class="muted">No active room types. Create room types first.</div>'
+                }
+              </div>
+              <div class="muted" style="margin-top:4px;font-size:12px">
+                Tick one or more room types.
+              </div>
             </div>
             <div class="form-group">
               <label>Nights</label>
-              <input id="pkg-nights" type="number" min="1" step="1" value="${p.nights ?? ""}">
+              <input id="pkg-nights" type="number" min="1" step="1" value="${p.nights ?? ''}">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Extras included in this package</label>
+            <div id="pkg-extras-list">
+              ${
+                extrasHtml ||
+                '<div class="muted">No extras defined yet. Create extras first in the Extras tab.</div>'
+              }
             </div>
           </div>
 
@@ -183,85 +315,161 @@ function openPackageModal(mode = "add", id = null) {
             </div>
           </div>
 
-          <div class="form-grid">
-            <div class="form-group">
-              <label>Image URL</label>
-              <input id="pkg-image" type="text" value="${p.image_url || ""}">
-            </div>
-            <div class="form-group">
-              <label>Sort Order</label>
-              <input id="pkg-sort" type="number" step="1" value="${p.sort_order ?? ""}">
-            </div>
+          <div class="form-group">
+            <label>Image URL</label>
+            <input id="pkg-image" type="text" value="${p.image_url || ''}">
           </div>
 
           <div class="form-grid">
             <div class="form-group">
               <label>Featured</label>
               <select id="pkg-featured">
-                <option value="false" ${p.is_featured ? "" : "selected"}>No</option>
-                <option value="true" ${p.is_featured ? "selected" : ""}>Yes</option>
+                <option value="false" ${p.is_featured ? '' : 'selected'}>No</option>
+                <option value="true" ${p.is_featured ? 'selected' : ''}>Yes</option>
               </select>
             </div>
             <div class="form-group">
               <label>Active</label>
               <select id="pkg-active">
-                <option value="false" ${p.is_active ? "" : "selected"}>No</option>
-                <option value="true" ${p.is_active ? "selected" : ""}>Yes</option>
+                <option value="false" ${p.is_active ? '' : 'selected'}>No</option>
+                <option value="true" ${p.is_active ? 'selected' : ''}>Yes</option>
               </select>
             </div>
           </div>
         </div>
 
         <div class="ft">
-          <button class="btn" onclick="document.getElementById('package-modal').remove()">Cancel</button>
-          <button class="btn btn-primary" id="pkg-save-btn">${mode === "edit" ? "Save Changes" : "Create Package"}</button>
+          <button class="btn" onclick="document.getElementById('package-modal').remove()">
+            Cancel
+          </button>
+          <button class="btn btn-primary" id="pkg-save-btn">
+            ${mode === 'edit' ? 'Save Changes' : 'Create Package'}
+          </button>
         </div>
       </div>
     `;
 
     // Wire save button
-    document.getElementById("pkg-save-btn").addEventListener("click", async () => {
+    document.getElementById('pkg-save-btn').addEventListener('click', async () => {
       try {
         const payload = collectPackageForm();
-        if (mode === "edit" && id) {
-          const { error } = await supabase.from("packages").update(payload).eq("id", id);
+
+        // all selected room checkboxes
+        const roomCheckboxes = Array.from(
+          wrap.querySelectorAll('.pkg-room-code:checked') || []
+        );
+
+        // ---- save package row ----
+        let pkgRow = null;
+
+        if (mode === 'edit' && id) {
+          const { data, error } = await supabase
+            .from('packages')
+            .update(payload)
+            .eq('id', id)
+            .select()
+            .single();
           if (error) throw error;
-          toast("Package updated");
+          pkgRow = data;
+          toast('Package updated');
         } else {
-          const { error } = await supabase.from("packages").insert(payload);
+          const { data, error } = await supabase
+            .from('packages')
+            .insert(payload)
+            .select()
+            .single();
           if (error) throw error;
-          toast("Package created");
+          pkgRow = data;
+          toast('Package created');
         }
+
+        if (pkgRow && pkgRow.id) {
+          // ---- upsert packages_rooms (many-to-many rooms) ----
+          try {
+            await supabase.from('packages_rooms').delete().eq('package_id', pkgRow.id);
+
+            if (roomCheckboxes.length > 0) {
+              const roomRows = roomCheckboxes.map((cb) => ({
+                package_id: pkgRow.id,
+                room_type_id: cb.value,
+              }));
+
+              const { error: roomErr } = await supabase
+                .from('packages_rooms')
+                .insert(roomRows);
+
+              if (roomErr) {
+                console.error('Error saving packages_rooms:', roomErr);
+              }
+            }
+          } catch (err) {
+            console.warn('packages_rooms update failed (table may not exist yet):', err);
+          }
+
+          // ---- upsert package_extras (many-to-many extras) ----
+          try {
+            const extraCheckboxes = Array.from(
+              wrap.querySelectorAll('.pkg-extra:checked') || []
+            );
+
+            await supabase.from('package_extras').delete().eq('package_id', pkgRow.id);
+
+            if (extraCheckboxes.length > 0) {
+              const extrasPayload = extraCheckboxes.map((cb) => ({
+                package_id: pkgRow.id,
+                extra_id: cb.value,
+                quantity: 1,
+                code: cb.getAttribute('data-code') || null,
+              }));
+
+              const { error: extrasError } = await supabase
+                .from('package_extras')
+                .insert(extrasPayload);
+
+              if (extrasError) {
+                console.error('Error saving package_extras:', extrasError);
+              }
+            }
+          } catch (err) {
+            console.warn('package_extras update failed (table may not exist yet):', err);
+          }
+        }
+
         wrap.remove();
         initPackages();
       } catch (e) {
-        alert("Error saving: " + (e.message || e));
+        alert(e.message || e);
       }
     });
   })();
 }
 
 function collectPackageForm() {
-  const root = document.getElementById("package-modal") || document;
-  const code = root.querySelector("#pkg-code").value.trim();
-  const name = root.querySelector("#pkg-name").value.trim();
-  const description = root.querySelector("#pkg-desc").value.trim() || null;
-  const priceEl = root.querySelector("#pkg-price").value;
-  const package_price = priceEl === "" ? null : parseFloat(priceEl);
-  const currency = root.querySelector("#pkg-currency").value;
-  const room_type_id = root.querySelector("#pkg-room").value.trim() || null;
-  const nightsEl = root.querySelector("#pkg-nights").value;
-  const nights = nightsEl === "" ? null : parseInt(nightsEl, 10);
-  const valid_from = root.querySelector("#pkg-from").value || null;
-  const valid_until = root.querySelector("#pkg-until").value || null;
-  const image_url = root.querySelector("#pkg-image").value.trim() || null;
-  const sortEl = root.querySelector("#pkg-sort").value;
-  const sort_order = sortEl === "" ? null : parseInt(sortEl, 10);
-  const is_featured = root.querySelector("#pkg-featured").value === "true";
-  const is_active = root.querySelector("#pkg-active").value === "true";
+  const root = document.getElementById('package-modal') || document;
+  const code = root.querySelector('#pkg-code').value.trim();
+  const name = root.querySelector('#pkg-name').value.trim();
+  const description = root.querySelector('#pkg-desc').value.trim() || null;
+
+  const priceEl = root.querySelector('#pkg-price').value;
+  const package_price = priceEl === '' ? null : parseFloat(priceEl);
+
+  const currency = root.querySelector('#pkg-currency').value;
+
+  const nightsEl = root.querySelector('#pkg-nights').value;
+  const nights = nightsEl === '' ? null : Number.parseInt(nightsEl, 10);
+
+  const valid_from = root.querySelector('#pkg-from').value || null;
+  const valid_until = root.querySelector('#pkg-until').value || null;
+  const image_url = root.querySelector('#pkg-image').value.trim() || null;
+  const is_featured = root.querySelector('#pkg-featured').value === 'true';
+  const is_active = root.querySelector('#pkg-active').value === 'true';
 
   if (!code || !name || package_price == null || !currency) {
-    throw new Error("Code, Name, Price and Currency are required.");
+    throw new Error('Code, Name, Price and Currency are required.');
+  }
+
+  if (nights == null || Number.isNaN(nights) || nights <= 0) {
+    throw new Error('Nights is required and must be at least 1.');
   }
 
   return {
@@ -270,37 +478,207 @@ function collectPackageForm() {
     description,
     package_price,
     currency,
-    room_type_id,
     nights,
     valid_from,
     valid_until,
     image_url,
-    sort_order,
     is_featured,
-    is_active
+    is_active,
   };
 }
 
+// ---------- View Package Details ----------
+async function openPackageViewModal(packageId) {
+  const wrap = document.createElement('div');
+  wrap.id = 'package-view-modal';
+  wrap.className = 'modal show';
+  wrap.addEventListener('click', () => wrap.remove());
+  document.body.appendChild(wrap);
+
+  wrap.innerHTML = `
+    <div class="content" onclick="event.stopPropagation()">
+      <div class="bd">
+        <div class="muted">Loading package…</div>
+      </div>
+    </div>
+  `;
+
+  try {
+    // Base package
+    const { data: pkg, error } = await supabase
+      .from('packages')
+      .select('*')
+      .eq('id', packageId)
+      .single();
+
+    if (error || !pkg) {
+      wrap.innerHTML = `
+        <div class="content" onclick="event.stopPropagation()">
+          <div class="hd">
+            <h3>Package Details</h3>
+            <button class="btn" onclick="document.getElementById('package-view-modal').remove()">×</button>
+          </div>
+          <div class="bd">
+            <div class="muted">Error loading package.</div>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    // Rooms
+    let roomsHtml = '<div class="muted">No rooms linked.</div>';
+    try {
+      const { data: pkgRooms } = await supabase
+        .from('packages_rooms')
+        .select('room_type_id')
+        .eq('package_id', packageId);
+
+      const roomIds = (pkgRooms || []).map((r) => r.room_type_id).filter(Boolean);
+
+      if (roomIds.length) {
+        const { data: rooms } = await supabase
+          .from('room_types')
+          .select('id, code, name')
+          .in('id', roomIds);
+
+        if (rooms && rooms.length) {
+          roomsHtml =
+            '<ul class="plain-list" style="padding-left:18px;margin:4px 0;">' +
+            rooms
+              .map(
+                (r) =>
+                  `<li>${(r.code || '').toUpperCase()} – ${r.name || ''}</li>`
+              )
+              .join('') +
+            '</ul>';
+        }
+      }
+    } catch (e) {
+      console.warn('Error loading package rooms:', e);
+    }
+
+    // Extras
+    let extrasHtml = '<div class="muted">No extras linked.</div>';
+    try {
+      const { data: pkgExtras } = await supabase
+        .from('package_extras')
+        .select('extra_id, quantity, code')
+        .eq('package_id', packageId);
+
+      const extraIds = (pkgExtras || []).map((x) => x.extra_id).filter(Boolean);
+
+      if (extraIds.length) {
+        const { data: extras } = await supabase
+          .from('extras')
+          .select('id, name, price, currency')
+          .in('id', extraIds);
+
+        if (extras && extras.length) {
+          const extrasById = new Map(extras.map((e) => [e.id, e]));
+          extrasHtml =
+            '<ul class="plain-list" style="padding-left:18px;margin:4px 0;">' +
+            (pkgExtras || [])
+              .map((px) => {
+                const ex = extrasById.get(px.extra_id);
+                const qty = px.quantity ?? 1;
+                const code = px.code || ex?.code || '';
+                const name = ex?.name || code || 'Extra';
+                const priceText =
+                  ex && ex.price != null
+                    ? ` – ${formatCurrency(
+                        ex.price,
+                        ex.currency || pkg.currency || 'GHS'
+                      )}`
+                    : '';
+                return `<li>${qty} × ${name}${priceText}</li>`;
+              })
+              .join('') +
+            '</ul>';
+        }
+      }
+    } catch (e) {
+      console.warn('Error loading package extras:', e);
+    }
+
+    const isActive = pkg.is_active !== false;
+    const isFeatured = !!pkg.is_featured;
+
+    const validity =
+      pkg.valid_from || pkg.valid_until
+        ? `${pkg.valid_from || '—'} → ${pkg.valid_until || '—'}`
+        : 'N/A';
+
+    wrap.innerHTML = `
+      <div class="content" onclick="event.stopPropagation()">
+        <div class="hd">
+          <h3>Package: ${pkg.name || ''}</h3>
+          <button class="btn" onclick="document.getElementById('package-view-modal').remove()">×</button>
+        </div>
+        <div class="bd">
+          ${
+            pkg.image_url
+              ? `<img src="${pkg.image_url}" alt="${pkg.name || ''}" style="max-width:100%;border-radius:12px;margin-bottom:12px;">`
+              : ''
+          }
+          <p><strong>Code:</strong> ${(pkg.code || '').toUpperCase()}</p>
+          <p><strong>Description:</strong> ${pkg.description || 'N/A'}</p>
+          <p><strong>Price:</strong> ${formatCurrency(
+            pkg.package_price || 0,
+            pkg.currency || 'GHS'
+          )}</p>
+          <p><strong>Nights:</strong> ${pkg.nights || 'N/A'}</p>
+          <p><strong>Validity:</strong> ${validity}</p>
+          <p><strong>Status:</strong>
+            <span class="badge ${isActive ? 'ok' : 'err'}">
+              ${isActive ? 'Active' : 'Inactive'}
+            </span>
+            ${
+              isFeatured
+                ? '<span class="badge ok" style="margin-left:6px;">Featured</span>'
+                : ''
+            }
+          </p>
+
+          <hr style="margin:12px 0;opacity:0.2;">
+
+          <h4 style="margin-bottom:4px;">Rooms</h4>
+          ${roomsHtml}
+
+          <h4 style="margin:12px 0 4px;">Extras</h4>
+          ${extrasHtml}
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    console.error('Error in openPackageViewModal:', err);
+  }
+}
+
+// ---------- Toggle & delete ----------
 async function togglePackageStatus(id, newStatus) {
   try {
-    const { error } = await supabase.from("packages").update({ is_active: newStatus }).eq("id", id);
+    const { error } = await supabase
+      .from('packages')
+      .update({ is_active: newStatus })
+      .eq('id', id);
     if (error) throw error;
-    toast(newStatus ? "Package activated" : "Package deactivated");
+    toast(newStatus ? 'Package activated' : 'Package deactivated');
     initPackages();
   } catch (e) {
-    alert("Error updating: " + (e.message || e));
+    alert('Error updating: ' + (e.message || e));
   }
 }
 
 async function deletePackage(id) {
-  if (!confirm("Delete this package? This cannot be undone.")) return;
+  if (!confirm('Delete this package? This cannot be undone.')) return;
   try {
-    const { error } = await supabase.from("packages").delete().eq("id", id);
+    const { error } = await supabase.from('packages').delete().eq('id', id);
     if (error) throw error;
-    toast("Package deleted");
+    toast('Package deleted');
     initPackages();
   } catch (e) {
-    alert("Error deleting: " + (e.message || e));
+    alert('Error deleting: ' + (e.message || e));
   }
 }
 
