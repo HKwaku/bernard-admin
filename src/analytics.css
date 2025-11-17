@@ -444,3 +444,22 @@
     grid-template-columns: 1fr !important;
   }
 }
+
+/********************************************
+ * COMPARISON VIEW STYLES
+ ********************************************/
+
+.change-positive {
+  color: #22c55e;
+  font-weight: 600;
+}
+
+.change-negative {
+  color: #ef4444;
+  font-weight: 600;
+}
+
+.change-neutral {
+  color: #64748b;
+  font-weight: 500;
+}

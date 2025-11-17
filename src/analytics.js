@@ -1,8 +1,12 @@
 // src/analytics.js
 // Analytics Dashboard for Sojourn Cabins
 
+import { renderComparisonView } from './analytics-comparison.js';
 import { supabase } from './config/supabase.js';
 import { formatCurrency, toast } from './utils/helpers.js';
+
+// View mode state: 'standard' or 'comparison'
+let viewMode = 'standard';
 
 // Format currency with K/M suffix
 function formatCurrencyCompact(amount, currency = 'GHS') {
@@ -80,7 +84,7 @@ function setActiveChartButtons(chart, mode) {
 export function initAnalytics() {
   renderAnalytics();
   autoSetGranularityFromRange();
-  loadAllAnalytics();
+  renderStandardViewContent();
 }
 
 function renderAnalytics() {
@@ -90,9 +94,9 @@ function renderAnalytics() {
 view.innerHTML = `
   <div class="card-bd" style="padding: 16px; box-sizing: border-box;">
 
-    <!-- Date Range Selector -->
+    <!-- Date Range Selector + View Toggle -->
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; width: 100%; box-sizing: border-box;">
-      <div style="display: flex; gap: 12px; align-items: center;">
+      <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
         <select id="analytics-period" class="select">
           <option value="7">Last 7 days</option>
           <option value="30" selected>Last 30 days</option>
@@ -100,15 +104,25 @@ view.innerHTML = `
           <option value="365">Last 12 months</option>
           <option value="custom">Custom Range</option>
         </select>
-        <div id="custom-date-range" style="display: none; gap: 8px;">
+        <div id="custom-date-range" style="display: none; gap: 8px; flex-wrap: wrap;">
           <input type="date" id="analytics-start" class="input" style="width: auto;">
           <span>to</span>
           <input type="date" id="analytics-end" class="input" style="width: auto;">
           <button id="apply-date-range" class="btn btn-sm">Apply</button>
         </div>
       </div>
-      <button id="export-analytics" class="btn">Export Report</button>
+      <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+        <!-- View Toggle -->
+        <div class="chart-controls">
+          <button class="chart-btn active" id="view-standard" data-view="standard">Standard</button>
+          <button class="chart-btn" id="view-comparison" data-view="comparison">Comparison</button>
+        </div>
+        <button id="export-analytics" class="btn">Export Report</button>
+      </div>
     </div>
+
+    <!-- Content Container -->
+    <div id="analytics-content">
 
     <!-- ========================================================= -->
     <!-- UPCOMING & OPERATIONAL  (MOVED TO TOP)                     -->
@@ -266,11 +280,13 @@ view.innerHTML = `
         <div id="coupon-chart">Loading...</div>
       </div>
     </div>
+
+    </div><!-- End analytics-content -->
   </div>
 `;
 
   // Chart granularity buttons (Revenue + Occupancy)
-  document.querySelectorAll('.chart-btn').forEach((btn) => {
+  document.querySelectorAll('.chart-btn[data-chart]').forEach((btn) => {
     btn.addEventListener('click', handleChartGranularityClick);
   });
 
@@ -278,6 +294,195 @@ view.innerHTML = `
   document.getElementById('analytics-period')?.addEventListener('change', handlePeriodChange);
   document.getElementById('apply-date-range')?.addEventListener('click', applyCustomDateRange);
   document.getElementById('export-analytics')?.addEventListener('click', exportAnalytics);
+
+  // View toggle handlers
+  document.getElementById('view-standard')?.addEventListener('click', () => {
+    viewMode = 'standard';
+    document.querySelectorAll('[data-view]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.view === 'standard');
+    });
+    renderStandardViewContent();
+  });
+
+  document.getElementById('view-comparison')?.addEventListener('click', async () => {
+    viewMode = 'comparison';
+    document.querySelectorAll('[data-view]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.view === 'comparison');
+    });
+    await renderComparisonView(dateRange);
+  });
+}
+
+function renderStandardViewContent() {
+  const container = document.getElementById('analytics-content');
+  if (!container) return;
+  
+  // Render the standard view HTML
+  container.innerHTML = `
+    <!-- ========================================================= -->
+    <!-- UPCOMING & OPERATIONAL  (MOVED TO TOP)                     -->
+    <!-- ========================================================= -->
+    <div class="analytics-section">
+      <h2 class="analytics-section-title">Upcoming & Operational</h2>
+      <div class="two-column upcoming-grid">
+        <div class="chart-card">
+          <h3 class="chart-title">Next 7 Days Check-Ins</h3>
+          <div id="upcoming-checkins">Loading...</div>
+        </div>
+        <div class="chart-card">
+          <h3 class="chart-title">Current Status</h3>
+          <div id="current-status">Loading...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- OCCUPANCY OVERVIEW                                        -->
+    <!-- ========================================================= -->
+    <div class="analytics-section">
+      <h2 class="analytics-section-title">Occupancy Overview</h2>
+      <div class="metrics-grid" id="occupancy-metrics">
+        <div class="metric-card"><div class="metric-label">Loading...</div></div>
+      </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- OCCUPANCY TREND (LINE CHART) + SOURCES                    -->
+    <!-- ========================================================= -->
+    <div class="analytics-section">
+    <h2 class="analytics-section-title">Occupancy & Sources</h2>
+      <div class="chart-card" style="margin-bottom: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+          <h3 class="chart-title">Occupancy Trend</h3>
+          <div class="chart-controls">
+            <button class="chart-btn" data-chart="occupancy" data-period="day">D</button>
+            <button class="chart-btn" data-chart="occupancy" data-period="week">W</button>
+            <button class="chart-btn active" data-chart="occupancy" data-period="month">M</button>
+          </div>
+
+        </div>
+
+        <div
+          id="occupancy-trend-chart"
+          style="height: 280px; display: flex; align-items: center; justify-content: center; color: #64748b;"
+        >
+          Loading chart...
+        </div>
+
+        <div style="margin-top: 32px;">
+          <h4 class="chart-subtitle">Occupancy by Cabin</h4>
+          <div id="occupancy-chart">Loading...</div>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <h3 class="chart-title">Booking Sources</h3>
+        <div id="sources-chart">Loading...</div>
+      </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- REVENUE OVERVIEW                                          -->
+    <!-- ========================================================= -->
+    <div class="analytics-section">
+      <h2 class="analytics-section-title">Revenue Overview</h2>
+      <div class="metrics-grid" id="revenue-metrics">
+        <div class="metric-card"><div class="metric-label">Loading...</div></div>
+      </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- REVENUE TREND (LINE CHART)                                -->
+    <!-- ========================================================= -->
+    <div class="analytics-section">
+      <h2 class="analytics-section-title">Revenue Trend</h2>
+      <div class="chart-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+          <h3 class="chart-title">Revenue Trend</h3>
+          <div class="chart-controls">
+            <button class="chart-btn" data-chart="revenue" data-period="day">D</button>
+            <button class="chart-btn" data-chart="revenue" data-period="week">W</button>
+            <button class="chart-btn active" data-chart="revenue" data-period="month">M</button>
+          </div>
+
+        </div>
+        <div id="revenue-chart" style="height: 280px; display: flex; align-items: center; justify-content: center; color: #64748b;">
+          Loading chart...
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- EXTRAS PERFORMANCE                                        -->
+    <!-- ========================================================= -->
+    <div class="analytics-section">
+      <h2 class="analytics-section-title">Extras & Add-ons Performance</h2>
+      <div class="metrics-grid" id="extras-metrics">
+        <div class="metric-card"><div class="metric-label">Loading...</div></div>
+      </div>
+
+      <div class="two-column" style="margin-top: 20px;">
+        <div class="chart-card">
+          <h3 class="chart-title">Top Extras by Bookings</h3>
+          <div id="extras-chart">Loading...</div>
+        </div>
+        <div class="chart-card">
+          <h3 class="chart-title">Extras Revenue Breakdown</h3>
+          <div id="extras-revenue-chart">Loading...</div>
+        </div>
+      </div>
+
+      <div class="chart-card" style="margin-top: 20px;">
+        <h3 class="chart-title">Extras Pairing Analysis</h3>
+        <div id="pairing-analysis">Loading...</div>
+      </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- PACKAGE PERFORMANCE                                       -->
+    <!-- ========================================================= -->
+    <div class="analytics-section">
+      <h2 class="analytics-section-title">Package Performance</h2>
+      <div class="metrics-grid" id="package-metrics">
+        <div class="metric-card"><div class="metric-label">Loading...</div></div>
+      </div>
+
+      <div class="two-column" style="margin-top: 20px;">
+        <div class="chart-card">
+          <h3 class="chart-title">Package Bookings</h3>
+          <div id="package-chart">Loading...</div>
+        </div>
+        <div class="chart-card">
+          <h3 class="chart-title">Package Revenue Split</h3>
+          <div id="package-revenue-chart">Loading...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- COUPON ANALYTICS                                          -->
+    <!-- ========================================================= -->
+    <div class="analytics-section">
+      <h2 class="analytics-section-title">Coupon Analytics</h2>
+      <div class="metrics-grid" id="coupon-metrics">
+        <div class="metric-card"><div class="metric-label">Loading...</div></div>
+      </div>
+
+      <div class="chart-card" style="margin-top: 20px;">
+        <h3 class="chart-title">Top Coupons by Usage</h3>
+        <div id="coupon-chart">Loading...</div>
+      </div>
+    </div>
+  `;
+  
+  // Re-attach chart button listeners for the standard view
+  setTimeout(() => {
+    document.querySelectorAll('.chart-btn[data-chart]').forEach((btn) => {
+      btn.addEventListener('click', handleChartGranularityClick);
+    });
+  }, 100);
+  
+  loadAllAnalytics();
 }
 
 async function loadAllAnalytics() {
@@ -913,15 +1118,16 @@ async function loadExtrasMetrics() {
         <div class="metric-label">Avg Per Booking</div>
         <div class="metric-value">${avgPerBooking.toFixed(1)}</div>
       </div>
+            <div class="metric-card">
+        <div class="metric-label">Total Extras Sold</div>
+        <div class="metric-value">${reservationExtras.length}</div>
+      </div>
       <div class="metric-card">
         <div class="metric-label">Top Extra</div>
         <div class="metric-value" style="font-size: 16px;">${topExtra ? topExtra[0] : 'N/A'}</div>
         <div style="font-size: 13px; color: #64748b; margin-top: 4px;">${topExtra ? topExtra[1] + ' bookings' : ''}</div>
       </div>
-      <div class="metric-card">
-        <div class="metric-label">Total Extras Sold</div>
-        <div class="metric-value">${reservationExtras.length}</div>
-      </div>
+
     `;
 
     document.getElementById('extras-metrics').innerHTML = html;
@@ -1590,7 +1796,13 @@ function handlePeriodChange(e) {
     dateRange.start = new Date();
     dateRange.start.setDate(dateRange.start.getDate() - days);
     autoSetGranularityFromRange();
-    loadAllAnalytics();
+    
+    // Re-render based on current view mode
+    if (viewMode === 'comparison') {
+      renderComparisonView(dateRange);
+    } else {
+      loadAllAnalytics();
+    }
   }
 }
 
@@ -1602,7 +1814,13 @@ function applyCustomDateRange() {
     dateRange.start = new Date(start);
     dateRange.end = new Date(end);
     autoSetGranularityFromRange();
-    loadAllAnalytics();
+    
+    // Re-render based on current view mode
+    if (viewMode === 'comparison') {
+      renderComparisonView(dateRange);
+    } else {
+      loadAllAnalytics();
+    }
   } else {
     toast('Please select both start and end dates');
   }

@@ -431,29 +431,45 @@ loadStats();
 async function loadStats() {
   try {
     const today = new Date().toISOString().slice(0, 10);
-    const n = new Date();
-    const y = n.getFullYear();
-    const m = String(n.getMonth() + 1).padStart(2, '0');
+    const now = new Date();
+    const year = now.getFullYear();
+    const monthIndex = now.getMonth(); // 0–11
+
+    // First day of current month (YYYY-MM-DD)
+    const firstOfMonth = new Date(year, monthIndex, 1)
+      .toISOString()
+      .slice(0, 10);
+
+    // First day of next month (YYYY-MM-DD) – safe for any month length
+    const firstOfNextMonth = new Date(year, monthIndex + 1, 1)
+      .toISOString()
+      .slice(0, 10);
 
     const [
-      checkins,  // count only (no rows)
-      confirmed, // count only (no rows)
-      monthCnt,  // count only (no rows)
-      nightsSum  // minimal columns to sum
+      checkins,   // count only
+      confirmed,  // count only
+      monthCnt,   // count only
+      nightsSum   // rows (for sum)
     ] = await Promise.all([
+      // Today's check-ins
       supabase.from('reservations')
         .select('id', { count: 'exact', head: true })
-        .gte('check_in', today).lte('check_in', today),
+        .gte('check_in', today)
+        .lte('check_in', today),
 
+      // Active bookings (confirmed)
       supabase.from('reservations')
         .select('id', { count: 'exact', head: true })
         .eq('status', 'confirmed'),
 
+      // This month: check-in date in current month AND not cancelled / no-show
       supabase.from('reservations')
         .select('id', { count: 'exact', head: true })
-        .gte('check_in', `${y}-${m}-01`)
-        .lte('check_in', `${y}-${m}-31`),
+        .gte('check_in', firstOfMonth)
+        .lt('check_in', firstOfNextMonth)
+        .not('status', 'in', '("cancelled","no_show")'),
 
+      // Total nights booked
       supabase.from('reservations')
         .select('nights')
     ]);
@@ -461,34 +477,96 @@ async function loadStats() {
     $('#stat-checkins').textContent = checkins?.count ?? 0;
     $('#stat-total').textContent    = confirmed?.count ?? 0;
     $('#stat-month').textContent    = monthCnt?.count ?? 0;
-    $('#stat-nights').textContent   = (nightsSum?.data || []).reduce((t, r) => t + (r.nights || 0), 0);
+    $('#stat-nights').textContent   = (nightsSum?.data || [])
+      .reduce((t, r) => t + (r.nights || 0), 0);
   } catch (e) {
     console.warn('stats error', e);
   }
 }
 
-  // ---------- Recent Bookings ----------
+    // ---------- Recent Bookings ----------
   loadRecent();
   async function loadRecent() {
     try {
       const { data } = await supabase
         .from('reservations')
-        .select('guest_first_name,guest_last_name,confirmation_code,status,created_at,room_name,check_in')
+        .select(
+          'guest_first_name,guest_last_name,confirmation_code,status,payment_status,created_at,room_name,check_in'
+        )
         .order('created_at', { ascending: false })
         .limit(7);
 
+      const rows = data || [];
+
+      function renderStatusBadge(status) {
+        if (!status) return '';
+        const s = String(status).toLowerCase();
+
+        switch (s) {
+          case 'pending':
+            return '<span class="badge pending">Pending</span>';
+          case 'confirmed':
+            return '<span class="badge ok">Confirmed</span>';
+          case 'checked-in':
+            return '<span class="badge checked-in">Checked in</span>';
+          case 'checked-out':
+            return '<span class="badge checked-out">Checked out</span>';
+          case 'cancelled':
+            return '<span class="badge err">Cancelled</span>';
+          case 'no_show':
+          case 'no-show':
+            return '<span class="badge err">No-show</span>';
+          default:
+            return `<span class="badge">${status}</span>`;
+        }
+      }
+
+      function renderPaymentBadge(paymentStatus) {
+        if (!paymentStatus) return '';
+        const p = String(paymentStatus).toLowerCase();
+
+        switch (p) {
+          case 'unpaid':
+            return '<span class="badge err">Unpaid</span>';
+          case 'partial':
+          case 'partially_paid':
+            return '<span class="badge partial">Partially paid</span>';
+          case 'paid':
+            return '<span class="badge ok">Paid</span>';
+          case 'refunded':
+            return '<span class="badge refunded">Refunded</span>';
+          default:
+            return `<span class="badge">${paymentStatus}</span>`;
+        }
+      }
+
       $('#recent-bookings').innerHTML =
-        (data || [])
-          .map(
-            (r) => `
-        <div class="recent-item">
-          <div>
-            <div style="font-weight:700">${r.guest_first_name} ${r.guest_last_name}</div>
-            <div style="color:#6b7280">${r.room_name || ''} • ${r.check_in || ''}</div>
-          </div>
-          <span class="code">${r.confirmation_code}</span>
-        </div>`
-          )
+        rows
+          .map((r) => {
+            const fullName = [r.guest_first_name, r.guest_last_name]
+              .filter(Boolean)
+              .join(' ') || 'Unknown guest';
+
+            const when = r.check_in || '';
+            const room = r.room_name || '';
+
+            const statusBadge = renderStatusBadge(r.status);
+            const paymentBadge = renderPaymentBadge(r.payment_status);
+
+            return `
+              <div class="recent-item">
+                <div>
+                  <div style="font-weight:700">${fullName}</div>
+                  <div style="color:#6b7280">${room} • ${when}</div>
+                  <div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:6px">
+                    ${statusBadge}
+                    ${paymentBadge}
+                  </div>
+                </div>
+                <span class="code">${r.confirmation_code || ''}</span>
+              </div>
+            `;
+          })
           .join('') || 'No data';
     } catch (e) {
       $('#recent-bookings').textContent = 'Error loading';
