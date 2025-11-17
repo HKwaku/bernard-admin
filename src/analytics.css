@@ -443,3 +443,81 @@
     grid-template-columns: 1fr !important;
   }
 }
+/* ===== COMPLETE MOBILE VIEWPORT FIX ===== */
+@media (max-width: 768px) {
+  /* Lock down the viewport */
+  html, body {
+    overflow-x: hidden;
+    width: 100%;
+    max-width: 100vw;
+  }
+  
+  /* Constrain all main containers */
+  body > div,
+  #app,
+  #app-body,
+  .main-content {
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+    box-sizing: border-box;
+  }
+  
+  /* Override inline padding from JS (line 68) */
+  #view-analytics .card-bd {
+    padding: 12px !important;
+    box-sizing: border-box;
+    width: 100%;
+  }
+  
+  /* Ensure analytics view fits */
+  #view-analytics {
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+    box-sizing: border-box;
+  }
+  
+  /* Stack the date selector row */
+  #view-analytics .card-bd > div:first-child {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+    width: 100%;
+  }
+  
+  /* Full width controls */
+  #analytics-period,
+  #export-analytics {
+    width: 100%;
+    box-sizing: border-box;
+  }
+  
+  /* Constrain all sections and cards */
+  .analytics-section,
+  .chart-card,
+  .metric-card {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  
+  /* Stack two-column layouts */
+  .two-column,
+  .upcoming-grid {
+    grid-template-columns: 1fr !important;
+    width: 100%;
+  }
+  
+  /* Fix check-ins table overflow */
+  #upcoming-checkins > div {
+    width: 100%;
+    overflow-x: auto;
+  }
+  
+  /* Ensure status grid doesn't overflow */
+  #current-status > div {
+    width: 100%;
+    box-sizing: border-box;
+  }
+}
