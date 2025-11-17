@@ -413,6 +413,20 @@
     box-sizing: border-box;
   }
   
+  /* Reduce padding on Current Status boxes on mobile */
+  #current-status > div > div {
+    padding: 12px !important;
+  }
+  
+  /* Reduce font sizes in Current Status on mobile */
+  #current-status [style*="font-size: 36px"] {
+    font-size: 28px !important;
+  }
+  
+  #current-status [style*="font-size: 12px"] {
+    font-size: 10px !important;
+  }
+  
   /* Force Coupon Analytics metrics into 2 columns */
   #coupon-metrics,
   .coupon-impact-grid {
