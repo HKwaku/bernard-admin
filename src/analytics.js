@@ -662,7 +662,10 @@ async function loadRevenueChart() {
       }));
     }
 
-    renderLineChart('revenue-chart', points, { min: 0 });
+    renderLineChart('revenue-chart', points, { 
+      min: 0,
+      formatValue: (v, label) => `${label}: ${formatCurrencyCompact(v, 'GHS')}`
+    });
   } catch (error) {
     console.error('Error loading revenue chart:', error);
     const el = document.getElementById('revenue-chart');
@@ -985,14 +988,14 @@ async function loadExtrasCharts() {
           </div>
           <div style="display: flex; align-items: center; gap: 12px;">
             <span style="font-size: 14px; font-weight: 600; color: #64748b;">${percentage.toFixed(0)}%</span>
-            <span style="font-size: 14px; font-weight: 600; color: #0f172a;">${`GHS ${(revenue).toFixed(2)}`}</span>
+            <span style="font-size: 14px; font-weight: 600; color: #0f172a;">${formatCurrencyCompact(revenue, 'GHS')}</span>
           </div>
         </div>
       `;
     });
     revenueHtml += `</div>
       <div style="text-align: center; padding-top: 12px; border-top: 1px solid #e2e8f0; font-size: 14px; color: #64748b;">
-        Total: <strong style="color: #0f172a;">${`GHS ${(totalRevenue).toFixed(2)}`}</strong>
+        Total: <strong style="color: #0f172a;">${formatCurrencyCompact(totalRevenue, 'GHS')}</strong>
       </div>`;
 
     document.getElementById('extras-chart').innerHTML = bookingsHtml;
