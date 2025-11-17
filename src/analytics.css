@@ -311,15 +311,32 @@
   font-weight: 400 !important;
 }
 /* ---------- Analytics: mobile friendliness ---------- */
+#view-analytics {
+  width: 100%;
+}
+
 #view-analytics .card-bd {
   padding: 16px;
-  overflow-x: auto;        /* allow horizontal scroll if charts get wide */
+  overflow-x: hidden;      /* don't let the inner content cause sideways scroll */
 }
 
 #view-analytics canvas,
 #view-analytics .chart-container {
   max-width: 100%;
   height: auto;
+}
+
+@media (max-width: 768px) {
+  /* Stack any 2-column analytics layout on mobile */
+  .two-column {
+    grid-template-columns: 1fr;
+  }
+
+  /* Make the occupancy split stack as well, for safety */
+  .occupancy-split {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
 }
 
 /* Stack form grids inside modals on small screens */
