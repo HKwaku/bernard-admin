@@ -65,10 +65,10 @@ function renderAnalytics() {
   if (!view) return;
 
 view.innerHTML = `
-  <div class="card-bd" style="padding: 24px;">
+  <div class="card-bd" style="padding: 16px; box-sizing: border-box;">
 
     <!-- Date Range Selector -->
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; width: 100%; box-sizing: border-box;">
       <div style="display: flex; gap: 12px; align-items: center;">
         <select id="analytics-period" class="select">
           <option value="7">Last 7 days</option>

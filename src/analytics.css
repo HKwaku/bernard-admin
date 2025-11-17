@@ -5,7 +5,7 @@
 .analytics-section {
   margin: 40px 0;
   padding-bottom: 32px;
-  border-bottom: 2px solid #e2e8f0; /* clear separation between sections */
+  border-bottom: 2px solid #e2e8f0;
 }
 
 .analytics-section:last-child {
@@ -13,7 +13,7 @@
 }
 
 .analytics-section-title {
-  font-size: 17px; /* 3px smaller than before */
+  font-size: 17px;
   font-weight: 600;
   color: #0f172a;
   margin-bottom: 20px;
@@ -39,6 +39,7 @@
   box-shadow:
     0 2px 6px rgba(15, 23, 42, 0.04),
     0 4px 12px -2px rgba(15, 23, 42, 0.05);
+  font-family: inherit;
 }
 
 .metric-label {
@@ -46,15 +47,31 @@
   font-weight: 500;
   color: #64748b;
   margin-bottom: 6px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  text-transform: none;
+  letter-spacing: 0.2px;
 }
 
 .metric-value {
-  font-size: 20px; /* cleaner with smaller title */
+  font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.02em;
   color: #0f172a;
+  line-height: 1.1;
+}
+
+.metric-subtext {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-top: 4px;
+  font-weight: 400;
+}
+
+.metric-card .metric-subtext,
+.metric-card div[style*="font-size: 13px"] {
+  font-size: 13px !important;
+  color: #94a3b8 !important;
+  margin-top: 4px;
+  font-weight: 400 !important;
 }
 
 /********************************************
@@ -82,12 +99,6 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 22px;
-}
-
-@media (max-width: 900px) {
-  .two-column {
-    grid-template-columns: 1fr;
-  }
 }
 
 /********************************************
@@ -152,6 +163,7 @@
   border-radius: 4px;
   animation: shimmer 1.5s infinite linear;
 }
+
 /********************************************
  * LINE CHART WRAPPER + TOOLTIP
  ********************************************/
@@ -179,8 +191,8 @@
 
 .chart-line-path {
   fill: none;
-  stroke: #3B82F6;      /* soft blue */
-  stroke-width: 1;      /* thinner line */
+  stroke: #3B82F6;
+  stroke-width: 1;
   stroke-linejoin: round;
   stroke-linecap: round;
 }
@@ -237,87 +249,20 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
-/* Make occupancy trend card wider than booking sources */
+
 .occupancy-split {
   display: grid;
-  grid-template-columns: 3fr 1fr; /* 75% vs 25% */
+  grid-template-columns: 3fr 1fr;
   gap: 24px;
 }
-/* Mobile: prevent charts from extending beyond the page */
-@media (max-width: 768px) {
-  .chart-line-labels {
-    flex-wrap: wrap;          /* allow labels to wrap instead of forcing one long row */
-    row-gap: 2px;
-  }
 
-  .chart-x-label {
-    white-space: normal;      /* let "Nov 12" break across lines if needed */
-    font-size: 9px;           /* smaller text so more labels fit */
-  }
-}
-
-@media (max-width: 900px) {
-  .coupon-impact-grid {
-    grid-template-columns: 1fr; /* stack on mobile */
-  }
-}
-/* Force Coupon Analytics metrics into 2 columns on mobile */
-@media (max-width: 768px) {
-  #coupon-metrics,
-  .coupon-impact-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
-  }
-}
-/* -----------------------------------------------------------
-   GLOBAL ANALYTICS TILE TYPOGRAPHY — MATCH "Avg Booking Without Coupon"
-------------------------------------------------------------*/
-
-/* All metric tiles */
-.metric-card {
-  font-family: inherit;
-}
-
-/* Tile label (top small label) */
-.metric-card .metric-label {
-  font-size: 12px;
-  font-weight: 500;
-  color: #64748b;
-  margin-bottom: 6px;
-  text-transform: none;
-  letter-spacing: 0.2px;
-}
-
-/* Main value (big number) */
-.metric-card .metric-value {
-  font-size: 22px;
-  font-weight: 700;
-  color: #0f172a;
-  line-height: 1.1;
-}
-
-.metric-subtext {
-  font-size: 12px;
-  color: #94a3b8;
-  margin-top: 4px;
-  font-weight: 400;
-}
-
-/* Subtext under values (e.g., “Based on 8 bookings”, “currently active”) */
-.metric-card .metric-subtext,
-.metric-card div[style*="font-size: 13px"] {
-  font-size: 13px !important;
-  color: #94a3b8 !important;
-  margin-top: 4px;
-  font-weight: 400 !important;
-}
-/* ---------- Analytics: mobile friendliness ---------- */
 #view-analytics {
   width: 100%;
 }
 
 #view-analytics .card-bd {
   padding: 16px;
-  overflow-x: hidden;      /* don't let the inner content cause sideways scroll */
+  overflow-x: hidden;
 }
 
 #view-analytics canvas,
@@ -326,126 +271,22 @@
   height: auto;
 }
 
-@media (max-width: 768px) {
-  /* Stack any 2-column analytics layout on mobile */
+/********************************************
+ * MOBILE RESPONSIVE STYLES
+ ********************************************/
+
+@media (max-width: 900px) {
   .two-column {
     grid-template-columns: 1fr;
   }
-
-  /* Make the occupancy split stack as well, for safety */
-  .occupancy-split {
+  
+  .coupon-impact-grid {
     grid-template-columns: 1fr;
-    gap: 16px;
   }
 }
 
-/* Stack form grids inside modals on small screens */
-@media (max-width: 640px) {
-  .modal .form-grid {
-    grid-template-columns: 1fr !important;
-  }
-}
-/* ===== Analytics: hard mobile layout overrides ===== */
 @media (max-width: 768px) {
-  /* Make sure the analytics card itself never overflows */
-  #view-analytics {
-    width: 100%;
-    overflow-x: hidden;
-  }
-
-  #view-analytics .card-bd {
-    padding: 12px;
-  }
-
-  /* Stack metric tiles on one column so they don't squeeze off-screen */
-  .metrics-grid {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-
-  /* Charts: keep them comfortably inside the viewport */
-  .chart-card {
-    padding: 16px;
-  }
-
-  .chart-line-container {
-    height: auto;
-    min-height: 200px;
-  }
-
-  /* Occupancy split: 3fr/1fr is too tight on mobile – stack it */
-  .occupancy-split {
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-}
-@media (max-width: 768px) {
-  /* Reduce padding on metric cards to prevent overflow */
-  .metric-card {
-    padding: 16px 12px;
-  }
-  
-  /* Slightly smaller text on mobile */
-  .metric-value {
-    font-size: 18px;
-  }
-  
-  /* Ensure metric grid doesn't create overflow */
-  .metrics-grid {
-    grid-template-columns: 1fr;
-    gap: 12px;
-    width: 100%;
-  }
-  
-  /* Add this to ensure the analytics section itself doesn't overflow */
-  .analytics-section {
-    width: 100%;
-    overflow-x: hidden;
-    margin: 24px 0;
-  }
-}
-/* ===== MOBILE FIX: Remove inline padding and use responsive padding ===== */
-@media (max-width: 768px) {
-  /* Override the inline style padding from JavaScript */
-  #view-analytics .card-bd {
-    padding: 12px !important;
-  }
-  
-  /* Ensure the entire analytics view fits */
-  #view-analytics {
-    width: 100%;
-    max-width: 100vw;
-    overflow-x: hidden;
-  }
-  
-  /* Make the header row with dropdown and export button stack properly */
-  #view-analytics .card-bd > div:first-child {
-    flex-direction: column !important;
-    align-items: stretch !important;
-    gap: 12px !important;
-  }
-  
-  /* Make buttons full width on mobile */
-  #analytics-period,
-  #export-analytics {
-    width: 100%;
-  }
-  
-  /* Ensure sections don't overflow */
-  .analytics-section {
-    width: 100%;
-    margin: 24px 0;
-  }
-  
-  /* Stack two-column layouts */
-  .two-column,
-  .upcoming-grid {
-    grid-template-columns: 1fr !important;
-  }
-}
-/* ===== COMPLETE MOBILE VIEWPORT FIX ===== */
-@media (max-width: 768px) {
-  /* Lock down the viewport */
+  /* Lock down viewport */
   html, body {
     overflow-x: hidden;
     width: 100%;
@@ -463,9 +304,9 @@
     box-sizing: border-box;
   }
   
-  /* Override inline padding from JS (line 68) */
+  /* Override inline padding from JS */
   #view-analytics .card-bd {
-    padding: 12px !important;
+    padding: 8px !important;
     box-sizing: border-box;
     width: 100%;
   }
@@ -482,24 +323,51 @@
   #view-analytics .card-bd > div:first-child {
     flex-direction: column !important;
     align-items: stretch !important;
-    gap: 12px !important;
+    gap: 8px !important;
     width: 100%;
+    margin-bottom: 16px !important;
   }
   
   /* Full width controls */
   #analytics-period,
   #export-analytics {
-    width: 100%;
+    width: 100% !important;
     box-sizing: border-box;
   }
   
-  /* Constrain all sections and cards */
-  .analytics-section,
+  /* Constrain all sections */
+  .analytics-section {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    margin: 20px 0;
+    box-sizing: border-box;
+  }
+  
+  /* Section titles */
+  .analytics-section-title {
+    font-size: 15px;
+  }
+  
+  /* Constrain all cards */
   .chart-card,
   .metric-card {
     width: 100%;
     max-width: 100%;
     box-sizing: border-box;
+    padding: 12px;
+  }
+  
+  /* Stack metric tiles on one column */
+  .metrics-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px;
+    width: 100%;
+  }
+  
+  /* Slightly smaller metric text on mobile */
+  .metric-value {
+    font-size: 18px;
   }
   
   /* Stack two-column layouts */
@@ -507,6 +375,30 @@
   .upcoming-grid {
     grid-template-columns: 1fr !important;
     width: 100%;
+    gap: 12px;
+  }
+  
+  /* Stack occupancy split */
+  .occupancy-split {
+    grid-template-columns: 1fr !important;
+    gap: 12px;
+  }
+  
+  /* Chart containers */
+  .chart-line-container {
+    height: auto;
+    min-height: 200px;
+  }
+  
+  /* Chart labels */
+  .chart-line-labels {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+
+  .chart-x-label {
+    white-space: normal;
+    font-size: 9px;
   }
   
   /* Fix check-ins table overflow */
@@ -519,5 +411,18 @@
   #current-status > div {
     width: 100%;
     box-sizing: border-box;
+  }
+  
+  /* Force Coupon Analytics metrics into 2 columns */
+  #coupon-metrics,
+  .coupon-impact-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+@media (max-width: 640px) {
+  /* Stack form grids inside modals */
+  .modal .form-grid {
+    grid-template-columns: 1fr !important;
   }
 }
