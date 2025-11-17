@@ -51,7 +51,7 @@
 }
 
 .metric-value {
-  font-size: 20x; /* cleaner with smaller title */
+  font-size: 20px; /* cleaner with smaller title */
   font-weight: 700;
   letter-spacing: -0.02em;
   color: #0f172a;
@@ -379,4 +379,28 @@
     gap: 16px;
   }
 }
-
+@media (max-width: 768px) {
+  /* Reduce padding on metric cards to prevent overflow */
+  .metric-card {
+    padding: 16px 12px;
+  }
+  
+  /* Slightly smaller text on mobile */
+  .metric-value {
+    font-size: 18px;
+  }
+  
+  /* Ensure metric grid doesn't create overflow */
+  .metrics-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    width: 100%;
+  }
+  
+  /* Add this to ensure the analytics section itself doesn't overflow */
+  .analytics-section {
+    width: 100%;
+    overflow-x: hidden;
+    margin: 24px 0;
+  }
+}
