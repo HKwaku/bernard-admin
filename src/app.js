@@ -1250,8 +1250,20 @@ async function validateCoupon(code) {
 }
 
   // Event listeners
-  inEl.addEventListener('change', calculateNights);
-  outEl.addEventListener('change', calculateNights);
+   inEl.addEventListener('change', () => {
+    // Auto-set checkout to check-in + 1 day
+    if (inEl.value) {
+      outEl.value = addDaysISO(inEl.value, 1);
+    }
+    calculateNights();
+    computeRoomSubtotal();
+  });
+
+  outEl.addEventListener('change', () => {
+    calculateNights();
+    computeRoomSubtotal();
+  });
+
   roomSubtotalEl.addEventListener('input', updatePriceBreakdown);
     // Recalculate subtotal whenever the room or dates change
   roomSel.addEventListener('change', computeRoomSubtotal);

@@ -1024,14 +1024,25 @@ async function openEditModal(id) {
     }
 
     // Events: dates & room
+    function syncCheckoutPlusOne() {
+      if (!inEl.value) return;
+      const ci = new Date(inEl.value);
+      if (Number.isNaN(ci.getTime())) return;
+      ci.setDate(ci.getDate() + 1);
+      outEl.value = ci.toISOString().slice(0, 10);
+    }
+
     inEl.addEventListener('change', () => {
+      syncCheckoutPlusOne();
       calculateNights();
       computeRoomSubtotal();
     });
+
     outEl.addEventListener('change', () => {
       calculateNights();
       computeRoomSubtotal();
     });
+
     roomSel.addEventListener('change', computeRoomSubtotal);
 
     // Extras checkboxes
