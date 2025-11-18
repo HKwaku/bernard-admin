@@ -2,6 +2,7 @@
 // Analytics Dashboard for Sojourn Cabins
 
 import { renderComparisonView } from './analytics-comparison.js';
+import { initClientAnalytics, updateClientAnalyticsDateRange } from './client-analytics.js';
 import { supabase } from './config/supabase.js';
 import { formatCurrency, toast } from './utils/helpers.js';
 
@@ -116,6 +117,7 @@ view.innerHTML = `
         <div class="chart-controls">
           <button class="chart-btn active" id="view-standard" data-view="standard">Standard</button>
           <button class="chart-btn" id="view-comparison" data-view="comparison">Comparison</button>
+          <button class="chart-btn" id="view-client" data-view="client">Client Analytics</button>
         </div>
         <button id="export-analytics" class="btn">Export Report</button>
       </div>
@@ -311,6 +313,23 @@ view.innerHTML = `
     });
     await renderComparisonView(dateRange);
   });
+
+  document.getElementById('view-client')?.addEventListener('click', () => {
+    viewMode = 'client';
+    document.querySelectorAll('[data-view]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.view === 'client');
+    });
+    renderClientAnalyticsView();
+  });
+}
+
+function renderClientAnalyticsView() {
+  const container = document.getElementById('analytics-content');
+  if (!container) return;
+  
+  container.innerHTML = '<div id="view-client-analytics"></div>';
+  updateClientAnalyticsDateRange(dateRange.start, dateRange.end);
+  initClientAnalytics();
 }
 
 function renderStandardViewContent() {
@@ -1800,6 +1819,8 @@ function handlePeriodChange(e) {
     // Re-render based on current view mode
     if (viewMode === 'comparison') {
       renderComparisonView(dateRange);
+    } else if (viewMode === 'client') {
+      updateClientAnalyticsDateRange(dateRange.start, dateRange.end);
     } else {
       loadAllAnalytics();
     }
@@ -1818,6 +1839,8 @@ function applyCustomDateRange() {
     // Re-render based on current view mode
     if (viewMode === 'comparison') {
       renderComparisonView(dateRange);
+    } else if (viewMode === 'client') {
+      updateClientAnalyticsDateRange(dateRange.start, dateRange.end);
     } else {
       loadAllAnalytics();
     }

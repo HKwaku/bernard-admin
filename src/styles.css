@@ -2612,3 +2612,93 @@ label {
     "Noto Color Emoji",
     sans-serif !important;
 }
+
+/* ===== Mobile Modal Overflow Fixes ===== */
+@media (max-width: 767px) {
+  /* Fix modal content overflow */
+  .modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .modal .content,
+  #custom-booking-modal .content,
+  #package-booking-modal .content,
+  #reservation-modal .content {
+    max-height: 95vh;
+    max-height: 95dvh;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    border-radius: 20px 20px 0 0;
+  }
+
+  /* Header stays fixed */
+  .modal .hd,
+  #custom-booking-modal .hd,
+  #package-booking-modal .hd,
+  #reservation-modal .hd {
+    flex-shrink: 0;
+    padding: 1.25rem 1.5rem;
+  }
+
+  /* Body scrolls */
+  .modal .bd,
+  #custom-booking-modal .bd,
+  #package-booking-modal .bd,
+  #reservation-modal .bd {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    padding: 1.5rem;
+    padding-bottom: 2rem;
+  }
+
+  /* Footer stays fixed at bottom */
+  .modal .ft,
+  #custom-booking-modal .ft,
+  #package-booking-modal .ft,
+  #reservation-modal .ft {
+    flex-shrink: 0;
+    padding: 1.25rem 1.5rem;
+    position: sticky;
+    bottom: 0;
+    background: white;
+    border-top: 1px solid var(--ring);
+  }
+
+  /* Prevent inputs from zooming on iOS */
+  input[type="text"],
+  input[type="email"],
+  input[type="tel"],
+  input[type="number"],
+  input[type="date"],
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  /* Ensure touch targets are large enough */
+  .btn,
+  button {
+    min-height: 44px;
+  }
+
+  /* Prevent body scroll when modal open */
+  body.modal-open {
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
+    height: 100%;
+  }
+}
