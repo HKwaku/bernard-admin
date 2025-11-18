@@ -908,6 +908,21 @@ label {
     display: none !important;
   }
 
+  /* Make booking buttons full width on mobile */
+  .booking-buttons {
+    order: 3;
+    width: 100%;
+  }
+
+  .booking-buttons .btn {
+    width: 100%;
+    justify-content: center;
+    white-space: normal;
+    text-align: center;
+    padding: 10px 12px;
+    font-size: 0.813rem;
+  }
+
   .mobile-menu-btn {
     display: inline-flex;
     order: 2;

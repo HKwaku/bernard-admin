@@ -4,6 +4,22 @@
 import { supabase } from './config/supabase.js';
 import { $, formatCurrency, toast } from './utils/helpers.js';
 
+// ---- Shared helper: upload package image to Supabase Storage ----
+async function uploadPackageImage(file, code) {
+  const bucket = 'cabin-images'; // your existing bucket
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+  const path = `packages/${String(code || 'PACKAGE').toUpperCase()}/${Date.now()}.${ext}`;
+
+  const { error: upErr } = await supabase.storage
+    .from(bucket)
+    .upload(path, file, { upsert: true, cacheControl: '3600' });
+
+  if (upErr) throw upErr;
+
+  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+  return data.publicUrl; // final public URL
+}
+
 // ---------- Packages ----------
 async function initPackages() {
   // Add event listener for Add Package button
@@ -317,7 +333,16 @@ function openPackageModal(mode = 'add', id = null) {
 
           <div class="form-group">
             <label>Image URL</label>
-            <input id="pkg-image" type="text" value="${p.image_url || ''}">
+            <div style="display:flex; gap:8px; align-items:center">
+              <input id="pkg-image" type="url" placeholder="https://..." style="flex:1" value="${p.image_url || ''}">
+              <input id="pkg-image-file" type="file" accept="image/*" />
+            </div>
+            <div id="pkg-image-preview" style="margin-top:8px; display:none">
+              <img id="pkg-image-preview-img" src="" alt="preview" style="max-width:100%; border-radius:10px"/>
+            </div>
+            <div id="pkg-image-help" class="muted" style="margin-top:6px">
+              Choose an image to upload; the URL will be filled automatically.
+            </div>
           </div>
 
           <div class="form-grid">
@@ -348,6 +373,48 @@ function openPackageModal(mode = 'add', id = null) {
         </div>
       </div>
     `;
+
+    // ---- image upload wiring (packages) ----
+    const fileInput        = wrap.querySelector('#pkg-image-file');
+    const imageUrlInput    = wrap.querySelector('#pkg-image');
+    const imagePreview     = wrap.querySelector('#pkg-image-preview');
+    const imagePreviewImg  = wrap.querySelector('#pkg-image-preview-img');
+
+    // Show preview if an image is already set
+    if (p.image_url) {
+      imagePreviewImg.src = p.image_url;
+      imagePreview.style.display = 'block';
+    }
+
+    fileInput?.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const code = (wrap.querySelector('#pkg-code')?.value || 'PACKAGE').toString().toUpperCase();
+      try {
+        const publicUrl = await uploadPackageImage(file, code);
+        imageUrlInput.value = publicUrl;
+        if (imagePreviewImg) {
+          imagePreviewImg.src = publicUrl;
+          imagePreview.style.display = 'block';
+        }
+
+        // If editing an existing package, persist immediately
+        if (mode === 'edit' && id) {
+          const { error } = await supabase.from('packages')
+            .update({ image_url: publicUrl })
+            .eq('id', id);
+          if (error) throw error;
+          toast('Image uploaded and package updated');
+          await initPackages();
+        } else {
+          // In create mode, the URL will be saved when the user clicks "Create Package"
+          toast('Image uploaded — URL filled. Save the package to persist.');
+        }
+      } catch (err) {
+        alert('Upload failed: ' + (err.message || err));
+      }
+    });
 
     // Wire save button
     document.getElementById('pkg-save-btn').addEventListener('click', async () => {
