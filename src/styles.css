@@ -2615,10 +2615,20 @@ label {
 
 /* ===== Mobile Modal Overflow Fixes ===== */
 @media (max-width: 767px) {
-  /* Modal overlay - allow scrolling */
-  .modal-overlay {
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+  /* Modal wrapper */
+  .modal.show,
+  #custom-booking-modal.modal,
+  #package-booking-modal.modal,
+  #reservation-modal.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    z-index: 1000;
   }
 
   /* Modal content - proper flex layout */
@@ -2626,11 +2636,15 @@ label {
   #custom-booking-modal .content,
   #package-booking-modal .content,
   #reservation-modal .content {
-    max-height: 90vh;
-    max-height: 90dvh;
+    width: 100%;
+    max-width: 100%;
+    max-height: 92vh;
+    max-height: 92dvh;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    border-radius: 20px 20px 0 0;
+    margin: 0;
   }
 
   /* Header - no changes needed, stays at top */
@@ -2639,6 +2653,7 @@ label {
   #package-booking-modal .hd,
   #reservation-modal .hd {
     flex-shrink: 0;
+    padding: 1.25rem var(--space-xl);
   }
 
   /* Body - this is what scrolls */
@@ -2651,6 +2666,7 @@ label {
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     min-height: 0; /* Critical for flex scrolling */
+    padding: var(--space-xl);
   }
 
   /* Footer - stays at bottom */
@@ -2659,6 +2675,7 @@ label {
   #package-booking-modal .ft,
   #reservation-modal .ft {
     flex-shrink: 0;
+    padding: var(--space-lg) var(--space-xl);
   }
 
   /* Prevent iOS zoom on input focus */
@@ -2669,7 +2686,7 @@ label {
   input[type="date"],
   select,
   textarea {
-    font-size: 16px;
+    font-size: 16px !important;
   }
 
   /* Touch-friendly button sizing */
