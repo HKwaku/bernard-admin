@@ -2869,3 +2869,23 @@ label {
     display: block;
   }
 }
+
+/* Custom booking cabins list alignment */
+#reservation-modal #nb-rooms-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Override the generic form-group label rule */
+#reservation-modal label.nb-room-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  width: 100%;
+}
+
+#reservation-modal label.nb-room-row input[type="checkbox"] {
+  margin: 0;
+}

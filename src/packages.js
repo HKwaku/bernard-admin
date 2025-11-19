@@ -196,19 +196,22 @@ function openPackageModal(mode = 'add', id = null) {
       }
     }
 
-    // existing package_extras
-    let selectedExtraIds = [];
+        // existing package_extras
+    const selectedExtraQuantities = {};
     if (mode === 'edit' && id) {
       try {
         const { data: pkgExtras } = await supabase
           .from('package_extras')
-          .select('extra_id')
+          .select('extra_id, quantity')
           .eq('package_id', id);
-        selectedExtraIds = (pkgExtras || []).map((x) => x.extra_id);
+        (pkgExtras || []).forEach((x) => {
+          selectedExtraQuantities[x.extra_id] = x.quantity ?? 1;
+        });
       } catch (e) {
         console.warn('package_extras lookup failed (table may not exist yet):', e);
       }
     }
+
 
     // extras list
     const { data: extras } = await supabase
@@ -236,25 +239,29 @@ function openPackageModal(mode = 'add', id = null) {
       })
       .join('');
 
-    const extrasHtml = (extras || [])
-      .map(
-        (e) => `
-        <label style="display:flex;align-items:center;gap:8px;margin:4px 0;cursor:pointer">
-          <input
-            type="checkbox"
-            class="pkg-extra"
-            value="${e.id}"
-            data-code="${e.code || ''}"
-            data-name="${e.name || ''}"
-            data-price="${e.price || 0}"
-            data-category="${e.category || ''}"
-            ${selectedExtraIds.includes(e.id) ? 'checked' : ''}
-            style="width:auto"
-          />
-          <span>${e.name} - GHS ${e.price ?? 0}</span>
-        </label>`
-      )
+        const extrasHtml = (extras || [])
+      .map((e) => {
+        const qty =
+          selectedExtraQuantities && selectedExtraQuantities[e.id] != null
+            ? selectedExtraQuantities[e.id]
+            : 0;
+
+        return `
+        <div class="pkg-extra-row" data-extra-id="${e.id}" style="display:flex;justify-content:space-between;align-items:center;margin:6px 0;padding:8px;border:1px solid var(--ring);border-radius:10px;">
+          <div>
+            <div style="font-weight:700">${e.name}</div>
+            <div style="color:#64748b;font-size:0.85rem">GHS ${e.price ?? 0}</div>
+          </div>
+
+          <div style="display:flex;gap:6px;align-items:center">
+            <button class="btn btn-sm pkg-extra-dec" data-id="${e.id}">−</button>
+            <span class="pkg-extra-qty" id="pkg-extra-qty-${e.id}">${qty}</span>
+            <button class="btn btn-sm pkg-extra-inc" data-id="${e.id}">+</button>
+          </div>
+        </div>`;
+      })
       .join('');
+
 
     wrap.innerHTML = `
       <div class="content" onclick="event.stopPropagation()">
@@ -373,6 +380,39 @@ function openPackageModal(mode = 'add', id = null) {
         </div>
       </div>
     `;
+        const pkgExtraQuantities = {};
+
+    (extras || []).forEach((e) => {
+      const q =
+        selectedExtraQuantities && selectedExtraQuantities[e.id] != null
+          ? selectedExtraQuantities[e.id]
+          : 0;
+      if (q > 0) {
+        pkgExtraQuantities[e.id] = q;
+      }
+    });
+
+    wrap.querySelectorAll('.pkg-extra-inc').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.id;
+        const current = pkgExtraQuantities[id] || 0;
+        const next = current + 1;
+        pkgExtraQuantities[id] = next;
+        const span = wrap.querySelector(`#pkg-extra-qty-${id}`);
+        if (span) span.textContent = String(next);
+      });
+    });
+
+    wrap.querySelectorAll('.pkg-extra-dec').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.id;
+        const current = pkgExtraQuantities[id] || 0;
+        const next = current > 0 ? current - 1 : 0;
+        pkgExtraQuantities[id] = next;
+        const span = wrap.querySelector(`#pkg-extra-qty-${id}`);
+        if (span) span.textContent = String(next);
+      });
+    });
 
     // ---- image upload wiring (packages) ----
     const fileInput        = wrap.querySelector('#pkg-image-file');
@@ -473,21 +513,25 @@ function openPackageModal(mode = 'add', id = null) {
             console.warn('packages_rooms update failed (table may not exist yet):', err);
           }
 
-          // ---- upsert package_extras (many-to-many extras) ----
+                    // ---- upsert package_extras (many-to-many extras) ----
           try {
-            const extraCheckboxes = Array.from(
-              wrap.querySelectorAll('.pkg-extra:checked') || []
-            );
-
             await supabase.from('package_extras').delete().eq('package_id', pkgRow.id);
 
-            if (extraCheckboxes.length > 0) {
-              const extrasPayload = extraCheckboxes.map((cb) => ({
-                package_id: pkgRow.id,
-                extra_id: cb.value,
-                quantity: 1,
-                code: cb.getAttribute('data-code') || null,
-              }));
+            const qtyEntries = Object.entries(pkgExtraQuantities || {}).filter(
+              ([_, qty]) => qty > 0
+            );
+
+            if (qtyEntries.length > 0) {
+              const extrasPayload = qtyEntries.map(([id, qty]) => {
+                const ex =
+                  (extras || []).find((e) => String(e.id) === String(id)) || {};
+                return {
+                  package_id: pkgRow.id,
+                  extra_id: id,
+                  quantity: qty,
+                  code: ex.code || null,
+                };
+              });
 
               const { error: extrasError } = await supabase
                 .from('package_extras')

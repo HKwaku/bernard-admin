@@ -923,18 +923,25 @@ async function openNewCustomBookingModal() {
    </option>`
 ).join('');
 
-  const extrasHtml = (extras || []).map(e =>
-  `<label for="extra-${e.id}" style="display:flex;align-items:center;gap:8px;margin:4px 0;cursor:pointer">
-      <input type="checkbox"
-        id="extra-${e.id}"
-        value="${e.id}"
-        data-price="${e.price}"
-        data-name="${e.name}"
-        data-code="${e.code || ''}"
-        style="width:auto" />
-      <span>${e.name} - GHS ${e.price}</span>
-  </label>`
-).join('');
+  const extrasHtml = (extras || [])
+  .map(
+    (e) => `
+      <div class="extra-row" data-extra-id="${e.id}" style="display:flex;justify-content:space-between;align-items:center;margin:6px 0;padding:8px;border:1px solid var(--ring);border-radius:10px;">
+        <div>
+          <div style="font-weight:700">${e.name}</div>
+          <div style="color:#64748b;font-size:0.85rem">GHS ${e.price}</div>
+        </div>
+
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="btn btn-sm extra-dec" data-id="${e.id}">−</button>
+          <span class="extra-qty" id="extra-qty-${e.id}">0</span>
+          <button class="btn btn-sm extra-inc" data-id="${e.id}">+</button>
+        </div>
+      </div>
+    `
+  )
+  .join('');
+
   const countryOptionsHtml = COUNTRY_OPTIONS
     .map(c => `<option value="${c.code}" ${c.code === '+233' ? 'selected' : ''}>${c.label}</option>`)
     .join('');
@@ -979,25 +986,63 @@ async function openNewCustomBookingModal() {
         </div>
 
         <div class="form-group">
-          <label style="display:flex;align-items:center;gap:8px;">
+          <label style="display:flex;align-items:center;gap:4px;">
             <span>Influencer?</span>
-            <input type="checkbox" id="nb-influencer">
+            <input
+              type="checkbox"
+              id="nb-influencer"
+              style="width:auto;flex-shrink:0;margin-left:2px"
+            />
           </label>
         </div>
 
         <div class="form-grid">
-          <div class="form-group">
-            <label>Room (name/code)</label>
-            <select id="nb-room">
-              <option value="">Select room type...</option>
-              ${roomOptions}
-            </select>
+          <div class="form-group" style="min-width:0">
+            <label>Cabins (select one or more)</label>
+            <div
+              id="nb-rooms-list"
+              style="
+                border:1px solid var(--ring);
+                border-radius:var(--radius-md);
+                padding:10px;
+                max-height:200px;
+                overflow-y:auto;
+                display:flex;
+                flex-direction:column;
+                gap:6px;
+              "
+            >
+              ${
+                (rooms || []).length
+                  ? (rooms || [])
+                      .map(
+                        (r) => `
+                          <label style="display:flex;align-items:center;gap:8px;margin:4px 0;cursor:pointer">
+                            <input 
+                              type="checkbox" 
+                              class="nb-room-checkbox" 
+                              value="${r.id}" 
+                              data-code="${r.code || ''}" 
+                              data-name="${r.name || ''}"
+                              style="width:auto"
+                            />
+                            <span>${(r.code || '').toUpperCase()} – ${r.name || ''}</span>
+                          </label>
+
+                        `
+                      )
+                      .join('')
+                  : '<div class="muted">No room types available</div>'
+              }
+            </div>
           </div>
           <div class="form-group">
             <label>Currency</label>
             <input id="nb-currency" type="text" value="GHS" />
           </div>
         </div>
+
+
 
         <div class="form-grid">
           <div class="form-group">
@@ -1034,7 +1079,7 @@ async function openNewCustomBookingModal() {
 
         <div class="form-group">
           <label>Extras (Optional)</label>
-          <div style="border:1px solid var(--ring);border-radius:var(--radius-md);padding:10px;max-height:150px;overflow-y:auto">
+          <div style="border:1px solid var(--ring);border-radius:var(--radius-md);padding:10px;max-height:260px;overflow-y:auto">
             ${extrasHtml || '<div class="muted">No extras available</div>'}
           </div>
         </div>
@@ -1104,18 +1149,45 @@ async function openNewCustomBookingModal() {
       </div>
     </div>
   `;
+  function getSelectedRoomIds() {
+    return Array.from(
+      wrap.querySelectorAll('.nb-room-checkbox:checked')
+    ).map((cb) => cb.value);
+  }
+
+  const extraQuantities = {}; // { extraId: qty }
+
+wrap.querySelectorAll('.extra-inc').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const id = btn.dataset.id;
+    extraQuantities[id] = (extraQuantities[id] || 0) + 1;
+    wrap.querySelector(`#extra-qty-${id}`).textContent = extraQuantities[id];
+    updatePriceBreakdown();
+  });
+});
+
+wrap.querySelectorAll('.extra-dec').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const id = btn.dataset.id;
+    if (!extraQuantities[id]) return;
+    extraQuantities[id]--;
+    wrap.querySelector(`#extra-qty-${id}`).textContent = extraQuantities[id];
+    updatePriceBreakdown();
+  });
+});
+
+
 
    // enable search on the country code selector
   attachCountrySearch('nb-country-code');
 
-  const inEl = wrap.querySelector('#nb-in');
+    const inEl = wrap.querySelector('#nb-in');
   const outEl = wrap.querySelector('#nb-out');
   const nightsEl = wrap.querySelector('#nb-nights');
   const roomSubtotalEl = wrap.querySelector('#nb-room-subtotal');
- 
-    // --- Auto-calc Room Subtotal (weekday/weekend split like the widget) ---
-  const roomSel = wrap.querySelector('#nb-room');
-  const roomMap = Object.fromEntries((rooms || []).map(r => [String(r.id), r]));
+
+  // --- Room pricing helpers (weekday/weekend split, multiple cabins) ---
+  const roomMap = Object.fromEntries((rooms || []).map((r) => [String(r.id), r]));
 
   function isWeekend(d) {
     // Friday (5) and Saturday (6) are weekend nights in the widget logic
@@ -1124,13 +1196,17 @@ async function openNewCustomBookingModal() {
   }
 
   function computeRoomSubtotal() {
-    const roomId = roomSel.value;
-    const info = roomMap[roomId];
+    const selectedRoomIds = getSelectedRoomIds();
     const ci = new Date(inEl.value);
     const co = new Date(outEl.value);
 
-    if (!info || !inEl.value || !outEl.value || !(co > ci)) {
-      // nothing to do / invalid; keep whatever is currently there but still refresh totals
+    if (
+      !selectedRoomIds.length ||
+      !inEl.value ||
+      !outEl.value ||
+      !(co > ci)
+    ) {
+      roomSubtotalEl.value = '';
       updatePriceBreakdown();
       return;
     }
@@ -1144,33 +1220,41 @@ async function openNewCustomBookingModal() {
       else weekdayN++;
     }
 
-    const wkdPrice = Number(info.base_price_per_night_weekday || 0);
-    const wkePrice = Number(info.base_price_per_night_weekend || 0);
-    const subtotal = (weekdayN * wkdPrice) + (weekendN * wkePrice);
-
-    // Put the computed value into the Room Subtotal input (leave editable)
-    roomSubtotalEl.value = String(subtotal.toFixed(2));
-
-    // Ensure nights field stays in sync too
+    // Nights are the same for all cabins
     nightsEl.value = String(weekdayN + weekendN);
 
+    let totalSubtotal = 0;
+
+    selectedRoomIds.forEach((roomId) => {
+      const info = roomMap[String(roomId)];
+      if (!info) return;
+
+      const wkdPrice = Number(info.base_price_per_night_weekday || 0);
+      const wkePrice = Number(info.base_price_per_night_weekend || 0);
+      totalSubtotal += weekdayN * wkdPrice + weekendN * wkePrice;
+    });
+
+    roomSubtotalEl.value = String(totalSubtotal.toFixed(2));
     updatePriceBreakdown();
   }
 
   // Auto-calculate nights when dates change
   function calculateNights() {
-  const checkIn = new Date(inEl.value);
-  const checkOut = new Date(outEl.value);
+    const checkIn = new Date(inEl.value);
+    const checkOut = new Date(outEl.value);
 
-  if (checkIn && checkOut && checkOut > checkIn) {
-    nightsEl.value = Math.ceil((checkOut - checkIn) / (1000 * 60 * 60 * 24));
-  } else {
-    nightsEl.value = 1;
+    if (checkIn && checkOut && checkOut > checkIn) {
+      nightsEl.value = Math.ceil(
+        (checkOut - checkIn) / (1000 * 60 * 60 * 24)
+      );
+    } else {
+      nightsEl.value = 1;
+    }
+
+    // Recompute pricing after nights change
+    computeRoomSubtotal();
   }
-  
-  // Recompute pricing after nights change
-  computeRoomSubtotal();
-}
+
 
   // Calculate price breakdown
   // Calculate price breakdown
@@ -1178,18 +1262,25 @@ async function openNewCustomBookingModal() {
     const roomSubtotal = parseFloat(roomSubtotalEl.value) || 0;
     const currency = wrap.querySelector('#nb-currency').value || 'GHS';
 
-    // Calculate extras total + capture details
-    selectedExtras = Array.from(
-      wrap.querySelectorAll('input[type="checkbox"][id^="extra-"]:checked')
-    ).map((cb) => ({
-      extra_id: cb.value,
-      extra_code: cb.getAttribute('data-code') || '',
-      extra_name: cb.getAttribute('data-name') || '',
-      price: parseFloat(cb.getAttribute('data-price') || 0),
-      quantity: 1,
-    }));
+      // Calculate extras total + capture details from extraQuantities
+  selectedExtras = Object.entries(extraQuantities)
+    .filter(([_, qty]) => qty > 0)
+    .map(([id, qty]) => {
+      const ex = (extras || []).find((e) => String(e.id) === String(id)) || {};
+      return {
+        extra_id: id,
+        extra_code: ex.code || '',
+        extra_name: ex.name || '',
+        price: Number(ex.price || 0),
+        quantity: qty,
+      };
+    });
 
-    const extrasTotal = selectedExtras.reduce((sum, e) => sum + e.price, 0);
+  const extrasTotal = selectedExtras.reduce(
+  (sum, e) => sum + e.price * e.quantity,
+  0
+  );
+
 
     // Total only for extras that this coupon targets (if defined)
     let extrasTargetTotal = extrasTotal;
@@ -1201,7 +1292,7 @@ async function openNewCustomBookingModal() {
       const idSet = new Set(appliedCoupon.extra_ids.map(String));
       extrasTargetTotal = selectedExtras
         .filter((e) => idSet.has(String(e.extra_id)))
-        .reduce((sum, e) => sum + e.price, 0);
+        .reduce((sum, e) => sum + e.price * e.quantity, 0);
     }
 
     // Calculate discount
@@ -1293,7 +1384,10 @@ async function validateCoupon(code) {
     }
 
     const roomSubtotal = parseFloat(roomSubtotalEl.value) || 0;
-    const extrasTotal = selectedExtras.reduce((sum, e) => sum + e.price, 0);
+    const extrasTotal = selectedExtras.reduce(
+      (sum, e) => sum + e.price * e.quantity,
+      0
+      );
     const subtotal = roomSubtotal + extrasTotal;
 
     if (coupon.min_booking_amount && subtotal < coupon.min_booking_amount) {
@@ -1326,7 +1420,7 @@ async function validateCoupon(code) {
 }
 
   // Event listeners
-   inEl.addEventListener('change', () => {
+    inEl.addEventListener('change', () => {
     // Auto-set checkout to check-in + 1 day
     if (inEl.value) {
       outEl.value = addDaysISO(inEl.value, 1);
@@ -1341,19 +1435,17 @@ async function validateCoupon(code) {
   });
 
   roomSubtotalEl.addEventListener('input', updatePriceBreakdown);
-    // Recalculate subtotal whenever the room or dates change
-  roomSel.addEventListener('change', computeRoomSubtotal);
-  inEl.addEventListener('change', computeRoomSubtotal);
-  outEl.addEventListener('change', computeRoomSubtotal);
+
+  // Recalculate subtotal whenever any cabin checkbox changes
+  wrap.addEventListener('change', (e) => {
+    if (e.target.classList.contains('nb-room-checkbox')) {
+      computeRoomSubtotal();
+    }
+  });
 
   // Initial compute after modal opens
   computeRoomSubtotal();
   
-  // Extras checkboxes
-  wrap.querySelectorAll('input[type="checkbox"][id^="extra-"]').forEach(cb => {
-    cb.addEventListener('change', updatePriceBreakdown);
-  });
-
   // Apply coupon button
   wrap.querySelector('#apply-coupon-btn').addEventListener('click', async () => {
     const code = wrap.querySelector('#nb-coupon').value.trim();
@@ -1459,19 +1551,12 @@ async function validateCoupon(code) {
 
   calculateNights(); // Initial calculation
 
-    wrap.querySelector('#nb-save').addEventListener('click', async () => {
+      wrap.querySelector('#nb-save').addEventListener('click', async () => {
     try {
-      const roomSelect = wrap.querySelector('#nb-room');
-      const selectedOption = roomSelect.selectedOptions[0];
-      const roomTypeId = roomSelect.value || null;
-      const roomTypeCode = selectedOption ? selectedOption.getAttribute('data-code') : null;
-      const roomName = selectedOption
-        ? selectedOption.getAttribute("data-name")
-        : null;
+      const selectedRoomIds = getSelectedRoomIds();
 
-      
-      if (!roomTypeId || !roomTypeCode) {
-        alert('Please select a room type');
+      if (!selectedRoomIds.length) {
+        alert('Please select at least one cabin');
         return;
       }
 
@@ -1497,22 +1582,57 @@ async function validateCoupon(code) {
         return;
       }
 
-      // ---- AVAILABILITY CHECK ----
-      const available = await isRoomAvailable(roomTypeId,roomTypeCode,inEl.value, outEl.value);
-      if (!available) {
-        alert('This cabin is NOT available for the selected dates.');
-        return;
+      // ---- AVAILABILITY CHECK FOR EACH CABIN ----
+      for (const roomId of selectedRoomIds) {
+        const info = roomMap[String(roomId)] || {};
+        const roomTypeCode = info.code || null;
+        const available = await isRoomAvailable(
+          roomId,
+          roomTypeCode,
+          inEl.value,
+          outEl.value
+        );
+
+        if (!available) {
+          alert(
+            `${info.name || 'One of the selected cabins'} is NOT available for the selected dates.`
+          );
+          return;
+        }
       }
 
-      const roomSubtotal = parseFloat(roomSubtotalEl.value) || 0;
-      const extrasTotal = selectedExtras.reduce((sum, e) => sum + e.price, 0);
-      // ... (rest of your save logic stays exactly the same)
+      // ---- PRICING (recompute per-cabin subtotals) ----
+      const ci = new Date(inEl.value);
+      const co = new Date(outEl.value);
 
-      
-      // Calculate final discount
+      let weekdayN = 0;
+      let weekendN = 0;
+      for (let d = new Date(ci); d < co; d.setDate(d.getDate() + 1)) {
+        if (isWeekend(d)) weekendN++;
+        else weekdayN++;
+      }
+
+      const perRoomSubtotals = selectedRoomIds.map((roomId) => {
+        const info = roomMap[String(roomId)] || {};
+        const wkdPrice = Number(info.base_price_per_night_weekday || 0);
+        const wkePrice = Number(info.base_price_per_night_weekend || 0);
+        return weekdayN * wkdPrice + weekendN * wkePrice;
+      });
+
+      const roomSubtotal =
+        perRoomSubtotals.reduce((sum, v) => sum + v, 0) || 0;
+      roomSubtotalEl.value = String(roomSubtotal.toFixed(2));
+
+      const extrasTotal = selectedExtras.reduce(
+        (sum, e) => sum + e.price * e.quantity,
+        0
+      );
+
+      // ---- DISCOUNT (unchanged, based on overall totals) ----
       let discount = 0;
       if (appliedCoupon) {
         const subtotal = roomSubtotal + extrasTotal;
+
         if (appliedCoupon.applies_to === 'both') {
           let base;
           if (
@@ -1521,8 +1641,11 @@ async function validateCoupon(code) {
           ) {
             const idSet = new Set(appliedCoupon.extra_ids.map(String));
             const targetedExtrasTotal = selectedExtras
-              .filter(e => idSet.has(String(e.extra_id)))
-              .reduce((sum, e) => sum + e.price, 0);
+              .filter((e) => idSet.has(String(e.extra_id)))
+              .reduce(
+                (sum, e) => sum + e.price * e.quantity,
+                0
+              );
 
             base = roomSubtotal + targetedExtrasTotal;
           } else {
@@ -1532,97 +1655,159 @@ async function validateCoupon(code) {
             appliedCoupon.discount_type === 'percentage'
               ? (base * appliedCoupon.discount_value) / 100
               : appliedCoupon.discount_value;
-
         } else if (appliedCoupon.applies_to === 'rooms') {
-          discount = appliedCoupon.discount_type === 'percentage'
-            ? (roomSubtotal * appliedCoupon.discount_value / 100)
-            : appliedCoupon.discount_value;
+          discount =
+            appliedCoupon.discount_type === 'percentage'
+              ? (roomSubtotal * appliedCoupon.discount_value) / 100
+              : appliedCoupon.discount_value;
         } else if (appliedCoupon.applies_to === 'extras') {
-          discount = appliedCoupon.discount_type === 'percentage'
-            ? (extrasTotal * appliedCoupon.discount_value / 100)
-            : appliedCoupon.discount_value;
+          discount =
+            appliedCoupon.discount_type === 'percentage'
+              ? (extrasTotal * appliedCoupon.discount_value) / 100
+              : appliedCoupon.discount_value;
         }
-        discount = Math.min(discount, subtotal);
+
+        discount = Math.min(discount, roomSubtotal + extrasTotal);
       }
-      
+
       const finalTotal = Math.max(0, roomSubtotal + extrasTotal - discount);
       const isInfluencer = wrap.querySelector('#nb-influencer').checked;
 
-      // Create the reservation first
-      const reservationPayload = {
-        confirmation_code: genConfCode(),
-        guest_first_name:  wrap.querySelector('#nb-first').value.trim() || null,
-        guest_last_name:   wrap.querySelector('#nb-last').value.trim() || null,
-        guest_email:       wrap.querySelector('#nb-email').value.trim() || null,
-        country_code:      wrap.querySelector('#nb-country-code')?.value || null,
-        guest_phone:       wrap.querySelector('#nb-phone').value.trim() || null,
-        room_name:         roomName,
-        room_type_id:      roomTypeId,
-        room_type_code:    roomTypeCode,
-        check_in:          wrap.querySelector('#nb-in').value || null,
-        check_out:         wrap.querySelector('#nb-out').value || null,
-        nights:            parseInt(wrap.querySelector('#nb-nights').value || '0', 10) || 0,
-        adults:            parseInt(wrap.querySelector('#nb-adults').value || '0', 10) || 0,
-        children:          parseInt(wrap.querySelector('#nb-children').value || '0', 10) || 0,
-        is_influencer:     isInfluencer,
-        status:            wrap.querySelector('#nb-status').value,
-        payment_status:    wrap.querySelector('#nb-pay').value,
-        currency:          wrap.querySelector('#nb-currency').value.trim() || 'GHS',
-        room_subtotal:     roomSubtotal,
-        extras_total:      extrasTotal,
-        discount_amount:   discount,
-        coupon_code:       appliedCoupon ? appliedCoupon.code : null,
-        total:             finalTotal,
-        notes:             wrap.querySelector('#nb-notes').value || null
+      // Common data for all reservations
+      const commonPayload = {
+        guest_first_name:
+          wrap.querySelector('#nb-first').value.trim() || null,
+        guest_last_name:
+          wrap.querySelector('#nb-last').value.trim() || null,
+        guest_email:
+          wrap.querySelector('#nb-email').value.trim() || null,
+        country_code:
+          wrap.querySelector('#nb-country-code')?.value || null,
+        guest_phone:
+          wrap.querySelector('#nb-phone').value.trim() || null,
+        check_in: wrap.querySelector('#nb-in').value || null,
+        check_out: wrap.querySelector('#nb-out').value || null,
+        nights:
+          parseInt(
+            wrap.querySelector('#nb-nights').value || '0',
+            10
+          ) || 0,
+        adults:
+          parseInt(
+            wrap.querySelector('#nb-adults').value || '0',
+            10
+          ) || 0,
+        children:
+          parseInt(
+            wrap.querySelector('#nb-children').value || '0',
+            10
+          ) || 0,
+        is_influencer: isInfluencer,
+        status: wrap.querySelector('#nb-status').value,
+        payment_status: wrap.querySelector('#nb-pay').value,
+        currency:
+          wrap.querySelector('#nb-currency').value.trim() || 'GHS',
+        notes: wrap.querySelector('#nb-notes').value || null,
       };
 
-      const { data: reservation, error: reservationError } = await supabase
-        .from('reservations')
-        .insert(reservationPayload)
-        .select()
-        .single();
+      let primaryReservation = null;
+        const createdReservations = [];
 
-      if (reservationError) throw reservationError;
+      // Insert one reservation per selected cabin
+      for (let index = 0; index < selectedRoomIds.length; index++) {
+        const roomId = selectedRoomIds[index];
+        const info = roomMap[String(roomId)] || {};
+        const perRoomSubtotal = perRoomSubtotals[index] || 0;
+        const isPrimary = index === 0;
 
-      // Now insert extras into reservation_extras table if any selected
-      if (selectedExtras.length > 0 && reservation) {
-        const extrasPayload = selectedExtras.map(extra => ({
-          reservation_id: reservation.id,
-          extra_id: extra.extra_id,
-          extra_code: extra.extra_code,
-          extra_name: extra.extra_name,
-          price: extra.price,
-          quantity: extra.quantity,
-          subtotal: extra.price * extra.quantity
-        }));
+        const extrasForThis = isPrimary ? extrasTotal : 0;
+        const discountForThis = isPrimary ? discount : 0;
+        const totalForThis = Math.max(
+          0,
+          perRoomSubtotal + extrasForThis - discountForThis
+        );
 
-        const { error: extrasError } = await supabase
-          .from('reservation_extras')
-          .insert(extrasPayload);
+        const reservationPayload = {
+          ...commonPayload,
+          confirmation_code: genConfCode(),
+          room_name: info.name || null,
+          room_type_id: roomId,
+          room_type_code: info.code || null,
+          room_subtotal: perRoomSubtotal,
+          extras_total: extrasForThis,
+          discount_amount: discountForThis,
+          coupon_code:
+            isPrimary && appliedCoupon ? appliedCoupon.code : null,
+          total: totalForThis,
+        };
 
-        if (extrasError) {
-          console.error('Error saving extras:', extrasError);
+        const { data: reservation, error: reservationError } =
+          await supabase
+            .from('reservations')
+            .insert(reservationPayload)
+            .select()
+            .single();
+
+        if (reservationError) throw reservationError;
+        if (isPrimary) primaryReservation = reservation;
+            createdReservations.push(reservation);
+
+        // Only attach extras to the primary reservation
+        if (isPrimary && selectedExtras.length > 0 && reservation) {
+          const extrasPayload = selectedExtras.map((extra) => ({
+            reservation_id: reservation.id,
+            extra_id: extra.extra_id,
+            extra_code: extra.extra_code,
+            extra_name: extra.extra_name,
+            price: extra.price,
+            quantity: extra.quantity,
+            subtotal: extra.price * extra.quantity,
+          }));
+
+          const { error: extrasError } = await supabase
+            .from('reservation_extras')
+            .insert(extrasPayload);
+
+          if (extrasError) {
+            console.error('Error saving extras:', extrasError);
+          }
         }
       }
 
-      // Update coupon usage if applied
-      if (appliedCoupon && reservation) {
+      // Update coupon usage once per booking (if applied)
+      if (appliedCoupon && primaryReservation) {
         await supabase
           .from('coupons')
-          .update({ current_uses: (appliedCoupon.current_uses || 0) + 1 })
+          .update({
+            current_uses: (appliedCoupon.current_uses || 0) + 1,
+          })
           .eq('id', appliedCoupon.id);
       }
+          // If this is a group booking (more than one cabin), set group fields
+      if (createdReservations.length > 1 && primaryReservation) {
+        const groupCode = genConfCode(); // shared group confirmation code
+        const groupIds = createdReservations.map((r) => r.id);
 
-      toast('Reservation created');
-      wrap.remove();
-      toast('Reservation created');
+        try {
+          await supabase
+            .from('reservations')
+            .update({
+              group_reservation_id: primaryReservation.id,
+              group_reservation_code: groupCode,
+            })
+            .in('id', groupIds);
+        } catch (err) {
+          console.error('Error updating group reservation fields:', err);
+        }
+      }
+
+      toast('Reservation(s) created');
       wrap.remove();
 
       // Refresh calendar/list
       if (typeof initReservations === 'function') {
         initReservations();
       }
-
       initReservations?.();
     } catch (e) {
       alert('Error saving: ' + (e.message || e));

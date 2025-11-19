@@ -515,6 +515,32 @@
     font-size: 14px !important;
   }
   
+  /* Extra safety: prevent client analytics from overflowing on mobile */
+@media (max-width: 768px) {
+  #view-client-analytics {
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+    box-sizing: border-box;
+  }
+
+  #view-client-analytics .client-analytics-container {
+    width: 100% !important;
+    max-width: 100vw !important;
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+    margin: 0 auto;
+    overflow-x: hidden;
+    box-sizing: border-box;
+  }
+
+  /* Ensure no child forces horizontal scroll */
+  #view-client-analytics .client-analytics-container * {
+    max-width: 100% !important;
+    box-sizing: border-box;
+  }
+}
+
   /* Country/Gender distribution bars */
   #country-split > div,
   #gender-split > div {

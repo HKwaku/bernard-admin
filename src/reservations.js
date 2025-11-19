@@ -575,10 +575,19 @@ async function openEditModal(id) {
     };
 
     const roomMap = Object.fromEntries((rooms || []).map((rm) => [String(rm.id), rm]));
-    const extraNameMap = Object.fromEntries((extras || []).map((e) => [String(e.id), e.name]));
+        const extraNameMap = Object.fromEntries((extras || []).map((e) => [String(e.id), e.name]));
     const selectedExtraIdSet = new Set(
       (resExtras || []).map((e) => String(e.extra_id || e.extra_code || ''))
     );
+
+    // Quantities per extra (preload from reservation_extras)
+    const extraQuantities = {};
+    (resExtras || []).forEach((e) => {
+      const key = String(e.extra_id || e.extra_code || '');
+      if (e.quantity != null && e.quantity > 0) {
+        extraQuantities[key] = e.quantity;
+      }
+    });
 
     const roomOptions = (rooms || [])
       .map(
@@ -596,18 +605,21 @@ async function openEditModal(id) {
     const extrasHtml = (extras || [])
       .map((e) => {
         const key = String(e.id || e.code || '');
-        const checked = selectedExtraIdSet.has(key) ? 'checked' : '';
+        const qty = extraQuantities[key] != null ? extraQuantities[key] : 0;
         return `
-          <label class="checkbox-row">
-            <input type="checkbox"
-              value="${e.id}"
-              data-code="${e.code || ''}"
-              data-name="${e.name}"
-              data-price="${e.price}"
-              ${checked}
-            />
-            <span>${e.name} - GHS ${e.price}</span>
-          </label>
+          <div class="er-extra-row" data-extra-id="${key}"
+               style="display:flex;justify-content:space-between;align-items:center;margin:6px 0;padding:8px;border:1px solid var(--ring);border-radius:10px;">
+            <div>
+              <div style="font-weight:700">${e.name}</div>
+              <div style="color:#64748b;font-size:0.85rem">GHS ${e.price}</div>
+            </div>
+
+            <div style="display:flex;gap:6px;align-items:center">
+              <button class="btn btn-sm er-extra-dec" data-id="${key}">−</button>
+              <span class="er-extra-qty" id="er-extra-qty-${key}">${qty}</span>
+              <button class="btn btn-sm er-extra-inc" data-id="${key}">+</button>
+            </div>
+          </div>
         `;
       })
       .join('');
@@ -798,6 +810,30 @@ async function openEditModal(id) {
     if (influencerEl) {
       influencerEl.checked = !!r.is_influencer;
 }
+        // Extras quantity controls in edit modal
+    modal.querySelectorAll('.er-extra-inc').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.id;
+        const current = extraQuantities[id] || 0;
+        const next = current + 1;
+        extraQuantities[id] = next;
+        const span = modal.querySelector(`#er-extra-qty-${id}`);
+        if (span) span.textContent = String(next);
+        updatePriceBreakdown();
+      });
+    });
+
+    modal.querySelectorAll('.er-extra-dec').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.id;
+        const current = extraQuantities[id] || 0;
+        const next = current > 0 ? current - 1 : 0;
+        extraQuantities[id] = next;
+        const span = modal.querySelector(`#er-extra-qty-${id}`);
+        if (span) span.textContent = String(next);
+        updatePriceBreakdown();
+      });
+    });
 
     modal.addEventListener('click', (e) => {
       if (e.target === modal) close();
@@ -884,18 +920,27 @@ async function openEditModal(id) {
       const roomSubtotal = parseFloat(roomSubtotalEl.value) || 0;
       const currency = currencyInput.value || 'GHS';
 
-      // extras
-      selectedExtras = Array.from(
-        modal.querySelectorAll('#er-extras-list input[type="checkbox"]:checked')
-      ).map((cb) => ({
-        extra_id: cb.value,
-        extra_code: cb.getAttribute('data-code') || '',
-        extra_name: cb.getAttribute('data-name') || '',
-        price: parseFloat(cb.getAttribute('data-price') || 0),
-        quantity: 1,
-      }));
+            // extras from extraQuantities
+      selectedExtras = Object.entries(extraQuantities)
+        .filter(([_, qty]) => qty > 0)
+        .map(([key, qty]) => {
+          const ex =
+            (extras || []).find(
+              (e) => String(e.id || e.code || '') === String(key)
+            ) || {};
+          return {
+            extra_id: ex.id,
+            extra_code: ex.code || '',
+            extra_name: ex.name || '',
+            price: Number(ex.price || 0),
+            quantity: qty,
+          };
+        });
 
-      const extrasTotal = selectedExtras.reduce((sum, e) => sum + e.price, 0);
+      const extrasTotal = selectedExtras.reduce(
+        (sum, e) => sum + e.price * e.quantity,
+        0
+      );
 
       // For coupons that target only some extras
       let extrasTargetTotal = extrasTotal;
@@ -907,7 +952,7 @@ async function openEditModal(id) {
         const idSet = new Set(appliedCoupon.extra_ids.map(String));
         extrasTargetTotal = selectedExtras
           .filter((e) => idSet.has(String(e.extra_id)))
-          .reduce((sum, e) => sum + e.price, 0);
+          .reduce((sum, e) => sum + e.price * e.quantity, 0);
       }
 
       let discount = 0;
@@ -992,7 +1037,10 @@ async function openEditModal(id) {
         }
 
         const roomSubtotal = parseFloat(roomSubtotalEl.value) || 0;
-        const extrasTotal = selectedExtras.reduce((sum, e) => sum + e.price, 0);
+        const extrasTotal = selectedExtras.reduce(
+          (sum, e) => sum + e.price * e.quantity,
+          0
+        );
         const subtotal = roomSubtotal + extrasTotal;
 
         if (coupon.min_booking_amount && subtotal < coupon.min_booking_amount) {
@@ -1045,10 +1093,6 @@ async function openEditModal(id) {
 
     roomSel.addEventListener('change', computeRoomSubtotal);
 
-    // Extras checkboxes
-    modal.querySelectorAll('#er-extras-list input[type="checkbox"]').forEach((cb) =>
-      cb.addEventListener('change', updatePriceBreakdown)
-    );
 
     // Apply coupon
     modal.querySelector('#er-apply-coupon').addEventListener('click', async () => {
@@ -1246,7 +1290,11 @@ async function openEditModal(id) {
         }
 
         const roomSubtotal = parseFloat(roomSubtotalEl.value) || 0;
-        const extrasTotal = selectedExtras.reduce((sum, e) => sum + e.price, 0);
+        const extrasTotal = selectedExtras.reduce(
+          (sum, e) => sum + e.price * e.quantity,
+          0
+        );
+
 
         let discount = 0;
         if (appliedCoupon) {
@@ -1260,7 +1308,8 @@ async function openEditModal(id) {
             const idSet = new Set(appliedCoupon.extra_ids.map(String));
             extrasTargetTotal = selectedExtras
               .filter((e) => idSet.has(String(e.extra_id)))
-              .reduce((sum, e) => sum + e.price, 0);
+              .reduce((sum, e) => sum + e.price * e.quantity, 0);
+
           }
 
           if (appliedCoupon.applies_to === 'both') {
