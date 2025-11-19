@@ -832,7 +832,7 @@ function sqlDate(d) {
 
 // Get occupancy + revenue overview for a date range.
 // Used when user asks: "Give me an overview for last 30 days", etc.
-export const getAnalyticsOverviewTool = tool({
+// export const getAnalyticsOverviewTool = tool({
   name: "get_analytics_overview",
   description:
     "Get occupancy and revenue metrics for a date range. " +
