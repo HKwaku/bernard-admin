@@ -625,7 +625,24 @@ label {
   display: flex;
 }
 
-.modal .inner {
+/* Shared container for all modals (HTML uses .inner or .content) */
+.modal .inner,
+.modal .content {
+  width: 96%;
+  max-width: 760px;
+  background: #fff;
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  animation: slideUp 0.3s ease;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  margin: auto;
+}
+
+
+/* Also support .content class used in modals */
+.modal .content {
   width: 96%;
   max-width: 760px;
   background: #fff;
@@ -1790,15 +1807,36 @@ label {
 }
 
 @media (max-width: 720px) {
-  #coupon-modal .form-grid,
+  /* Make modals fit small screens */
+  .modal {
+    padding: var(--space-md);
+    align-items: flex-start;
+  }
+
+  .modal .inner,
+  .modal .content {
+    width: 100%;
+    max-width: 100%;
+    margin: var(--space-lg) auto;
+    max-height: calc(100vh - 2 * var(--space-lg));
+    border-radius: 18px;
+  }
+
+  /* Stack form fields in all modals (including custom + package booking) */
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Preserve special 3-column layout for coupons, but stack on mobile */
   #coupon-modal .form-grid-3 {
     grid-template-columns: 1fr;
   }
-  
+
   #coupon-modal .bd {
     padding: var(--space-lg);
   }
 }
+
 
 /* ===== ROOM & EXTRA MODALS (shared styles) ===== */
 #room-modal.modal,
@@ -2620,78 +2658,75 @@ label {
   #custom-booking-modal.modal,
   #package-booking-modal.modal,
   #reservation-modal.modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
-    z-index: 1000;
+    padding: 0 !important;
+    align-items: flex-end !important;
   }
 
   /* Modal content - proper flex layout */
   .modal .content,
+  .modal .inner,
   #custom-booking-modal .content,
   #package-booking-modal .content,
   #reservation-modal .content {
-    width: 100%;
-    max-width: 100%;
-    max-height: 92vh;
-    max-height: 92dvh;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    border-radius: 20px 20px 0 0;
-    margin: 0;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 92vh !important;
+    max-height: 92dvh !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    border-radius: 20px 20px 0 0 !important;
+    margin: 0 !important;
   }
 
-  /* Header - no changes needed, stays at top */
+  /* Header - stays at top */
   .modal .hd,
+  .modal .inner .hd,
   #custom-booking-modal .hd,
   #package-booking-modal .hd,
   #reservation-modal .hd {
-    flex-shrink: 0;
-    padding: 1.25rem var(--space-xl);
+    flex-shrink: 0 !important;
+    padding: 1rem 1.25rem !important;
   }
 
   /* Body - this is what scrolls */
   .modal .bd,
+  .modal .inner .bd,
   #custom-booking-modal .bd,
   #package-booking-modal .bd,
   #reservation-modal .bd {
-    flex: 1 1 auto;
-    overflow-y: auto;
-    overflow-x: hidden;
-    -webkit-overflow-scrolling: touch;
-    min-height: 0; /* Critical for flex scrolling */
-    padding: var(--space-xl);
+    flex: 1 1 auto !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    min-height: 0 !important; /* Critical for flex scrolling */
+    padding: 1rem 1.25rem !important;
   }
 
   /* Footer - stays at bottom */
   .modal .ft,
+  .modal .inner .ft,
   #custom-booking-modal .ft,
   #package-booking-modal .ft,
   #reservation-modal .ft {
-    flex-shrink: 0;
-    padding: var(--space-lg) var(--space-xl);
+    flex-shrink: 0 !important;
+    padding: 1rem 1.25rem !important;
   }
 
   /* Prevent iOS zoom on input focus */
-  input[type="text"],
-  input[type="email"],
-  input[type="tel"],
-  input[type="number"],
-  input[type="date"],
-  select,
-  textarea {
+  .modal input[type="text"],
+  .modal input[type="email"],
+  .modal input[type="tel"],
+  .modal input[type="number"],
+  .modal input[type="date"],
+  .modal select,
+  .modal textarea {
     font-size: 16px !important;
   }
 
   /* Touch-friendly button sizing */
-  .btn,
-  button {
-    min-height: 44px;
+  .modal .btn,
+  .modal button {
+    min-height: 44px !important;
   }
 }
