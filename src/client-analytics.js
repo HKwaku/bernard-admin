@@ -25,14 +25,13 @@ export function updateClientAnalyticsDateRange(start, end) {
   renderClientAnalyticsContent();
 }
 
-// Main render function
+// Main render function (now mirrors analytics-comparison structure)
 function renderClientAnalytics() {
-  const view = document.getElementById('view-client-analytics');
-  if (!view) return;
+  const container = document.getElementById('analytics-content');
+  if (!container) return;
 
-  view.innerHTML = `
-    <div class="card-bd">
-      <div class="card-bd client-analytics-container" style="max-width:100%; overflow-x:hidden;">
+  container.innerHTML = `
+    <div id="view-client-analytics" class="client-analytics-container">
       
       <!-- Header -->
       <div style="margin-bottom: 24px;">
@@ -87,25 +86,10 @@ function renderClientAnalytics() {
         <div class="analytics-section-title">Room Preferences by Guest Type</div>
         <div id="room-preferences"></div>
       </div>
-
-      <!-- Loyalty Insights -->
-      <div class="analytics-section">
-        <div class="analytics-section-title">Guest Loyalty</div>
-        <div class="two-column">
-          <div class="chart-card">
-            <div class="chart-title">Repeat Guest Analysis</div>
-            <div id="repeat-guest-analysis"></div>
-          </div>
-          <div class="chart-card">
-            <div class="chart-title">Guest Lifetime Value</div>
-            <div id="guest-lifetime-value"></div>
-          </div>
-        </div>
-      </div>
-
     </div>
   `;
 
+  // Fill the sections
   renderClientAnalyticsContent();
 }
 
