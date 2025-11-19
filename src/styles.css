@@ -2834,3 +2834,38 @@ label {
     min-height: 44px !important;
   }
 }
+/* === Mobile fix: custom booking phone row === */
+@media (max-width: 720px) {
+  /* Let the country selector and phone field share the row properly */
+  #reservation-modal .country-select-box {
+    width: auto !important;          /* override inline 100% */
+    flex: 0 0 42% !important;        /* take ~40% of the row */
+  }
+
+  #reservation-modal #nb-phone {
+    flex: 1 1 0 !important;         /* take the remaining space */
+    min-width: 0 !important;        /* avoid overflow */
+  }
+
+  /* Optional: keep the search + dropdown full width inside the country box */
+  #reservation-modal .country-select-box input,
+  #reservation-modal .country-select-box select {
+    width: 100%;
+    box-sizing: border-box;
+  }
+}
+/* === Mobile fix: package booking date fields === */
+@media (max-width: 720px) {
+  /* Ensure form rows stack cleanly on very small screens */
+  #package-booking-modal .form-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Make sure date inputs never overflow horizontally */
+  #package-booking-modal input[type="date"] {
+    width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box;
+    display: block;
+  }
+}
