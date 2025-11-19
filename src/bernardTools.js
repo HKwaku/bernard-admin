@@ -7,6 +7,54 @@
 import { tool } from "@langchain/core/tools";
 import { supabase } from "../src/config/supabase.js"; // adjust path if needed
 
+// =====================
+// UNIVERSAL TABLE FORMATTER
+// =====================
+
+export function formatTable(rows, options = {}) {
+  if (!Array.isArray(rows) || rows.length === 0) return "No data found.";
+
+  const keys = Object.keys(rows[0]);
+
+  // Mobile-friendly responsive table pattern
+  return `
+  <div style="
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+    margin:8px 0;
+    border:1px solid #e5e7eb;
+    border-radius:8px;
+  ">
+    <table style="width:100%;border-collapse:collapse;font-size:0.85rem;min-width:${options.minWidth || '480px'}">
+      <thead style="background:#f8fafc;">
+        <tr>
+          ${keys
+            .map(
+              (k) =>
+                `<th style="text-align:left;padding:8px 10px;border-bottom:1px solid #e5e7eb;font-weight:600;color:#0f172a;white-space:nowrap">${k.replace(/_/g, ' ')}</th>`
+            )
+            .join("")}
+        </tr>
+      </thead>
+      <tbody>
+        ${rows
+          .map(
+            (r) => `
+          <tr>
+            ${keys
+              .map(
+                (k) =>
+                  `<td style="padding:8px 10px;border-bottom:1px solid #f1f5f9;">${r[k] ?? ''}</td>`
+              )
+              .join("")}
+          </tr>`
+          )
+          .join("")}
+      </tbody>
+    </table>
+  </div>`;
+}
+
 // ============================================================================
 // RESERVATION / OPERATIONS TOOLS
 // ============================================================================
@@ -29,14 +77,14 @@ export const listRoomsTool = tool({
 
     const active = (data || []).filter((r) => r.is_active !== false);
     return {
-      rooms: active.map((r) => ({
-        code: r.code,
-        name: r.name,
-        max_adults: r.max_adults,
-        weekday_price: r.base_price_per_night_weekday,
-        weekend_price: r.base_price_per_night_weekend,
-        currency: r.currency || "GHS",
-      })),
+       html: formatTable(
+        (data || []).map(r => ({
+          Code: r.code,
+          Name: r.name,
+          Sleeps: r.max_adults,
+          Active: r.is_active ? "Yes" : "No",
+        })),
+        { minWidth: "420px" }
     };
   },
 });
@@ -57,13 +105,15 @@ export const listExtrasTool = tool({
 
     const active = (data || []).filter((x) => x.is_active !== false);
     return {
-      extras: active.map((x) => ({
-        name: x.name,
-        category: x.category,
-        unit_type: x.unit_type,
-        price: x.price,
-        currency: x.currency || "GHS",
-      })),
+      html: formatTable(
+        (data || []).map(x => ({
+          Name: x.name,
+          Category: x.category,
+          Price: x.price,
+          Currency: x.currency,
+          Unit: x.unit_type,
+          Active: x.is_active ? "Yes" : "No",
+        }))
     };
   },
 });
@@ -98,18 +148,17 @@ export const searchReservationsTool = tool({
     if (error) return { error: error.message };
 
     return {
-      reservations: (data || []).map((r) => ({
-        id: r.id,
-        guest_name: `${r.guest_first_name || ""} ${
-          r.guest_last_name || ""
-        }`.trim(),
-        email: r.guest_email,
-        confirmation_code: r.confirmation_code,
-        status: r.status,
-        room_name: r.room_name,
-        check_in: r.check_in,
-        check_out: r.check_out,
-      })),
+      html: formatTable(
+        (data || []).map(r => ({
+          ID: r.id,
+          Guest: `${r.guest_first_name} ${r.guest_last_name}`,
+          Email: r.guest_email,
+          Code: r.confirmation_code,
+          Status: r.status,
+          Room: r.room_name,
+          Check_In: r.check_in,
+          Check_Out: r.check_out,
+        }))
     };
   },
 });
@@ -140,15 +189,16 @@ export const todayStatsTool = tool({
     if (checkins.error) return { error: checkins.error.message };
 
     return {
-      today_checkins_count: checkins.count ?? 0,
-      today_checkins: (checkins.data || []).map((r) => ({
-        guest_name: `${r.guest_first_name || ""} ${
-          r.guest_last_name || ""
-        }`.trim(),
-        room_name: r.room_name,
-        check_in: r.check_in,
-      })),
-      total_confirmed_bookings: confirmed.count ?? 0,
+      html: formatTable(
+        (checkins.data || []).map(r => ({
+          Guest: `${r.guest_first_name} ${r.guest_last_name}`,
+          Room: r.room_name,
+          CheckIn: r.check_in,
+        }))
+      ),
+      stats: {
+        today_checkins_count: checkins.count ?? 0,
+        total_confirmed_bookings: confirmed.count ?? 0,
     };
   },
 });
@@ -226,18 +276,16 @@ export const listActivePackagesTool = tool({
     if (error) return { error: error.message };
 
     return {
-      packages: (data || []).map((p) => ({
-        id: p.id,
-        code: p.code,
-        name: p.name,
-        description: p.description,
-        price: p.package_price,
-        currency: p.currency || "GHS",
-        nights: p.nights,
-        valid_from: p.valid_from,
-        valid_until: p.valid_until,
-        is_featured: !!p.is_featured,
-      })),
+      html: formatTable(
+        (data || []).map(p => ({
+          Code: p.code,
+          Name: p.name,
+          Price: p.package_price,
+          Nights: p.nights,
+          From: p.valid_from,
+          Until: p.valid_until,
+          Featured: p.is_featured ? "Yes" : "No",
+        }))
     };
   },
 });
@@ -911,477 +959,6 @@ export const getAnalyticsOverviewTool = tool({
         revpar: revPAR,
         adr,
       },
-    };
-  },
-});
-// ============================================================================
-// INTERNAL HELPERS FOR MUTATING TOOLS
-// ============================================================================
-
-function parseISODate(iso) {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return d;
-}
-
-// Friday + Saturday are weekend nights (same as widget logic)
-function isWeekendDate(d) {
-  const dow = d.getDay();
-  return dow === 5 || dow === 6;
-}
-
-/**
- * Compute room pricing for a date range based on weekday/weekend split.
- * Mirrors the widget's computeRoomSubtotal logic.
- */
-function computeRoomPricingForRange(roomRow, checkInISO, checkOutISO) {
-  const ci = parseISODate(checkInISO);
-  const co = parseISODate(checkOutISO);
-  if (!ci || !co || !(co > ci)) {
-    return { nights: 0, weekdayN: 0, weekendN: 0, room_subtotal: 0 };
-  }
-
-  let weekdayN = 0;
-  let weekendN = 0;
-
-  // Count each *night* starting from check-in date up to night before check-out
-  for (let d = new Date(ci); d < co; d.setDate(d.getDate() + 1)) {
-    if (isWeekendDate(d)) {
-      weekendN++;
-    } else {
-      weekdayN++;
-    }
-  }
-
-  const wkdPrice = Number(roomRow.base_price_per_night_weekday || 0);
-  const wkePrice = Number(roomRow.base_price_per_night_weekend || 0);
-  const subtotal = weekdayN * wkdPrice + weekendN * wkePrice;
-  const nights = weekdayN + weekendN;
-
-  return { nights, weekdayN, weekendN, room_subtotal: subtotal };
-}
-
-/**
- * Generate confirmation code (same pattern as app.js / package_booking.js)
- */
-function genConfCode() {
-  return (
-    "B" +
-    Math.random().toString(36).slice(2, 8) +
-    Date.now().toString(36).slice(-4)
-  ).toUpperCase();
-}
-
-/**
- * Simple overlap check for [checkIn, checkOut) ranges.
- */
-function rangesOverlap(existingStartISO, existingEndISO, newStart, newEnd) {
-  const es = parseISODate(existingStartISO);
-  const ee = parseISODate(existingEndISO);
-  if (!es || !ee) return false;
-  return es < newEnd && ee > newStart;
-}
-
-// ============================================================================
-// MUTATING TOOLS: CREATE / UPDATE / CANCEL RESERVATIONS
-// IMPORTANT: Agent should ONLY use these after explicit user confirmation.
-// ============================================================================
-
-/**
- * Create a simple reservation (no extras, no package).
- * - Computes nights + room_subtotal using weekday/weekend pricing.
- * - Checks basic availability for the selected room type.
- */
-export const createSimpleReservationTool = tool({
-  name: "create_simple_reservation",
-  description:
-    "Create a simple reservation (no package, no extras). " +
-    "Input: { guest_first_name, guest_last_name?, guest_email?, guest_phone?, country_code?, " +
-    "room_type_code, check_in: 'YYYY-MM-DD', check_out: 'YYYY-MM-DD', adults?: number, children?: number, " +
-    "status?: 'pending'|'confirmed', payment_status?: 'unpaid'|'paid', currency?: string, notes?: string }. " +
-    "Use ONLY after the user has explicitly confirmed they want to create the booking.",
-  async func(input) {
-    try {
-      const roomCode = (input?.room_type_code || "").trim().toUpperCase();
-      const checkIn = input?.check_in;
-      const checkOut = input?.check_out;
-
-      if (!roomCode || !checkIn || !checkOut) {
-        return {
-          error:
-            "room_type_code, check_in and check_out are required to create a reservation.",
-        };
-      }
-
-      const ci = parseISODate(checkIn);
-      const co = parseISODate(checkOut);
-      if (!ci || !co || !(co > ci)) {
-        return { error: "Invalid date range. Ensure check_out > check_in." };
-      }
-
-      // 1) Load room type
-      const { data: room, error: roomErr } = await supabase
-        .from("room_types")
-        .select(
-          "id, code, name, base_price_per_night_weekday, base_price_per_night_weekend, currency, is_active"
-        )
-        .eq("code", roomCode)
-        .maybeSingle?.() ?? {};
-
-      // Fallback for older Supabase clients without maybeSingle
-      const finalRoom =
-        room ||
-        (Array.isArray(room) && room.length > 0 ? room[0] : null);
-
-      if (roomErr || !finalRoom) {
-        return { error: `Room type with code ${roomCode} not found.` };
-      }
-      if (finalRoom.is_active === false) {
-        return { error: `Room type ${roomCode} is not active.` };
-      }
-
-      // 2) Check availability for this room type
-      const { data: existingRes, error: resErr } = await supabase
-        .from("reservations")
-        .select("id, check_in, check_out, status, room_type_code")
-        .eq("room_type_code", roomCode)
-        .not("status", "in", '("cancelled","no_show")');
-
-      if (resErr) {
-        return { error: "Error checking availability: " + resErr.message };
-      }
-
-      const hasOverlap = (existingRes || []).some((r) =>
-        rangesOverlap(r.check_in, r.check_out, ci, co)
-      );
-      if (hasOverlap) {
-        return {
-          error: `Room type ${roomCode} is not available for ${checkIn} → ${checkOut}.`,
-          available: false,
-        };
-      }
-
-      // 3) Compute pricing (weekday/weekend split)
-      const pricing = computeRoomPricingForRange(finalRoom, checkIn, checkOut);
-      if (pricing.nights <= 0) {
-        return { error: "Could not compute a positive number of nights." };
-      }
-
-      const currency =
-        input?.currency || finalRoom.currency || "GHS";
-      const adults = Number(input?.adults ?? 0) || 0;
-      const children = Number(input?.children ?? 0) || 0;
-
-      const status = input?.status || "pending";
-      const paymentStatus = input?.payment_status || "unpaid";
-
-      const payload = {
-        confirmation_code: genConfCode(),
-        guest_first_name:
-          (input?.guest_first_name || "").trim() || null,
-        guest_last_name:
-          (input?.guest_last_name || "").trim() || null,
-        guest_email: (input?.guest_email || "").trim() || null,
-        guest_phone: (input?.guest_phone || "").trim() || null,
-        country_code: (input?.country_code || "").trim() || null,
-        is_influencer: false,
-        room_type_id: finalRoom.id,
-        room_type_code: finalRoom.code,
-        room_name: finalRoom.name,
-        check_in: checkIn,
-        check_out: checkOut,
-        nights: pricing.nights,
-        adults,
-        children,
-        status,
-        payment_status: paymentStatus,
-        currency,
-        room_subtotal: pricing.room_subtotal,
-        extras_total: 0,
-        discount_amount: 0,
-        coupon_code: null,
-        total: pricing.room_subtotal,
-        notes: (input?.notes || "").trim() || null,
-      };
-
-      const { data: inserted, error: insErr } = await supabase
-        .from("reservations")
-        .insert(payload)
-        .select(
-          "id, confirmation_code, status, check_in, check_out, room_name, total, currency"
-        )
-        .single();
-
-      if (insErr) {
-        return { error: "Error creating reservation: " + insErr.message };
-      }
-
-      return {
-        success: true,
-        reservation: inserted,
-        pricing: {
-          nights: pricing.nights,
-          room_subtotal: pricing.room_subtotal,
-        },
-      };
-    } catch (e) {
-      return { error: "Unexpected error creating reservation: " + e.message };
-    }
-  },
-});
-
-/**
- * Cancel a reservation (by id or confirmation code).
- */
-export const cancelReservationTool = tool({
-  name: "cancel_reservation",
-  description:
-    "Cancel a reservation by id or confirmation_code. " +
-    "Input: { reservation_id?: number, confirmation_code?: string, reason?: string }. " +
-    "Use ONLY after the user explicitly confirms cancellation.",
-  async func(input) {
-    const id = input?.reservation_id;
-    const code = (input?.confirmation_code || "").trim();
-
-    if (!id && !code) {
-      return {
-        error: "Provide reservation_id or confirmation_code to cancel.",
-      };
-    }
-
-    // 1) Load reservation
-    let query = supabase
-      .from("reservations")
-      .select("id, confirmation_code, status, notes")
-      .limit(1);
-
-    if (id) query = query.eq("id", id);
-    if (!id && code) query = query.eq("confirmation_code", code);
-
-    const { data, error } = await query;
-    if (error) return { error: error.message };
-
-    const res =
-      data && data.length ? data[0] : null;
-
-    if (!res) {
-      return { error: "Reservation not found." };
-    }
-
-    if (res.status === "cancelled") {
-      return {
-        success: true,
-        already_cancelled: true,
-        reservation_id: res.id,
-        confirmation_code: res.confirmation_code,
-      };
-    }
-
-    const reason = (input?.reason || "").trim();
-    const now = new Date().toISOString();
-    const existingNotes = res.notes || "";
-    const cancelNote = `Cancelled via Bernard agent on ${now}${
-      reason ? " — " + reason : ""
-    }`;
-    const newNotes = existingNotes
-      ? `${existingNotes}\n${cancelNote}`
-      : cancelNote;
-
-    const { error: upErr } = await supabase
-      .from("reservations")
-      .update({
-        status: "cancelled",
-        notes: newNotes,
-      })
-      .eq("id", res.id);
-
-    if (upErr) {
-      return { error: "Error cancelling reservation: " + upErr.message };
-    }
-
-    return {
-      success: true,
-      reservation_id: res.id,
-      confirmation_code: res.confirmation_code,
-      previous_status: res.status,
-      new_status: "cancelled",
-    };
-  },
-});
-
-/**
- * Modify reservation dates and reprice room_subtotal.
- * - Uses weekday/weekend pricing like the widget.
- * - Checks room availability excluding the current reservation.
- * - Does NOT currently support package bookings (those should be changed via package flow).
- */
-export const updateReservationDatesTool = tool({
-  name: "update_reservation_dates",
-  description:
-    "Update a reservation's check-in / check-out and reprice room_subtotal. " +
-    "Input: { reservation_id?: number, confirmation_code?: string, new_check_in: 'YYYY-MM-DD', new_check_out: 'YYYY-MM-DD' }. " +
-    "Does NOT support package bookings. Use ONLY after explicit user confirmation.",
-  async func(input) {
-    const id = input?.reservation_id;
-    const code = (input?.confirmation_code || "").trim();
-    const newCheckIn = input?.new_check_in;
-    const newCheckOut = input?.new_check_out;
-
-    if (!id && !code) {
-      return {
-        error:
-          "Provide reservation_id or confirmation_code to modify a reservation.",
-      };
-    }
-    if (!newCheckIn || !newCheckOut) {
-      return {
-        error: "new_check_in and new_check_out are required.",
-      };
-    }
-
-    const ci = parseISODate(newCheckIn);
-    const co = parseISODate(newCheckOut);
-    if (!ci || !co || !(co > ci)) {
-      return { error: "Invalid date range. Ensure new_check_out > new_check_in." };
-    }
-
-    // 1) Load reservation (including room_type info + extras/discounts)
-    let query = supabase
-      .from("reservations")
-      .select(
-        "id, confirmation_code, status, room_type_id, room_type_code, package_id, " +
-          "room_subtotal, extras_total, discount_amount"
-      )
-      .limit(1);
-
-    if (id) query = query.eq("id", id);
-    if (!id && code) query = query.eq("confirmation_code", code);
-
-    const { data, error } = await query;
-    if (error) return { error: error.message };
-
-    const res =
-      data && data.length ? data[0] : null;
-    if (!res) {
-      return { error: "Reservation not found." };
-    }
-
-    if (res.package_id) {
-      return {
-        error:
-          "This reservation is linked to a package. Please adjust it via the package booking flow instead.",
-      };
-    }
-
-    const roomTypeCode = (res.room_type_code || "").trim();
-    const roomTypeId = res.room_type_id;
-
-    if (!roomTypeCode && !roomTypeId) {
-      return {
-        error:
-          "Reservation has no room_type_code / room_type_id. Cannot safely reprice.",
-      };
-    }
-
-    // 2) Load room_type for pricing
-    let roomQuery = supabase
-      .from("room_types")
-      .select(
-        "id, code, name, base_price_per_night_weekday, base_price_per_night_weekend, currency"
-      )
-      .limit(1);
-
-    if (roomTypeId) roomQuery = roomQuery.eq("id", roomTypeId);
-    else roomQuery = roomQuery.eq("code", roomTypeCode);
-
-    const { data: roomRows, error: roomErr } = await roomQuery;
-    if (roomErr) return { error: roomErr.message };
-
-    const room =
-      roomRows && roomRows.length ? roomRows[0] : null;
-    if (!room) {
-      return {
-        error: "Room type for this reservation could not be found.",
-      };
-    }
-
-    // 3) Check availability for new range (exclude current reservation)
-    const { data: others, error: othersErr } = await supabase
-      .from("reservations")
-      .select("id, check_in, check_out, status, room_type_id, room_type_code")
-      .not("status", "in", '("cancelled","no_show")');
-
-    if (othersErr) return { error: othersErr.message };
-
-    const newStart = ci;
-    const newEnd = co;
-
-    const relevant = (others || []).filter((r) => {
-      if (r.id === res.id) return false; // exclude self
-      const sameId =
-        roomTypeId != null && r.room_type_id === roomTypeId;
-      const sameCode =
-        roomTypeCode && r.room_type_code === roomTypeCode;
-      return sameId || sameCode;
-    });
-
-    const hasOverlap = relevant.some((r) =>
-      rangesOverlap(r.check_in, r.check_out, newStart, newEnd)
-    );
-    if (hasOverlap) {
-      return {
-        error:
-          "New dates are not available for this room type (conflict with another booking).",
-      };
-    }
-
-    // 4) Recompute nights + room_subtotal
-    const pricing = computeRoomPricingForRange(
-      room,
-      newCheckIn,
-      newCheckOut
-    );
-    if (pricing.nights <= 0) {
-      return {
-        error:
-          "Could not compute a positive number of nights for the new dates.",
-      };
-    }
-
-    const extrasTotal = Number(res.extras_total || 0);
-    const discountAmount = Number(res.discount_amount || 0);
-    const newTotal = Math.max(
-      0,
-      pricing.room_subtotal + extrasTotal - discountAmount
-    );
-
-    const { error: upErr } = await supabase
-      .from("reservations")
-      .update({
-        check_in: newCheckIn,
-        check_out: newCheckOut,
-        nights: pricing.nights,
-        room_subtotal: pricing.room_subtotal,
-        total: newTotal,
-      })
-      .eq("id", res.id);
-
-    if (upErr) {
-      return {
-        error: "Error updating reservation: " + upErr.message,
-      };
-    }
-
-    return {
-      success: true,
-      reservation_id: res.id,
-      confirmation_code: res.confirmation_code,
-      new_check_in: newCheckIn,
-      new_check_out: newCheckOut,
-      nights: pricing.nights,
-      room_subtotal: pricing.room_subtotal,
-      total: newTotal,
     };
   },
 });
