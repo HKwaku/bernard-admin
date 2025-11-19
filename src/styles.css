@@ -2891,3 +2891,11 @@ label {
 #reservation-modal label.nb-room-row input[type="checkbox"] {
   margin: 0;
 }
+@media (max-width: 768px) {
+  input[type="date"] {
+    width: 100% !important;
+    padding-right: 0 !important;
+    max-width: 100% !important;
+    box-sizing: border-box;
+  }
+}
