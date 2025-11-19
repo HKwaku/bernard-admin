@@ -2892,10 +2892,13 @@ label {
   margin: 0;
 }
 @media (max-width: 768px) {
-  input[type="date"] {
-    width: 80% !important;
-    padding-right: 0 !important;
-    max-width: 80% !important;
+  #custom-booking-modal input[type="date"],
+  #reservation-modal input[type="date"],
+  #package-booking-modal input[type="date"] {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
     box-sizing: border-box;
   }
 }
+
