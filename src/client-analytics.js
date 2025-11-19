@@ -31,7 +31,7 @@ function renderClientAnalytics() {
   if (!view) return;
 
   view.innerHTML = `
-    <div class="card-bd client-analytics-container" style="padding: 16px; box-sizing: border-box; width: 100%; max-width: 100%;">
+    <div class="card-bd client-analytics-container">
       
       <!-- Header -->
       <div style="margin-bottom: 24px;">
