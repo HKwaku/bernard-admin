@@ -476,7 +476,7 @@
     grid-template-columns: repeat(2, 1fr) !important;
   }
   
-  /* CLIENT ANALYTICS MOBILE OPTIMIZATIONS */
+    /* CLIENT ANALYTICS MOBILE OPTIMIZATIONS */
   
   /* Header adjustments */
   #view-client-analytics h2 {
@@ -511,7 +511,6 @@
   }
   
   /* Extra safety: prevent client analytics from overflowing on mobile */
-
   #view-client-analytics {
     width: 100%;
     max-width: 100vw;
@@ -520,21 +519,19 @@
   }
 
   #view-client-analytics .client-analytics-container {
-  width: 100% !important;
-  max-width: 100% !important;
-  overflow-x: hidden;
-  box-sizing: border-box;
-  padding: 0 !important;
-  margin: 0 !important;
-}
-
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: hidden;
+    box-sizing: border-box;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
 
   /* Ensure no child forces horizontal scroll */
   #view-client-analytics .client-analytics-container * {
-  max-width: 100% !important;
-  box-sizing: border-box;
+    max-width: 100% !important;
+    box-sizing: border-box;
   }
-}
 
   /* Country/Gender distribution bars */
   #country-split > div,
