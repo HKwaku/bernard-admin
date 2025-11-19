@@ -2060,14 +2060,28 @@ label {
 
 @media (max-width:720px){
   #reservation-modal .bd{ padding:var(--space-lg); }
-  #reservation-modal .form-grid{ grid-template-columns:1fr; }
+  #reservation-modal .form-grid{ 
+    grid-template-columns:1fr !important; 
+    gap: var(--space-md) !important;
+  }
   
-  /* Ensure date inputs fit properly on mobile */
+  /* Ensure form-group inside grid has same behavior as standalone */
+  #reservation-modal .form-grid .form-group {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    margin-bottom: var(--space-md);
+  }
+  
+  /* Ensure date inputs match email input sizing exactly */
+  #reservation-modal .form-grid .form-group input[type="date"],
   #reservation-modal .form-group input[type="date"] {
-    width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
-    font-size: 16px; /* Prevents iOS zoom */
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+    font-size: 16px !important; /* Prevents iOS zoom */
+    padding: 10px 12px !important;
   }
   
   /* Fix phone field layout on mobile */
