@@ -32,7 +32,7 @@ function renderClientAnalytics() {
 
   view.innerHTML = `
     <div class="card-bd">
-      <div class="client-analytics-container">
+      <div class="card-bd client-analytics-container" style="max-width:100%; overflow-x:hidden;">
       
       <!-- Header -->
       <div style="margin-bottom: 24px;">

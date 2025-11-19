@@ -98,7 +98,7 @@ view.innerHTML = `
     <!-- Date Range Selector + View Toggle -->
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; width: 100%; box-sizing: border-box;">
       <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-        <select id="analytics-period" class="select">
+        <select id="analytics-period" class="select" style="max-width: 220px;">
           <option value="7">Last 7 days</option>
           <option value="30" selected>Last 30 days</option>
           <option value="90">Last 90 days</option>
@@ -119,9 +119,9 @@ view.innerHTML = `
           <button class="chart-btn" id="view-comparison" data-view="comparison">Comparison</button>
           <button class="chart-btn" id="view-client" data-view="client">Client Analytics</button>
         </div>
-        <button id="export-analytics" class="btn">Export Report</button>
       </div>
     </div>
+
 
     <!-- Content Container -->
     <div id="analytics-content">
@@ -295,7 +295,6 @@ view.innerHTML = `
   // Event listeners
   document.getElementById('analytics-period')?.addEventListener('change', handlePeriodChange);
   document.getElementById('apply-date-range')?.addEventListener('click', applyCustomDateRange);
-  document.getElementById('export-analytics')?.addEventListener('click', exportAnalytics);
 
   // View toggle handlers
   document.getElementById('view-standard')?.addEventListener('click', () => {
