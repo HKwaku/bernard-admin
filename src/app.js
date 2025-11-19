@@ -856,7 +856,7 @@ function buildCountrySelectHtml(selectId, currentValue = "+233") {
     .join("");
 
   return `
-    <div class="country-select-box" style="display:flex;flex-direction:column;gap:6px;width:100%">
+    <div class="country-select-box" style="display:flex;flex-direction:column;gap:6px;min-width:0;flex-shrink:0;">
       <input type="text" id="${selectId}-search" placeholder="Search country..." 
         style="padding:6px;border:1px solid #ccc;border-radius:6px;font-size:14px"/>
       <select id="${selectId}" style="padding:6px;border:1px solid #ccc;border-radius:6px;">
@@ -965,18 +965,16 @@ async function openNewCustomBookingModal() {
           </div>
         </div>
 
-        <div class="form-grid">
-          <div class="form-group">
-            <label>Email</label>
-            <input id="nb-email" type="email" />
-          </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input id="nb-email" type="email" />
+        </div>
 
-          <div class="form-group">
-            <label>Phone</label>
-            <div style="display:flex;gap:8px;align-items:flex-start;width:100%">
-              ${buildCountrySelectHtml("nb-country-code", "+233")}
-              <input id="nb-phone" type="text" style="flex:1" />
-            </div>
+        <div class="form-group">
+          <label>Phone</label>
+          <div style="display:flex;gap:8px;align-items:flex-start;width:100%">
+            ${buildCountrySelectHtml("nb-country-code", "+233")}
+            <input id="nb-phone" type="text" style="flex:1" />
           </div>
         </div>
 

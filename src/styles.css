@@ -2042,14 +2042,15 @@ label {
 }
 
 /* Form layout (reuse your grid styles) */
-#reservation-modal .form-grid{ display:grid; grid-template-columns:1fr 1fr; gap:var(--space-lg); }
-#reservation-modal .form-group{ display:flex; flex-direction:column; gap:6px; margin-bottom:var(--space-md); }
+#reservation-modal .form-grid{ display:grid; grid-template-columns:1fr 1fr; gap:var(--space-lg); min-width: 0; }
+#reservation-modal .form-group{ display:flex; flex-direction:column; gap:6px; margin-bottom:var(--space-md); min-width: 0; }
 #reservation-modal .form-group label{ font-weight:700; font-size:.875rem; color:var(--ink); }
 #reservation-modal .form-group input,
 #reservation-modal .form-group select,
 #reservation-modal .form-group textarea{
   padding:10px 12px; border:1px solid var(--ring); border-radius:var(--radius-md);
   font-size:.875rem; transition:border-color var(--transition-fast); font-family:inherit;
+  width: 100%; min-width: 0; box-sizing: border-box;
 }
 #reservation-modal .form-group input:focus,
 #reservation-modal .form-group select:focus,
@@ -2060,19 +2061,69 @@ label {
 @media (max-width:720px){
   #reservation-modal .bd{ padding:var(--space-lg); }
   #reservation-modal .form-grid{ grid-template-columns:1fr; }
+  
+  /* Fix phone field layout on mobile */
+  #reservation-modal .form-group > div[style*="display:flex"] {
+    flex-wrap: wrap;
+    gap: 8px !important;
+  }
+  
+  #reservation-modal .country-select-box {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+  
+  #reservation-modal .form-group input[type="text"][id*="phone"] {
+    width: 100% !important;
+    flex: 1 1 100% !important;
+    min-width: 0 !important;
+  }
 }
-/* ===== Packages (match Extras look) ===== */
+/* ===== Packages (match Room card style) ===== */
+.pkg-card-top {
+  display: grid;
+  grid-template-columns: 180px 1fr;     /* image | content */
+  gap: var(--space-lg);
+  align-items: center;
+}
+
 .pkg-thumb {
   width: 100%;
-  max-width: 160px;
-  height: 100px;
+  height: 140px;
   object-fit: cover;
   border-radius: var(--radius-md);
-  box-shadow: 0 4px 12px rgba(0,0,0,.06);
+  box-shadow: 0 4px 12px rgba(0,0,0,.08);
+}
+
+.pkg-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.pkg-card-title {
+  margin: 0 0 4px 0;
+  font-size: 1.25rem;
+  line-height: 1.2;
+  font-weight: 800;
 }
 
 .pkg-meta {
   color: var(--muted);
+}
+
+.pkg-card-body {
+  margin-top: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.pkg-card-price-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #415063;
 }
 
 .pkg-footer { /* reuse same footer look as rooms/extras */
@@ -2188,6 +2239,7 @@ label {
   flex-direction: column;
   gap: 6px;
   margin-bottom: var(--space-md);
+  min-width: 0;
 }
 
 #package-booking-modal .form-group label {
@@ -2206,6 +2258,8 @@ label {
   font-family: inherit;
   transition: border-color var(--transition-fast);
   width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 #package-booking-modal .form-group input:focus,
@@ -2221,6 +2275,7 @@ label {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--space-lg);
+  min-width: 0;
 }
 
 /* Footer */
@@ -2249,6 +2304,14 @@ label {
 
   #package-booking-modal .form-grid {
     grid-template-columns: 1fr;
+  }
+  
+  /* Fix date input truncation on mobile */
+  #package-booking-modal .form-group input[type="date"] {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    font-size: 16px; /* Prevents iOS zoom */
   }
 }
 
@@ -2537,6 +2600,25 @@ label {
   #view-rooms .room-card-media img {
     width: 100%;
     height: auto;
+  }
+  
+  /* Stack package cards on mobile (same as room cards) */
+  #view-packages .item {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  
+  #view-packages .pkg-card-top {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--space-md);
+  }
+  
+  #view-packages .pkg-thumb {
+    width: 100%;
+    height: auto;
+    max-width: 100%;
   }
 }
 #reservation-modal .extras-grid {

@@ -186,7 +186,7 @@ async function renderClientOverviewMetrics() {
         </div>
         <div class="metric-card">
           <div class="metric-label">Avg Booking Value</div>
-          <div class="metric-value">${formatCurrency(avgBookingValue)}</div>
+          <div class="metric-value">${formatCurrency(avgBookingValue, 'GHS')}</div>
           <div class="metric-subtext">Per reservation</div>
         </div>
         <div class="metric-card">
@@ -277,7 +277,7 @@ async function renderTopClients() {
           </div>
           <div style="text-align: right; flex-shrink: 0;">
             <div style="font-weight: 700; color: #0f172a; font-size: 16px;">${client.bookings} booking${client.bookings > 1 ? 's' : ''}</div>
-            <div style="font-size: 12px; color: #64748b; margin-top: 2px;">${formatCurrency(client.totalSpent)}</div>
+            <div style="font-size: 12px; color: #64748b; margin-top: 2px;">${formatCurrency(client.totalSpent, 'GHS')}</div>
           </div>
         </div>
       `;
@@ -532,7 +532,7 @@ async function renderGuestTypeAnalysis() {
           </div>
           <div style="display: flex; justify-content: space-between; font-size: 12px; color: #166534; margin-bottom: 8px;">
             <span>${totalBookings > 0 ? ((newGuestBookings / totalBookings) * 100).toFixed(1) : 0}% of bookings</span>
-            <span>${formatCurrency(newGuestRevenue)}</span>
+            <span>${formatCurrency(newGuestRevenue, 'GHS')}</span>
           </div>
           <div style="background: #dcfce7; border-radius: 999px; height: 8px; overflow: hidden;">
             <div style="background: #22c55e; height: 100%; width: ${totalBookings > 0 ? (newGuestBookings / totalBookings) * 100 : 0}%; transition: width 0.3s ease;"></div>
@@ -547,7 +547,7 @@ async function renderGuestTypeAnalysis() {
           </div>
           <div style="display: flex; justify-content: space-between; font-size: 12px; color: #1e40af; margin-bottom: 8px;">
             <span>${totalBookings > 0 ? ((returningGuestBookings / totalBookings) * 100).toFixed(1) : 0}% of bookings</span>
-            <span>${formatCurrency(returningGuestRevenue)}</span>
+            <span>${formatCurrency(returningGuestRevenue, 'GHS')}</span>
           </div>
           <div style="background: #dbeafe; border-radius: 999px; height: 8px; overflow: hidden;">
             <div style="background: #3b82f6; height: 100%; width: ${totalBookings > 0 ? (returningGuestBookings / totalBookings) * 100 : 0}%; transition: width 0.3s ease;"></div>
@@ -560,11 +560,11 @@ async function renderGuestTypeAnalysis() {
           <div style="display: flex; justify-content: space-around; margin-top: 8px;">
             <div>
               <div style="font-size: 11px; color: #64748b;">New</div>
-              <div style="font-size: 16px; font-weight: 700; color: #22c55e;">${newGuestBookings > 0 ? formatCurrency(newGuestRevenue / newGuestBookings) : formatCurrency(0)}</div>
+              <div style="font-size: 16px; font-weight: 700; color: #22c55e;">${newGuestBookings > 0 ? formatCurrency(newGuestRevenue / newGuestBookings, 'GHS') : formatCurrency(0, 'GHS')}</div>
             </div>
             <div>
               <div style="font-size: 11px; color: #64748b;">Returning</div>
-              <div style="font-size: 16px; font-weight: 700; color: #3b82f6;">${returningGuestBookings > 0 ? formatCurrency(returningGuestRevenue / returningGuestBookings) : formatCurrency(0)}</div>
+              <div style="font-size: 16px; font-weight: 700; color: #3b82f6;">${returningGuestBookings > 0 ? formatCurrency(returningGuestRevenue / returningGuestBookings, 'GHS') : formatCurrency(0, 'GHS')}</div>
             </div>
           </div>
         </div>
@@ -887,15 +887,15 @@ async function renderGuestLifetimeValue() {
         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
           <div style="text-align: center; padding: 12px; background: #f8fafc; border-radius: 8px;">
             <div style="font-size: 11px; color: #64748b; margin-bottom: 4px;">Average LTV</div>
-            <div style="font-size: 18px; font-weight: 700; color: #0f172a;">${formatCurrency(avgLTV)}</div>
+            <div style="font-size: 18px; font-weight: 700; color: #0f172a;">${formatCurrency(avgLTV, 'GHS')}</div>
           </div>
           <div style="text-align: center; padding: 12px; background: #f8fafc; border-radius: 8px;">
             <div style="font-size: 11px; color: #64748b; margin-bottom: 4px;">Highest LTV</div>
-            <div style="font-size: 18px; font-weight: 700; color: #22c55e;">${formatCurrency(maxLTV)}</div>
+            <div style="font-size: 18px; font-weight: 700; color: #22c55e;">${formatCurrency(maxLTV, 'GHS')}</div>
           </div>
           <div style="text-align: center; padding: 12px; background: #f8fafc; border-radius: 8px;">
             <div style="font-size: 11px; color: #64748b; margin-bottom: 4px;">Lowest LTV</div>
-            <div style="font-size: 18px; font-weight: 700; color: #94a3b8;">${formatCurrency(minLTV)}</div>
+            <div style="font-size: 18px; font-weight: 700; color: #94a3b8;">${formatCurrency(minLTV, 'GHS')}</div>
           </div>
         </div>
 
