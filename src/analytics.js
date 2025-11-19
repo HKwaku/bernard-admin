@@ -119,8 +119,7 @@ view.innerHTML = `
           <button class="chart-btn" id="view-comparison" data-view="comparison">Comparison</button>
           <button class="chart-btn" id="view-client" data-view="client">Client Analytics</button>
         </div>
-        <button id="export-analytics" class="btn">Export Report</button>
-      </div>
+        </div>
     </div>
 
     <!-- Content Container -->
