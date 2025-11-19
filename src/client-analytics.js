@@ -31,7 +31,8 @@ function renderClientAnalytics() {
   if (!view) return;
 
   view.innerHTML = `
-    <div class="card-bd client-analytics-container">
+    <div class="card-bd">
+      <div class="client-analytics-container">
       
       <!-- Header -->
       <div style="margin-bottom: 24px;">
