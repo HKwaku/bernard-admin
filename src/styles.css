@@ -2062,6 +2062,14 @@ label {
   #reservation-modal .bd{ padding:var(--space-lg); }
   #reservation-modal .form-grid{ grid-template-columns:1fr; }
   
+  /* Ensure date inputs fit properly on mobile */
+  #reservation-modal .form-group input[type="date"] {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    font-size: 16px; /* Prevents iOS zoom */
+  }
+  
   /* Fix phone field layout on mobile */
   #reservation-modal .form-group > div[style*="display:flex"] {
     flex-wrap: wrap;
