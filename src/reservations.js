@@ -7,6 +7,8 @@ import { $, $$, formatCurrency, toast } from './utils/helpers.js';
 // Shared module state
 let allReservations = [];
 let currentView = 'list'; // 'list' | 'calendar'
+let reservations = [];
+let collapsedGroups = new Set(); // Track which groups are collapsed
 
 /* ----------------- Public API ----------------- */
 
@@ -35,7 +37,7 @@ async function loadReservations() {
     const { data, error } = await supabase
       .from('reservations')
       .select(
-        'id,confirmation_code,room_type_id,room_type_code,room_name,check_in,check_out,nights,adults,children,status,payment_status,total,currency,guest_first_name,guest_last_name,guest_email,guest_phone,country_code,notes'
+        'id,confirmation_code,group_reservation_id,group_reservation_code,room_type_id,room_type_code,room_name,check_in,check_out,nights,adults,children,status,payment_status,total,currency,guest_first_name,guest_last_name,guest_email,guest_phone,country_code,notes'
       )
       .order('check_in', { ascending: false });
 
@@ -107,6 +109,7 @@ function filterReservations() {
         r.guest_email,
         r.guest_phone,
         r.confirmation_code,
+        r.group_reservation_code, 
         r.room_name,
         r.room_type_code,
       ]
@@ -206,17 +209,42 @@ function renderListView(reservations) {
     return;
   }
 
-  list.innerHTML = reservations
-    .map((r) => {
-      const total = formatCurrency(r.total || 0, r.currency || 'GHS');
+    // Group reservations by group_reservation_id (normalise to string)
+  const groupMap = new Map();
+  const standaloneReservations = [];
 
+  reservations.forEach((r) => {
+    if (r.group_reservation_id) {
+      const key = String(r.group_reservation_id);
+      if (!groupMap.has(key)) {
+        groupMap.set(key, []);
+      }
+      groupMap.get(key).push(r);
+    } else {
+      standaloneReservations.push(r);
+    }
+  });
+
+    // ----- Default all groups to COLLAPSED -----
+  if (collapsedGroups.size === 0) {
+    for (const groupId of groupMap.keys()) {
+      collapsedGroups.add(String(groupId));
+    }
+  }
+
+
+  // Helper function to render a single reservation item
+  const renderReservationItem = (r, inGroup = false) => {
+    const total = formatCurrency(r.total || 0, r.currency || 'GHS');
     const statusLabel = formatStatusLabel(r.status);
     const statusClass = getStatusBadgeClass(r.status);
     const paymentLabel = formatPaymentStatusLabel(r.payment_status);
     const paymentClass = getPaymentBadgeClass(r.payment_status);
 
+    const extraStyle = inGroup ? ' background: white; border: 1px solid #bae6fd; margin: 0;' : '';
+
     return `
-      <div class="item" onclick="showReservationDetails('${r.confirmation_code}')" style="cursor:pointer">
+      <div class="item" onclick="showReservationDetails('${r.confirmation_code}')" style="cursor:pointer;${extraStyle}">
         <div class="row">
           <div>
             <div class="title">${r.guest_first_name || ''} ${r.guest_last_name || ''}</div>
@@ -227,7 +255,16 @@ function renderListView(reservations) {
           </div>
 
           <div style="text-align:right">
-            <div class="code">${r.confirmation_code}</div>
+            <div class="code">
+              ${r.confirmation_code}
+              ${
+                r.group_reservation_code && !inGroup
+                  ? `<div style="font-size:12px;color:#0ea5e9;margin-top:2px">
+                      Group: <strong>${r.group_reservation_code}</strong>
+                    </div>`
+                  : ''
+              }
+            </div>
             <div style="margin:6px 0">
               <span class="badge ${statusClass}">${statusLabel}</span>
               <span class="badge ${paymentClass}" style="margin-left:6px">
@@ -243,8 +280,103 @@ function renderListView(reservations) {
         </div>
       </div>
     `;
-    })
-    .join('');
+  };
+
+  const html = [];
+
+  // Render groups
+  groupMap.forEach((groupReservations, groupId) => {
+    const key = String(groupId);
+    const isCollapsed = collapsedGroups.has(key);
+    
+    if (isCollapsed) {
+      // Collapsed: show single card
+      const primaryRes = groupReservations[0];
+      const totalRooms = groupReservations.length;
+      const totalAmount = groupReservations.reduce((sum, r) => sum + (r.total || 0), 0);
+      const total = formatCurrency(totalAmount, primaryRes.currency || 'GHS');
+      const statusLabel = formatStatusLabel(primaryRes.status);
+      const statusClass = getStatusBadgeClass(primaryRes.status);
+      const paymentLabel = formatPaymentStatusLabel(primaryRes.payment_status);
+      const paymentClass = getPaymentBadgeClass(primaryRes.payment_status);
+
+      html.push(`
+        <div class="item" style="border-left: 4px solid #0ea5e9; background: linear-gradient(to right, #f0f9ff, white);">
+          <div class="row">
+            <div>
+              <div class="title" style="display: flex; align-items: center; gap: 8px;">
+                <span style="background: #0ea5e9; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">GROUP</span>
+                ${primaryRes.guest_first_name || ''} ${primaryRes.guest_last_name || ''}
+              </div>
+              <div class="meta">${primaryRes.guest_email || ''}</div>
+              <div class="meta"><strong>${totalRooms} Cabins</strong> • ${primaryRes.check_in || ''} to ${primaryRes.check_out || ''}</div>
+              <div class="meta">Total Guests: ${primaryRes.adults || 1} • Nights: ${primaryRes.nights || 1}</div>
+            </div>
+
+            <div style="text-align:right">
+              <div class="code">
+                ${primaryRes.group_reservation_code || primaryRes.confirmation_code}
+              </div>
+              <div style="margin:6px 0">
+                <span class="badge ${statusClass}">${statusLabel}</span>
+                <span class="badge ${paymentClass}" style="margin-left:6px">
+                  ${paymentLabel}
+                </span>
+              </div>
+              <div class="price">${total}</div>
+            </div>
+          </div>
+          <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb;">
+            <button 
+              class="btn btn-sm" 
+              data-group-toggle="${key}"
+              onclick="event.stopPropagation()"
+              style="font-size: 13px; padding: 4px 12px;">
+              ▼ Expand ${totalRooms} Reservations
+            </button>
+          </div>
+        </div>
+      `);
+    } else {
+      // Expanded: show all reservations
+      const totalRooms = groupReservations.length;
+      const primaryRes = groupReservations[0];
+      
+      html.push(`
+        <div style="border: 2px solid #0ea5e9; border-radius: 8px; padding: 16px; margin-bottom: 16px; background: #f0f9ff;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="background: #0ea5e9; color: white; padding: 4px 12px; border-radius: 4px; font-size: 12px; font-weight: 600;">GROUP RESERVATION</span>
+              <span style="color: #0369a1; font-weight: 600;">${totalRooms} Cabins</span>
+              <span style="color: #64748b; font-size: 14px;">Code: ${primaryRes.group_reservation_code || primaryRes.confirmation_code}</span>
+            </div>
+            <button 
+              class="btn btn-sm" 
+              data-group-toggle="${key}"
+              style="font-size: 13px; padding: 4px 12px;">
+              ▲ Collapse Group
+            </button>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+      `);
+      
+      groupReservations.forEach((r) => {
+        html.push(renderReservationItem(r, true));
+      });
+      
+      html.push(`
+          </div>
+        </div>
+      `);
+    }
+  });
+
+  // Render standalone reservations
+  standaloneReservations.forEach((r) => {
+    html.push(renderReservationItem(r, false));
+  });
+
+  list.innerHTML = html.join('');
 
   // Attach Edit/Delete behaviour
   list.querySelectorAll('[data-res-edit]').forEach((btn) => {
@@ -260,6 +392,21 @@ function renderListView(reservations) {
       reservationDelete(btn.getAttribute('data-res-delete'));
     });
   });
+
+  // Attach group toggle listeners
+  list.querySelectorAll('[data-group-toggle]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const groupId = btn.getAttribute('data-group-toggle'); // keep as string
+      if (collapsedGroups.has(groupId)) {
+        collapsedGroups.delete(groupId);
+      } else {
+        collapsedGroups.add(groupId);
+      }
+      renderReservations();
+    });
+  });
+
 }
 
 /* ----------------- Calendar view ----------------- */
@@ -478,7 +625,7 @@ function reservationDelete(id) {
 }
 
 // ---- Prevent double booking when editing: skip the current reservation id ----
-async function isRoomAvailableForEdit(roomTypeId, roomTypeCode, checkInISO, checkOutISO, reservationIdToSkip) {
+async function isRoomAvailableForEdit(roomTypeId, roomTypeCode, checkInISO, checkOutISO, reservationIdsToSkip) {
   if (!roomTypeId && !roomTypeCode) return false;
   if (!checkInISO || !checkOutISO) return false;
 
@@ -504,9 +651,14 @@ async function isRoomAvailableForEdit(roomTypeId, roomTypeCode, checkInISO, chec
     }
 
     const idNum = roomTypeId != null ? Number(roomTypeId) : null;
+    
+    // Convert reservationIdsToSkip to array if it's a single value
+    const skipIds = Array.isArray(reservationIdsToSkip) 
+      ? reservationIdsToSkip 
+      : (reservationIdsToSkip ? [reservationIdsToSkip] : []);
 
     const relevant = (data || []).filter((r) => {
-      if (r.id === reservationIdToSkip) return false; // skip self
+      if (skipIds.includes(r.id)) return false; // skip all IDs in the group
       if (r.status === 'cancelled' || r.status === 'no_show') return false;
 
       const sameId   = idNum !== null && Number(r.room_type_id) === idNum;
@@ -575,7 +727,36 @@ async function openEditModal(id) {
     };
 
     const roomMap = Object.fromEntries((rooms || []).map((rm) => [String(rm.id), rm]));
-        const extraNameMap = Object.fromEntries((extras || []).map((e) => [String(e.id), e.name]));
+    const initialSelectedRoomId = r.room_type_id ? String(r.room_type_id) : null;
+
+    const roomsHtml =
+      (rooms || []).length
+        ? (rooms || [])
+            .map(
+              (rm) => `
+              <label style="display:flex;align-items:center;gap:8px;margin:4px 0;cursor:pointer">
+                <input 
+                  type="checkbox"
+                  class="er-room-checkbox"
+                  value="${rm.id}"
+                  data-code="${rm.code || ''}"
+                  data-name="${rm.name || ''}"
+                  style="width:auto"
+                  ${
+                    initialSelectedRoomId &&
+                    String(rm.id) === initialSelectedRoomId
+                      ? 'checked'
+                      : ''
+                  }
+                />
+                <span>${(rm.code || '').toUpperCase()} – ${rm.name || ''}</span>
+              </label>
+            `
+            )
+            .join('')
+        : '<div class="muted">No room types available</div>';
+
+    const extraNameMap = Object.fromEntries((extras || []).map((e) => [String(e.id), e.name]));
     const selectedExtraIdSet = new Set(
       (resExtras || []).map((e) => String(e.extra_id || e.extra_code || ''))
     );
@@ -679,13 +860,24 @@ async function openEditModal(id) {
           </div>
           </div>
 
-          <div class="form-grid">
-            <div class="form-group">
-              <label>Room (name/code)</label>
-              <select id="er-room">
-                <option value="">Select room type...</option>
-                ${roomOptions}
-              </select>
+                    <div class="form-grid">
+            <div class="form-group" style="min-width:0">
+              <label>Cabins (select one or more)</label>
+              <div
+                id="er-rooms-list"
+                style="
+                  border:1px solid var(--ring);
+                  border-radius:var(--radius-md);
+                  padding:10px;
+                  max-height:200px;
+                  overflow-y:auto;
+                  display:flex;
+                  flex-direction:column;
+                  gap:6px;
+                "
+              >
+                ${roomsHtml}
+              </div>
             </div>
             <div class="form-group">
               <label>Currency</label>
@@ -858,12 +1050,18 @@ async function openEditModal(id) {
     });
 
     // ---------- Pricing + coupon logic (mirrors New Custom Booking) ----------
-    const inEl = modal.querySelector('#er-in');
+        const inEl = modal.querySelector('#er-in');
     const outEl = modal.querySelector('#er-out');
     const nightsEl = modal.querySelector('#er-nights');
     const roomSubtotalEl = modal.querySelector('#er-room-subtotal');
-    const roomSel = modal.querySelector('#er-room');
     const currencyInput = modal.querySelector('#er-currency');
+
+    function getSelectedRoomIds() {
+      return Array.from(
+        modal.querySelectorAll('.er-room-checkbox:checked')
+      ).map((cb) => cb.value);
+    }
+
 
     let appliedCoupon = null;
     let selectedExtras = [];
@@ -883,14 +1081,13 @@ async function openEditModal(id) {
       }
     }
 
-    function computeRoomSubtotal() {
-      const roomId = roomSel.value || (r.room_type_id ? String(r.room_type_id) : '');
-      const info = roomMap[roomId];
+        function computeRoomSubtotal() {
+      const selectedRoomIds = getSelectedRoomIds();
       const ci = new Date(inEl.value);
       const co = new Date(outEl.value);
 
-      if (!info || !inEl.value || !outEl.value || !(co > ci)) {
-        // if we have an existing stored subtotal, keep that as fallback
+      if (!selectedRoomIds.length || !inEl.value || !outEl.value || !(co > ci)) {
+        // Fallback to stored subtotal if present
         if (typeof r.room_subtotal === 'number' && !roomSubtotalEl.value) {
           roomSubtotalEl.value = String(r.room_subtotal.toFixed(2));
         }
@@ -901,18 +1098,25 @@ async function openEditModal(id) {
       let weekdayN = 0;
       let weekendN = 0;
 
+      // Count nights between check-in (inclusive) and check-out (exclusive)
       for (let d = new Date(ci); d < co; d.setDate(d.getDate() + 1)) {
         if (isWeekend(d)) weekendN++;
         else weekdayN++;
       }
 
-      const wkdPrice = Number(info.base_price_per_night_weekday || 0);
-      const wkePrice = Number(info.base_price_per_night_weekend || 0);
-      const subtotal = weekdayN * wkdPrice + weekendN * wkePrice;
-
-      roomSubtotalEl.value = subtotal.toFixed(2);
       nightsEl.value = String(weekdayN + weekendN);
 
+      let totalSubtotal = 0;
+
+      selectedRoomIds.forEach((roomId) => {
+        const info = roomMap[String(roomId)];
+        if (!info) return;
+        const wkdPrice = Number(info.base_price_per_night_weekday || 0);
+        const wkePrice = Number(info.base_price_per_night_weekend || 0);
+        totalSubtotal += weekdayN * wkdPrice + weekendN * wkePrice;
+      });
+
+      roomSubtotalEl.value = totalSubtotal.toFixed(2);
       updatePriceBreakdown();
     }
 
@@ -1091,7 +1295,12 @@ async function openEditModal(id) {
       computeRoomSubtotal();
     });
 
-    roomSel.addEventListener('change', computeRoomSubtotal);
+    modal.addEventListener('change', (e) => {
+      if (e.target.classList.contains('er-room-checkbox')) {
+        computeRoomSubtotal();
+      }
+    });
+
 
 
     // Apply coupon
@@ -1238,21 +1447,24 @@ async function openEditModal(id) {
     // ---------- SAVE CHANGES ----------
     modal.querySelector('#er-save')?.addEventListener('click', async () => {
       try {
-        const roomSelect = modal.querySelector('#er-room');
-        const selectedOption = roomSelect.selectedOptions[0];
-        const roomTypeId = roomSelect.value || null;
-        const roomTypeCode = selectedOption
-          ? selectedOption.getAttribute('data-code')
-          : r.room_type_code || null;
-        const roomName =
-          (selectedOption && selectedOption.getAttribute('data-name')) ||
-          r.room_name ||
-          null;
+                const selectedRoomIds = getSelectedRoomIds();
 
-        if (!roomTypeId || !roomTypeCode) {
-          alert('Please select a room type');
+        if (!selectedRoomIds.length) {
+          alert('Please select at least one cabin');
           return;
         }
+
+        const primaryRoomId = selectedRoomIds[0];
+        const primaryInfo = roomMap[String(primaryRoomId)] || {};
+        const roomTypeId = primaryRoomId;
+        const roomTypeCode = primaryInfo.code || r.room_type_code || null;
+        const roomName = primaryInfo.name || r.room_name || null;
+
+        if (!roomTypeId || !roomTypeCode) {
+          alert('Please select at least one cabin');
+          return;
+        }
+
 
         if (!inEl.value || !outEl.value) {
           alert('Please select both check-in and check-out dates.');
@@ -1275,18 +1487,38 @@ async function openEditModal(id) {
           return;
         }
 
-        // Availability (excluding this reservation)
-        const available = await isRoomAvailableForEdit(
-          roomTypeId,
-          roomTypeCode,
-          inEl.value,
-          outEl.value,
-          id
-        );
+                // Availability check for each selected cabin
+        // First, get all reservation IDs in this group to skip them all
+        let idsToSkip = [id];
+        if (r.group_reservation_id) {
+          // This is part of a group, fetch all IDs in the group
+          const { data: groupRes } = await supabase
+            .from('reservations')
+            .select('id')
+            .eq('group_reservation_id', r.group_reservation_id);
+          if (groupRes && groupRes.length) {
+            idsToSkip = groupRes.map(gr => gr.id);
+          }
+        }
 
-        if (!available) {
-          alert('This cabin is NOT available for the selected dates.');
-          return;
+        for (const roomId of selectedRoomIds) {
+          const info = roomMap[String(roomId)] || {};
+          const code = info.code || null;
+
+          const available = await isRoomAvailableForEdit(
+            roomId,
+            code,
+            inEl.value,
+            outEl.value,
+            idsToSkip
+          );
+
+          if (!available) {
+            alert(
+              `${info.name || 'One of the selected cabins'} is NOT available for the selected dates.`
+            );
+            return;
+          }
         }
 
         const roomSubtotal = parseFloat(roomSubtotalEl.value) || 0;
@@ -1345,16 +1577,13 @@ async function openEditModal(id) {
 
         const finalTotal = Math.max(0, roomSubtotal + extrasTotal - discount);
 
-        const payload = {
+                const commonPayload = {
           guest_first_name: modal.querySelector('#er-first')?.value.trim() || null,
           guest_last_name: modal.querySelector('#er-last')?.value.trim() || null,
           guest_email: modal.querySelector('#er-email')?.value.trim() || null,
           country_code: modal.querySelector('#er-country-code')?.value.trim() || null,
           guest_phone: modal.querySelector('#er-phone')?.value.trim() || null,
           is_influencer: !!$('#res-influencer')?.checked,
-          room_name: roomName,
-          room_type_id: roomTypeId,
-          room_type_code: roomTypeCode,
           check_in: inEl.value || null,
           check_out: outEl.value || null,
           nights: Number(nightsEl.value || 0),
@@ -1363,17 +1592,52 @@ async function openEditModal(id) {
           status: modal.querySelector('#er-status')?.value || 'pending',
           payment_status: modal.querySelector('#er-pay')?.value || 'unpaid',
           currency: currencyInput.value.trim() || 'GHS',
-          room_subtotal: roomSubtotal,
+          notes: modal.querySelector('#er-notes')?.value || null,
+        };
+
+        // Recompute per-room subtotals
+        const ci2 = new Date(inEl.value);
+        const co2 = new Date(outEl.value);
+        let weekdayN2 = 0;
+        let weekendN2 = 0;
+        for (let d = new Date(ci2); d < co2; d.setDate(d.getDate() + 1)) {
+          if (isWeekend(d)) weekendN2++;
+          else weekdayN2++;
+        }
+
+        const perRoomSubtotals = selectedRoomIds.map((roomId) => {
+          const info = roomMap[String(roomId)] || {};
+          const wkd = Number(info.base_price_per_night_weekday || 0);
+          const wke = Number(info.base_price_per_night_weekend || 0);
+          return weekdayN2 * wkd + weekendN2 * wke;
+        });
+
+        const primaryRoomSubtotal = perRoomSubtotals[0] || 0;
+
+        const primaryPayload = {
+          ...commonPayload,
+          room_name: roomName,
+          room_type_id: roomTypeId,
+          room_type_code: roomTypeCode,
+          room_subtotal: primaryRoomSubtotal,
           extras_total: extrasTotal,
           discount_amount: discount,
           coupon_code: appliedCoupon ? appliedCoupon.code : null,
           total: finalTotal,
-          notes: modal.querySelector('#er-notes')?.value || null,
         };
+
+        // If more than one cabin, treat this as the group "leader"
+        if (selectedRoomIds.length > 1) {
+          primaryPayload.group_reservation_id = id;
+          primaryPayload.group_reservation_code = r.confirmation_code;
+        } else {
+          primaryPayload.group_reservation_id = null;
+          primaryPayload.group_reservation_code = null;
+        }
 
         const { error: upErr } = await supabase
           .from('reservations')
-          .update(payload)
+          .update(primaryPayload)
           .eq('id', id);
 
         if (upErr) {
@@ -1381,7 +1645,7 @@ async function openEditModal(id) {
           return;
         }
 
-        // Replace reservation_extras rows
+        // Replace reservation_extras for PRIMARY reservation only
         await supabase.from('reservation_extras').delete().eq('reservation_id', id);
         if (selectedExtras.length > 0) {
           const extrasPayload = selectedExtras.map((e) => ({
@@ -1398,6 +1662,41 @@ async function openEditModal(id) {
             .insert(extrasPayload);
           if (exErr) {
             console.error('Error saving extras (edit):', exErr);
+          }
+        }
+
+        // Additional cabins → create extra reservations as a group (no extras/discount)
+        const additionalRoomIds = selectedRoomIds.slice(1);
+
+        for (let index = 0; index < additionalRoomIds.length; index++) {
+          const roomId = additionalRoomIds[index];
+          const info = roomMap[String(roomId)] || {};
+          const sub = perRoomSubtotals[index + 1] || 0;
+          const childTotal = sub;
+
+          const childPayload = {
+            ...commonPayload,
+            confirmation_code:
+              'G' +
+              Math.random().toString(36).slice(2, 8).toUpperCase(),
+            room_name: info.name || null,
+            room_type_id: roomId,
+            room_type_code: info.code || null,
+            room_subtotal: sub,
+            extras_total: 0,
+            discount_amount: 0,
+            coupon_code: null,
+            total: childTotal,
+            group_reservation_id: id,
+            group_reservation_code: r.confirmation_code,
+          };
+
+          const { error: childErr } = await supabase
+            .from('reservations')
+            .insert(childPayload);
+
+          if (childErr) {
+            console.error('Error creating additional cabin reservation:', childErr);
           }
         }
 
@@ -1555,4 +1854,3 @@ window.showReservationDetails = function (confirmationCode) {
 
   document.body.appendChild(overlay);
 };
-
