@@ -2901,4 +2901,18 @@ label {
     box-sizing: border-box;
   }
 }
+  /* Ensure expanded group bookings don’t overflow horizontally on mobile */
+  .group-card {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow-x: hidden;
+  }
+
+  .group-card-header {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-sm);
+  }
 

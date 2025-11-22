@@ -343,8 +343,8 @@ function renderListView(reservations) {
       const primaryRes = groupReservations[0];
       
       html.push(`
-        <div style="border: 2px solid #0ea5e9; border-radius: 8px; padding: 16px; margin-bottom: 16px; background: #f0f9ff;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <div class="group-card" style="border: 2px solid #0ea5e9; border-radius: 8px; padding: 16px; margin-bottom: 16px; background: #f0f9ff;">
+          <div class="group-card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
             <div style="display: flex; align-items: center; gap: 8px;">
               <span style="background: #0ea5e9; color: white; padding: 4px 12px; border-radius: 4px; font-size: 12px; font-weight: 600;">GROUP RESERVATION</span>
               <span style="color: #0369a1; font-weight: 600;">${totalRooms} Cabins</span>
