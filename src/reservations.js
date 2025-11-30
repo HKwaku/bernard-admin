@@ -37,7 +37,7 @@ async function loadReservations() {
     const { data, error } = await supabase
       .from('reservations')
       .select(
-        'id,confirmation_code,group_reservation_id,group_reservation_code,room_type_id,room_type_code,room_name,check_in,check_out,nights,adults,children,status,payment_status,total,currency,guest_first_name,guest_last_name,guest_email,guest_phone,country_code,notes'
+        'id,confirmation_code,group_reservation_id,group_reservation_code,room_type_id,room_type_code,room_name,check_in,check_out,nights,adults,children,status,payment_status,total,currency,guest_first_name,guest_last_name,guest_email,guest_phone,country_code,notes,package_code,package_name'
       )
       .order('check_in', { ascending: false });
 
@@ -112,6 +112,8 @@ function filterReservations() {
         r.group_reservation_code, 
         r.room_name,
         r.room_type_code,
+        r.package_code,
+        r.package_name,
       ]
         .filter(Boolean)
         .join(' ')
@@ -250,6 +252,11 @@ function renderListView(reservations) {
             <div class="title">${r.guest_first_name || ''} ${r.guest_last_name || ''}</div>
             <div class="meta">${r.guest_email || ''}</div>
             <div class="meta">Room: <strong>${r.room_name || ''}</strong></div>
+            ${
+              r.package_name || r.package_code
+                ? `<div class="meta">Package: <strong>${r.package_name || r.package_name}</strong></div>`
+                : ''
+            }
             <div class="meta">Check-in: ${r.check_in || ''} • Check-out: ${r.check_out || ''}</div>
             <div class="meta">Guests: ${r.adults || 1} • Nights: ${r.nights || 1}</div>
           </div>
@@ -270,6 +277,13 @@ function renderListView(reservations) {
               <span class="badge ${paymentClass}" style="margin-left:6px">
                 ${paymentLabel}
               </span>
+              ${
+                r.package_code || r.package_name
+                  ? `<span class="badge" style="margin-left:6px;background:#fbbf24;color:#78350f;font-weight:600">
+                      Package
+                    </span>`
+                  : ''
+              }
             </div>
             <div class="price">${total}</div>
           </div>
@@ -554,6 +568,7 @@ for (let day = 1; day <= monthDays; day++) {
             return `
               <div class="${chipClass}">
                 ${b.room_type_code || b.room_name || ''}
+                ${b.package_code || b.package_name ? '<span style="margin-left:4px;font-size:10px;background:#fbbf24;color:#78350f;padding:1px 4px;border-radius:4px;font-weight:600">PKG</span>' : ''}
               </div>`;
           })
           .join('') || ''
@@ -1627,9 +1642,14 @@ async function openEditModal(id) {
         };
 
         // If more than one cabin, treat this as the group "leader"
+        // OR if editing a reservation that's already part of a group, preserve those attributes
         if (selectedRoomIds.length > 1) {
           primaryPayload.group_reservation_id = id;
           primaryPayload.group_reservation_code = r.confirmation_code;
+        } else if (r.group_reservation_id) {
+          // Preserve existing group attributes when editing a group member
+          primaryPayload.group_reservation_id = r.group_reservation_id;
+          primaryPayload.group_reservation_code = r.group_reservation_code;
         } else {
           primaryPayload.group_reservation_id = null;
           primaryPayload.group_reservation_code = null;
@@ -1823,6 +1843,16 @@ window.showReservationDetails = function (confirmationCode) {
             ${paymentLabel}
           </span>
         </p>
+
+        ${
+          reservation.package_code || reservation.package_name
+            ? `<p><strong>Package:</strong>
+                <span class="badge" style="background:#fbbf24;color:#78350f;font-weight:600">
+                  ${reservation.package_name || reservation.package_name}
+                </span>
+              </p>`
+            : ''
+        }
 
         <p><strong>Total:</strong> ${formatCurrency(
           reservation.total || 0,
