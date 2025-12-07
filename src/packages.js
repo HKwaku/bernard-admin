@@ -785,7 +785,14 @@ async function deletePackage(id) {
   if (!confirm('Delete this package? This cannot be undone.')) return;
   try {
     const { error } = await supabase.from('packages').delete().eq('id', id);
-    if (error) throw error;
+    if (error) {
+      // Check if it's a foreign key constraint error
+      if (error.message && error.message.includes('reservations_package_id_fkey')) {
+        alert('Cannot delete this package because it has existing reservations. Please delete or update those reservations first, or deactivate the package instead.');
+        return;
+      }
+      throw error;
+    }
     toast('Package deleted');
     initPackages();
   } catch (e) {

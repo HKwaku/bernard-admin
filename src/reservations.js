@@ -484,7 +484,7 @@ function renderCalendarView(reservations) {
     const checkOut = new Date(r.check_out);
     if (Number.isNaN(checkIn.getTime()) || Number.isNaN(checkOut.getTime())) return;
 
-    for (let d = new Date(checkIn); d <= checkOut; d.setDate(d.getDate() + 1)) {
+    for (let d = new Date(checkIn); d < checkOut; d.setDate(d.getDate() + 1)) {
       if (d.getMonth() === month && d.getFullYear() === year) {
         const day = d.getDate();
         if (!reservationsByDate[day]) reservationsByDate[day] = [];
