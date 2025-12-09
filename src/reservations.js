@@ -3,9 +3,11 @@
 
 import { supabase } from './config/supabase.js';
 import { $, $$, formatCurrency, toast } from './utils/helpers.js';
+import { openBookPackageModal } from './package_booking.js';
+import { openNewCustomBookingModal } from './custom_booking.js';
+
 const SOJOURN_API_BASE_URL =
   (typeof window !== 'undefined' && window.SOJOURN_API_BASE_URL) || '';
-
 
 
 // Shared module state
@@ -84,7 +86,7 @@ function setupReservationFilters() {
   monthSelect?.addEventListener('change', () => renderReservations());
   yearSelect?.addEventListener('change', () => renderReservations());
 
-  listBtn?.addEventListener('click', () => {
+    listBtn?.addEventListener('click', () => {
     currentView = 'list';
     listBtn.classList.add('active');
     calendarBtn?.classList.remove('active');
@@ -97,7 +99,69 @@ function setupReservationFilters() {
     listBtn?.classList.remove('active');
     renderReservations();
   });
+
+  // ---- Booking buttons (desktop + mobile) live in Reservations module ----
+    listBtn?.addEventListener('click', () => {
+    currentView = 'list';
+    listBtn.classList.add('active');
+    calendarBtn?.classList.remove('active');
+    renderReservations();
+  });
+
+  calendarBtn?.addEventListener('click', () => {
+    currentView = 'calendar';
+    calendarBtn.classList.add('active');
+    listBtn?.classList.remove('active');
+    renderReservations();
+  });
+
+  // ---- Booking buttons are now created inside Reservations module ----
+  // We attach them to the same toolbar row that holds search/month/year/view toggles.
+  const toolbar =
+    searchInput && searchInput.parentElement instanceof HTMLElement
+      ? searchInput.parentElement
+      : null;
+
+  if (toolbar && !toolbar.dataset._bookingButtonsInjected) {
+    toolbar.dataset._bookingButtonsInjected = '1';
+
+    const btnWrap = document.createElement('div');
+    btnWrap.className = 'booking-buttons';
+    btnWrap.style.display = 'flex';
+    btnWrap.style.flexDirection = 'row';
+    btnWrap.style.alignItems = 'center';
+    btnWrap.style.justifyContent = 'flex-end';
+    btnWrap.style.gap = '8px';
+    btnWrap.style.marginLeft = 'auto';
+    btnWrap.style.flexWrap = 'nowrap'; // prevent mobile stacking
+
+
+    const newCustomBtn = document.createElement('button');
+    newCustomBtn.id = 'new-custom-booking-btn';
+    newCustomBtn.className = 'btn btn-primary';
+    newCustomBtn.textContent = '+ New Custom Booking';
+
+    const bookPkgBtn = document.createElement('button');
+    bookPkgBtn.id = 'book-package-btn';
+    bookPkgBtn.className = 'btn btn-primary';
+    bookPkgBtn.textContent = '+ Book New Package';
+
+    btnWrap.appendChild(newCustomBtn);
+    btnWrap.appendChild(bookPkgBtn);
+    toolbar.appendChild(btnWrap);
+
+    newCustomBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      openNewCustomBookingModal();
+    });
+
+    bookPkgBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      openBookPackageModal();
+    });
+  }
 }
+
 
 function filterReservations() {
   const searchTerm = ($('#res-search')?.value || '').toLowerCase();

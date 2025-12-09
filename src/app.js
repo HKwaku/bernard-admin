@@ -24,8 +24,6 @@ import { initRooms } from './rooms.js';
 import { initExtras } from './extras.js';
 import { initCoupons } from './coupons.js';
 import { initPackages } from './packages.js';
-import { openBookPackageModal } from './package_booking.js';
-import { openNewCustomBookingModal } from './custom_booking.js';
 import { initChat } from './chat.js';
 
 // Main app initializer
@@ -65,12 +63,7 @@ export function initApp() {
             <button class="tab" data-view="coupons">🎟️ Coupons</button>
             <button class="tab" data-view="packages">📦 Packages</button>
             <button class="tab" data-view="analytics">📊 Analytics</button>
-          </div>
-
-          <div class="booking-buttons">
-            <button class="btn btn-primary" id="new-custom-booking-btn">+ New Custom Booking</button>
-            <button class="btn btn-primary" id="book-package-btn">+ Book New Package</button>
-          </div>
+          </div>        
 
           <div class="now" id="now"></div>
 
@@ -245,62 +238,6 @@ export function initApp() {
     </div>
   `;
 
-  // -------- Wire "New Custom Booking" and "Book New Package" buttons (no DOM changes) --------
-document.addEventListener('click', (e) => {
-  const btn = e.target.closest('button, a, [role="button"]');
-  if (!btn) return;
-
-  // normalize the visible text of the clicked element
-  const label = (btn.textContent || btn.innerText || '')
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  // handle both the new labels and any legacy variants
-  if (
-    label.includes('new custom booking') ||
-    label === '+ new custom booking' ||
-    label.includes('new booking') // legacy safety
-  ) {
-    e.preventDefault();
-    if (typeof openNewCustomBookingModal === 'function') {
-      openNewCustomBookingModal();
-    } else {
-      alert('openNewCustomBookingModal() is not defined.');
-    }
-    return;
-  }
-
-  if (
-    label.includes('book new package') ||
-    label === '+ book new package'
-  ) {
-    e.preventDefault();
-    if (typeof openBookPackageModal === 'function') {
-      openBookPackageModal();
-    } else {
-      alert('openBookPackageModal() is not defined.');
-    }
-  }
-}, true);
-// Stack the two booking buttons vertically without changing their size
-function stackBookingButtons() {
-  const a = document.getElementById('new-custom-booking-btn');
-  const b = document.getElementById('book-package-btn');
-  if (!a || !b) return;
-
-  // already stacked?
-  if (a.parentElement && a.parentElement.classList.contains('booking-btn-stack')) return;
-
-  // create a compact vertical wrapper right where the first button lives
-  const parent = a.parentElement;
-  const wrap = document.createElement('div');
-  wrap.className = 'booking-btn-stack';
-  // insert before the first button, then move both buttons inside
-  parent.insertBefore(wrap, a);
-  wrap.appendChild(a);
-  wrap.appendChild(b);
-}
   // ---------- Live Clock ----------
   const nowEl = $('#now');
   const tick = () => {
@@ -578,52 +515,4 @@ async function loadStats() {
 // optional: hook a button with id="package-add-btn"
 document.getElementById("package-add-btn")?.addEventListener("click", () => openPackageModal("add"));
 
-// ---------- New Booking Buttons ----------
-// ---- New Booking buttons: resilient binding (delegation + observer)
-(function () {
-  function onNewBookingClick(e) {
-    const customBtn = e.target.closest('#new-custom-booking-btn, #mobile-custom-booking-btn');
-    if (customBtn) {
-      e.preventDefault();
-      openNewCustomBookingModal();
-      return;
-    }
-    const pkgBtn = e.target.closest('#book-package-btn, #mobile-package-btn');
-    if (pkgBtn) {
-      e.preventDefault();
-      openBookPackageModal();
-    }
-  }
-
-  // Delegation handles dynamically-added buttons
-  document.addEventListener('click', onNewBookingClick, true);
-
-  // Safety net: if the header is re-rendered later, attach direct listeners too
-  const attachDirect = () => {
-    const a = document.getElementById('new-custom-booking-btn');
-    if (a && !a.__wired) {
-      a.__wired = true;
-      a.addEventListener('click', (e) => { e.preventDefault(); openNewCustomBookingModal(); });
-    }
-    const b = document.getElementById('book-package-btn');
-    if (b && !b.__wired) {
-      b.__wired = true;
-      b.addEventListener('click', (e) => { e.preventDefault(); openBookPackageModal(); });
-    }
-    const mobileA = document.getElementById('mobile-custom-booking-btn');
-    if (mobileA && !mobileA.__wired) {
-      mobileA.__wired = true;
-      mobileA.addEventListener('click', (e) => { e.preventDefault(); openNewCustomBookingModal(); });
-    }
-    const mobileB = document.getElementById('mobile-package-btn');
-    if (mobileB && !mobileB.__wired) {
-      mobileB.__wired = true;
-      mobileB.addEventListener('click', (e) => { e.preventDefault(); openBookPackageModal(); });
-    }
-  };
-
-  // Run once now and whenever DOM changes (header re-mounts)
-  attachDirect();
-  new MutationObserver(attachDirect).observe(document.body, { childList: true, subtree: true });
-})();
 }

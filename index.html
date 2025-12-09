@@ -23,6 +23,16 @@
         });
       }
     </script>
+
+     <!-- 🌍 Inject Sojourn API base URL for email sending -->
+  <script>
+    // This variable MUST match the env variable you set in .env
+    // Example: NEXT_PUBLIC_SOJOURN_API_BASE_URL="https://sojourncabins.com"
+    window.SOJOURN_API_BASE_URL = "%NEXT_PUBLIC_SOJOURN_API_BASE_URL%";
+    // If your bundler does not replace %VAR%, hard-code temporarily:
+    // window.SOJOURN_API_BASE_URL = "https://sojourncabins.com";
+  </script>
+  
   </head>
   <body>
     <div id="root"></div>

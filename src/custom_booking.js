@@ -11,6 +11,118 @@ const SOJOURN_API_BASE_URL =
 
 // ===== HELPER FUNCTIONS =====
 
+// --------- SHARED: compute disabled CHECK-IN dates (no rooms free) ---------
+async function loadDisabledCheckinDatesForAllRooms() {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const horizonEnd = new Date(today);
+    // 1-year horizon like the widget
+    horizonEnd.setFullYear(horizonEnd.getFullYear() + 1);
+
+    const horizonStartISO = today.toISOString().slice(0, 10);
+    const horizonEndISO = horizonEnd.toISOString().slice(0, 10);
+
+    // Load all active room types
+    const { data: rooms, error: roomErr } = await supabase
+      .from('room_types')
+      .select('id, code')
+      .eq('is_active', true);
+
+    if (roomErr || !Array.isArray(rooms) || rooms.length === 0) {
+      console.warn('loadDisabledCheckinDatesForAllRooms: no rooms or error', roomErr);
+      return new Set();
+    }
+
+    // Build occupancy lookup per room
+    const roomKeyById = {};
+    const roomKeyByCode = {};
+    const occupancy = {};
+
+    rooms.forEach((room) => {
+      const key = String(room.id);
+      occupancy[key] = new Set();
+      roomKeyById[String(room.id)] = key;
+      if (room.code) roomKeyByCode[String(room.code)] = key;
+    });
+
+    // Reservations overlapping the horizon
+    const { data: reservations, error: resErr } = await supabase
+      .from('reservations')
+      .select('room_type_id, room_type_code, check_in, check_out, status')
+      .lt('check_in', horizonEndISO)
+      .gt('check_out', horizonStartISO)
+      .not('status', 'in', '("cancelled","no_show")');
+
+    if (!resErr && Array.isArray(reservations)) {
+      reservations.forEach((r) => {
+        const keyFromId =
+          r.room_type_id != null ? roomKeyById[String(r.room_type_id)] : null;
+        const keyFromCode = r.room_type_code
+          ? roomKeyByCode[String(r.room_type_code)]
+          : null;
+        const key = keyFromId || keyFromCode;
+        if (!key || !r.check_in || !r.check_out) return;
+
+        const start = new Date(r.check_in + 'T00:00:00');
+        const end = new Date(r.check_out + 'T00:00:00');
+
+        for (let d = new Date(start); d < end; d.setDate(d.getDate() + 1)) {
+          const dStr = d.toISOString().slice(0, 10);
+          occupancy[key].add(dStr);
+        }
+      });
+    }
+
+    // Blocked dates
+    const roomIds = rooms.map((r) => r.id).filter((id) => id != null);
+    if (roomIds.length) {
+      const { data: blocked, error: blkErr } = await supabase
+        .from('blocked_dates')
+        .select('room_type_id, blocked_date')
+        .in('room_type_id', roomIds);
+
+      if (!blkErr && Array.isArray(blocked)) {
+        blocked.forEach((b) => {
+          const key = roomKeyById[String(b.room_type_id)];
+          if (!key || !b.blocked_date) return;
+          occupancy[key].add(b.blocked_date);
+        });
+      }
+    }
+
+    // For each potential check-in date in horizon, disable if NO room is free
+    const disabled = new Set();
+    const cursor = new Date(today);
+
+    while (cursor <= horizonEnd) {
+      const ciStr = cursor.toISOString().slice(0, 10);
+
+      let hasAvailableRoom = false;
+      for (const room of rooms) {
+        const key = String(room.id);
+        const occ = occupancy[key] || new Set();
+        if (!occ.has(ciStr)) {
+          hasAvailableRoom = true;
+          break;
+        }
+      }
+
+      if (!hasAvailableRoom) {
+        disabled.add(ciStr);
+      }
+
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    return disabled;
+  } catch (e) {
+    console.error('loadDisabledCheckinDatesForAllRooms error', e);
+    return new Set();
+  }
+}
+
 function genConfCode() {
   return ('B' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4)).toUpperCase();
 }
