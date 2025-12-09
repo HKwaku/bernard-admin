@@ -4,6 +4,10 @@
 import { supabase } from './config/supabase.js';
 import { toast } from './utils/helpers.js';
 import { initReservations } from './reservations.js';
+const SOJOURN_API_BASE_URL =
+  (typeof window !== 'undefined' && window.SOJOURN_API_BASE_URL) || '';
+
+
 
 // ===== HELPER FUNCTIONS =====
 
@@ -557,13 +561,20 @@ export async function openNewCustomBookingModal() {
           <label>Notes</label>
           <textarea id="nb-notes" rows="3"></textarea>
         </div>
+
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:8px;">
+            <input id="nb-send-email" type="checkbox" style="width:auto" />
+            <span>Send confirmation email to guest</span>
+          </label>
+        </div>
       </div>
 
       <div class="ft">
         <button class="btn" onclick="document.getElementById('reservation-modal').remove()">Cancel</button>
         <button class="btn btn-primary" id="nb-save">Save</button>
       </div>
-    </div>
+
   `;
 
   function getSelectedRoomIds() {
@@ -1223,20 +1234,36 @@ export async function openNewCustomBookingModal() {
       }
 
       // If this is a group booking (more than one cabin), set group fields
-      if (createdReservations.length > 1 && primaryReservation) {
-        const groupCode = genConfCode(); // shared group confirmation code
-        const groupIds = createdReservations.map((r) => r.id);
+      // --- Send confirmation email via Sojourn API (optional) ---
+      const sendEmailCheckbox = wrap.querySelector('#nb-send-email');
+      if (
+        sendEmailCheckbox &&
+        sendEmailCheckbox.checked &&
+        primaryReservation &&
+        primaryReservation.guest_email
+      ) {
+        if (!SOJOURN_API_BASE_URL) {
+          console.error(
+            'SOJOURN_API_BASE_URL is not set – cannot send booking email.'
+          );
+        } else {
+          try {
+            const emailResponse = await fetch(
+              `${SOJOURN_API_BASE_URL}/api/send-booking-email`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ booking: primaryReservation }),
+              }
+            );
 
-        try {
-          await supabase
-            .from('reservations')
-            .update({
-              group_reservation_id: primaryReservation.id,
-              group_reservation_code: groupCode,
-            })
-            .in('id', groupIds);
-        } catch (err) {
-          console.error('Error updating group reservation fields:', err);
+            if (!emailResponse.ok) {
+              const errorText = await emailResponse.text();
+              console.error('Email API error:', errorText);
+            }
+          } catch (err) {
+            console.error('Failed to send booking email:', err);
+          }
         }
       }
 

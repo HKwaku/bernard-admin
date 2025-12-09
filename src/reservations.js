@@ -3,6 +3,10 @@
 
 import { supabase } from './config/supabase.js';
 import { $, $$, formatCurrency, toast } from './utils/helpers.js';
+const SOJOURN_API_BASE_URL =
+  (typeof window !== 'undefined' && window.SOJOURN_API_BASE_URL) || '';
+
+
 
 // Shared module state
 let allReservations = [];
@@ -1000,6 +1004,13 @@ async function openEditModal(id) {
             <label>Notes</label>
             <textarea id="er-notes" rows="3">${r.notes || ''}</textarea>
           </div>
+
+          <div class="form-group">
+            <label style="display:flex;align-items:center;gap:8px;">
+              <input type="checkbox" id="er-send-email" style="width:auto" />
+              <span>Send confirmation email to guest</span>
+            </label>
+          </div>
         </div>
 
         <div class="ft">
@@ -1720,9 +1731,45 @@ async function openEditModal(id) {
           }
         }
 
+        // --- Send confirmation email via Sojourn API (optional) ---
+        const sendEmailCheckbox = modal.querySelector('#er-send-email');
+        if (sendEmailCheckbox && sendEmailCheckbox.checked) {
+          if (!SOJOURN_API_BASE_URL) {
+            console.error(
+              'SOJOURN_API_BASE_URL is not set – cannot send booking email.'
+            );
+          } else {
+            const bookingForEmail = {
+              // original reservation data
+              ...r,
+              // overwrite with latest values from edit
+              ...primaryPayload,
+            };
+
+            try {
+              const emailResponse = await fetch(
+                `${SOJOURN_API_BASE_URL}/api/send-booking-email`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ booking: bookingForEmail }),
+                }
+              );
+
+              if (!emailResponse.ok) {
+                const errorText = await emailResponse.text();
+                console.error('Email API error:', errorText);
+              }
+            } catch (err) {
+              console.error('Failed to send booking email:', err);
+            }
+          }
+        }
+
         toast('Reservation updated');
         close();
         loadReservations();
+
       } catch (e) {
         alert('Error saving: ' + (e.message || e));
       }

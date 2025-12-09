@@ -2,6 +2,9 @@
 import { supabase } from './config/supabase.js';
 import { toast } from './utils/helpers.js';
 import { initReservations } from './reservations.js';
+const SOJOURN_API_BASE_URL =
+  (typeof window !== 'undefined' && window.SOJOURN_API_BASE_URL) || '';
+
 
 /* ---------- helpers (local copy, no changes to app.js) ---------- */
 
@@ -288,6 +291,13 @@ export async function openBookPackageModal() {
           <textarea id="pb-notes" rows="3"></textarea>
         </div>
 
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:8px;">
+            <input id="pb-send-email" type="checkbox" style="width:auto" />
+            <span>Send confirmation email to guest</span>
+          </label>
+        </div>
+
         <div style="background:#f8fafc;border:1px solid var(--ring);border-radius:var(--radius-md);padding:12px;margin-top:12px">
           <div style="font-weight:700;font-size:0.875rem;margin-bottom:8px;color:var(--ink)">Price Breakdown</div>
           <div style="display:flex;justify-content:space-between;font-size:0.875rem;margin-bottom:4px">
@@ -555,6 +565,48 @@ export async function openBookPackageModal() {
         }
       }
 
+      // --- Send confirmation email via Sojourn API (optional) ---
+      const sendEmailCheckbox = wrap.querySelector('#pb-send-email');
+      if (
+        sendEmailCheckbox &&
+        sendEmailCheckbox.checked &&
+        reservation &&
+        reservation.guest_email
+      ) {
+        if (!SOJOURN_API_BASE_URL) {
+          console.error(
+            'SOJOURN_API_BASE_URL is not set – cannot send booking email.'
+          );
+        } else {
+          const bookingForEmail = {
+            ...reservation,
+            package_name: pkg.name,
+            package_code: pkg.code,
+            packageExtras: (extras || []).map((e) => ({
+              name: e.name,
+              quantity: e.quantity || 1,
+            })),
+          };
+
+          try {
+            const emailResponse = await fetch(
+              `${SOJOURN_API_BASE_URL}/api/send-booking-email`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ booking: bookingForEmail }),
+              }
+            );
+
+            if (!emailResponse.ok) {
+              const errorText = await emailResponse.text();
+              console.error('Email API error:', errorText);
+            }
+          } catch (err) {
+            console.error('Failed to send booking email:', err);
+          }
+        }
+      }
       toast('Package booking created');
       wrap.remove();
       initReservations?.();
