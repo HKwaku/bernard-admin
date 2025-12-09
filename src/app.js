@@ -25,6 +25,8 @@ import { initExtras } from './extras.js';
 import { initCoupons } from './coupons.js';
 import { initPackages } from './packages.js';
 import { initChat } from './chat.js';
+import { openBookPackageModal } from './package_booking.js';
+import { openNewCustomBookingModal } from './custom_booking.js';
 
 // Main app initializer
 export function initApp() {
@@ -362,6 +364,92 @@ export function initApp() {
         tab?.dispatchEvent(new Event('click', { bubbles: true }));
       });
     });
+
+        // Handle menu actions
+    mDrawer.querySelectorAll('button[data-view]').forEach((b) => {
+      b.addEventListener('click', async () => {
+        const view = b.getAttribute('data-view');
+        close();
+
+        if (view === 'quickstats') {
+          // Hide all panels
+          $$('.panel').forEach((p) => p.classList.remove('show'));
+          // Show only stats card
+          const statsCard = document.getElementById('quick-stats-card');
+          const recentCard = document.getElementById('recent-bookings-card');
+          if (statsCard) statsCard.style.display = 'block';
+          if (recentCard) recentCard.style.display = 'none';
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          $('#section-title').textContent = 'Quick Stats';
+          return;
+        }
+        if (view === 'recent') {
+          // Hide all panels
+          $$('.panel').forEach((p) => p.classList.remove('show'));
+          // Show only recent bookings card
+          const statsCard = document.getElementById('quick-stats-card');
+          const recentCard = document.getElementById('recent-bookings-card');
+          if (statsCard) statsCard.style.display = 'none';
+          if (recentCard) recentCard.style.display = 'block';
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          $('#section-title').textContent = 'Recent Bookings';
+          return;
+        }
+        if (view === 'newbooking') {
+          document.getElementById('new-booking-btn')?.click();
+          return;
+        }
+
+        // Update page title
+        const titles = {
+          chat: 'Chat',
+          reservations: 'Reservations',
+          rooms: 'Room Types',
+          extras: 'Extras',
+          coupons: 'Coupons',
+          packages: 'Packages',
+          analytics: 'Analytics',
+        };
+        $('#section-title').textContent = titles[view] || 'Dashboard';
+
+        // Hide stats cards when switching to other views
+        const statsCard = document.getElementById('quick-stats-card');
+        const recentCard = document.getElementById('recent-bookings-card');
+        if (statsCard) statsCard.style.display = 'none';
+        if (recentCard) recentCard.style.display = 'none';
+
+        // Delegate to the existing tab button (Reservations / Rooms / Extras / Coupons / Packages)
+        const tab = document.querySelector(`#tabs .tab[data-view="${view}"]`);
+        tab?.dispatchEvent(new Event('click', { bubbles: true }));
+      });
+    });
+
+    // ---- Mobile booking buttons stay in the menu, but open the same modals ----
+    const mobileCustomBookingBtn = $('#mobile-custom-booking-btn');
+    if (mobileCustomBookingBtn && !mobileCustomBookingBtn.dataset._wired) {
+      mobileCustomBookingBtn.dataset._wired = '1';
+      mobileCustomBookingBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        close();
+        // Ensure Reservations view is active before opening modal
+        const tab = document.querySelector('#tabs .tab[data-view="reservations"]');
+        tab?.dispatchEvent(new Event('click', { bubbles: true }));
+        openNewCustomBookingModal();
+      });
+    }
+
+    const mobilePackageBtn = $('#mobile-package-btn');
+    if (mobilePackageBtn && !mobilePackageBtn.dataset._wired) {
+      mobilePackageBtn.dataset._wired = '1';
+      mobilePackageBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        close();
+        const tab = document.querySelector('#tabs .tab[data-view="reservations"]');
+        tab?.dispatchEvent(new Event('click', { bubbles: true }));
+        openBookPackageModal();
+      });
+    }
+
   }
 
 // ---------- Quick Stats ----------

@@ -347,6 +347,21 @@
     margin-bottom: 16px !important;
   }
   
+    /* Ensure comparison view content never spills horizontally */
+  #analytics-content {
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+    box-sizing: border-box;
+  }
+
+  /* Extra safety for line charts in comparison view */
+  .chart-line-wrapper,
+  .chart-line-labels {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
   /* Full width controls */
   #analytics-period,
   #export-analytics {
