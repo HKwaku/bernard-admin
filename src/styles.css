@@ -2916,3 +2916,22 @@ label {
     gap: var(--space-sm);
   }
 
+/* ===== Analytics Comparison – mobile overflow fix ===== */
+@media (max-width: 767px) {
+  /* Never allow horizontal overflow in analytics view */
+  #view-analytics,
+  #view-analytics #analytics-content {
+    overflow-x: hidden !important;
+    max-width: 100% !important;
+  }
+
+  /* Weekday vs Weekend grid – stack vertically on small screens */
+  #view-analytics #analytics-content .chart-card > div[style*="grid-template-columns: 1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Very large percentage text – shrink on mobile so tiles can fit */
+  #view-analytics #analytics-content .chart-card div[style*="font-size: 32px"] {
+    font-size: 24px !important;
+  }
+}
