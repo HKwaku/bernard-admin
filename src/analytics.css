@@ -628,6 +628,29 @@
     font-size: 22px !important;
   }
   
+    /* Ensure comparison view content never spills horizontally */
+  #analytics-content {
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+    box-sizing: border-box;
+  }
+
+  #analytics-content .analytics-section,
+  #analytics-content .metrics-grid,
+  #analytics-content .chart-card {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    box-sizing: border-box;
+  }
+
+  #analytics-content .chart-line-wrapper,
+  #analytics-content .chart-line-labels {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
   /* Chart controls (D/W/M buttons) */
   .chart-controls {
     padding: 3px;
