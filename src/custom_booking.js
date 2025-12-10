@@ -4,8 +4,10 @@
 import { supabase } from './config/supabase.js';
 import { toast } from './utils/helpers.js';
 import { initReservations } from './reservations.js';
+// Base URL of the Sojourn public site (for email API)
 const SOJOURN_API_BASE_URL =
-  (typeof window !== 'undefined' && window.SOJOURN_API_BASE_URL) || '';
+  'https://sojourn-cabins.vercel.app';
+
 
 
 

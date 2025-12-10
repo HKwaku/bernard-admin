@@ -6,8 +6,10 @@ import { $, $$, formatCurrency, toast } from './utils/helpers.js';
 import { openBookPackageModal } from './package_booking.js';
 import { openNewCustomBookingModal } from './custom_booking.js';
 
+// Base URL of the Sojourn public site (for email API)
 const SOJOURN_API_BASE_URL =
-  (typeof window !== 'undefined' && window.SOJOURN_API_BASE_URL) || '';
+  'https://sojourn-cabins.vercel.app';
+
 
 
 // Shared module state

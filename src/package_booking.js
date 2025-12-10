@@ -2,8 +2,10 @@
 import { supabase } from './config/supabase.js';
 import { toast } from './utils/helpers.js';
 import { initReservations } from './reservations.js';
+// Base URL of the Sojourn public site (for email API)
 const SOJOURN_API_BASE_URL =
-  (typeof window !== 'undefined' && window.SOJOURN_API_BASE_URL) || '';
+  'https://sojourn-cabins.vercel.app';
+
 
 
 /* ---------- helpers (local copy, no changes to app.js) ---------- */
@@ -579,7 +581,9 @@ export async function openBookPackageModal() {
           );
         } else {
           const bookingForEmail = {
+            // everything from the reservation record we just inserted
             ...reservation,
+            // enrich with package info
             package_name: pkg.name,
             package_code: pkg.code,
             packageExtras: (extras || []).map((e) => ({
@@ -587,6 +591,8 @@ export async function openBookPackageModal() {
               quantity: e.quantity || 1,
             })),
           };
+
+
 
           try {
             const emailResponse = await fetch(
