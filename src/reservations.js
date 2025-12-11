@@ -768,7 +768,7 @@ for (let day = 1; day <= monthDays; day++) {
   }
   // If bookedCabinCount === 0, occupancyClass stays '' → green via CSS
 
-    html += `
+      html += `
     <div class="calendar-day ${bookings.length ? 'has-bookings' : ''}${occupancyClass}"
          data-day="${day}"
          style="cursor:${bookings.length ? 'pointer' : 'default'}">
@@ -824,6 +824,7 @@ for (let day = 1; day <= monthDays; day++) {
 
     </div>
   `;
+
 }
   html += '</div></div>';
   calendar.innerHTML = html;
