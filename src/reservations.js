@@ -768,58 +768,59 @@ for (let day = 1; day <= monthDays; day++) {
   }
   // If bookedCabinCount === 0, occupancyClass stays '' → green via CSS
 
-  html += `
+    html += `
     <div class="calendar-day ${bookings.length ? 'has-bookings' : ''}${occupancyClass}"
          data-day="${day}"
          style="cursor:${bookings.length ? 'pointer' : 'default'}">
 
       <div class="calendar-day-number">${day}</div>
-      ${
-        bookings
-          .slice(0, 5)
-          .map((b) => {
-            const co = b.check_out ? new Date(b.check_out) : null;
-            const isCheckoutDay =
-              co &&
-              !Number.isNaN(co.getTime()) &&
-              co.getFullYear() === year &&
-              co.getMonth() === month &&
-              co.getDate() === day;
 
-            const isBlocked = !!b.is_blocked;
+      <div class="calendar-day-chips">
+        ${
+          bookings
+            .slice(0, 5)
+            .map((b) => {
+              const co = b.check_out ? new Date(b.check_out) : null;
+              const isCheckoutDay =
+                co &&
+                !Number.isNaN(co.getTime()) &&
+                co.getFullYear() === year &&
+                co.getMonth() === month &&
+                co.getDate() === day;
 
-            let chipClass = isCheckoutDay
-              ? 'calendar-chip checkout-day'
-              : 'calendar-chip';
-            if (isBlocked) chipClass += ' blocked-chip';
+              const isBlocked = !!b.is_blocked;
 
-            let labelText = b.room_type_code || b.room_name || '';
-            if (isBlocked) {
-              // Ensure the label ends with -BLK
-              if (!/-BLK$/i.test(labelText)) {
-                labelText = `${labelText}-BLK`;
-              }
-            }
+              let chipClass = isCheckoutDay
+                ? 'calendar-chip checkout-day'
+                : 'calendar-chip';
+              if (isBlocked) chipClass += ' blocked-chip';
 
-            return `
-              <div class="${chipClass}" style="${isBlocked ? 'color:#6b7280;' : ''}">
-                ${labelText}
-                ${
-                  !isBlocked && (b.package_code || b.package_name)
-                    ? '<span class="pkg-badge">PKG</span>'
-
-                    : ''
+              let labelText = b.room_type_code || b.room_name || '';
+              if (isBlocked) {
+                // Ensure the label ends with -BLK
+                if (!/-BLK$/i.test(labelText)) {
+                  labelText = `${labelText}-BLK`;
                 }
-              </div>`;
+              }
 
-          })
-          .join('') || ''
-      }
-      ${
-        bookings.length > 5
-          ? `<div class="calendar-more">+${bookings.length - 5} more</div>`
-          : ''
-      }
+              return `
+                <div class="${chipClass}" style="${isBlocked ? 'color:#6b7280;' : ''}">
+                  ${labelText}
+                  ${
+                    !isBlocked && (b.package_code || b.package_name)
+                      ? '<span class="pkg-badge">PKG</span>'
+                      : ''
+                  }
+                </div>`;
+            })
+            .join('') || ''
+        }
+        ${
+          bookings.length > 5
+            ? `<div class="calendar-more">+${bookings.length - 5} more</div>`
+            : ''
+        }
+      </div>
 
     </div>
   `;
