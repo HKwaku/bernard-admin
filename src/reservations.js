@@ -808,7 +808,7 @@ for (let day = 1; day <= monthDays; day++) {
                   ${labelText}
                   ${
                     !isBlocked && (b.package_code || b.package_name)
-                      ? '<span class="pkg-badge">PKG</span>'
+                      ? '<span class="pkg-badge">PK</span>'
                       : ''
                   }
                 </div>`;
