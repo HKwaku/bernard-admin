@@ -3023,34 +3023,39 @@ label {
 .calendar-weekday-header div {
   border-right: 1px solid rgba(255,255,255,0.9) !important;
 }
-/* Calendar day layout: date on top, chips below */
+/* === Calendar: put date on top, chips directly underneath === */
 .calendar-day {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
+  align-items: stretch;
 }
 
+/* Override the earlier absolute positioning */
 .calendar-day-number {
+  position: static !important;
+  top: auto !important;
+  right: auto !important;
+  width: 100%;
+  text-align: right;      /* keep date on the right like before */
   font-weight: 700;
-  margin-bottom: 4px;
+  margin-bottom: 4px;     /* space before room names */
 }
 
-/* Chips stacked under the date */
+/* Stack room names under the date */
 .calendar-day-chips {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-/* Keep room label + PKG badge together (no random floating) */
+/* Keep room label + PKG badge glued together (no random floating) */
 .calendar-chip {
   display: flex;
   align-items: center;
   flex-wrap: nowrap;
 }
 
-/* PKG badge already purple; this just keeps it glued to the label */
 .pkg-badge {
   margin-left: 4px;
 }
-
