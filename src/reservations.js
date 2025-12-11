@@ -5,6 +5,8 @@ import { supabase } from './config/supabase.js';
 import { $, $$, formatCurrency, toast } from './utils/helpers.js';
 import { openBookPackageModal } from './package_booking.js';
 import { openNewCustomBookingModal } from './custom_booking.js';
+import { openBlockDatesModal } from './blocked_bookings.js';
+
 
 // Base URL of the Sojourn public site (for email API)
 const SOJOURN_API_BASE_URL =
@@ -42,7 +44,8 @@ async function loadReservations() {
   if (list) list.textContent = 'Loading…';
 
   try {
-    const { data, error } = await supabase
+    // --- Load real reservations ---
+    const { data: resData, error } = await supabase
       .from('reservations')
       .select(
         'id,confirmation_code,group_reservation_id,group_reservation_code,room_type_id,room_type_code,room_name,check_in,check_out,nights,adults,children,status,payment_status,total,currency,guest_first_name,guest_last_name,guest_email,guest_phone,country_code,notes,package_code,package_name'
@@ -51,7 +54,86 @@ async function loadReservations() {
 
     if (error) throw error;
 
-    allReservations = data || [];
+    // --- Load blocked dates + room info ---
+    const { data: blockedDates, error: blockedErr } = await supabase
+      .from('blocked_dates')
+      .select('id, room_type_id, blocked_date, reason');
+
+    if (blockedErr) throw blockedErr;
+
+    let blockedRows = [];
+    if (blockedDates && blockedDates.length) {
+      const roomIds = Array.from(
+        new Set(
+          blockedDates
+            .map((b) => b.room_type_id)
+            .filter(Boolean)
+        )
+      );
+
+      let roomTypeMap = {};
+      if (roomIds.length) {
+        const { data: roomTypes, error: roomErr } = await supabase
+          .from('room_types')
+          .select('id, code, name')
+          .in('id', roomIds);
+
+        if (roomErr) throw roomErr;
+        roomTypeMap = Object.fromEntries(
+          (roomTypes || []).map((rt) => [String(rt.id), rt])
+        );
+      }
+
+      blockedRows = blockedDates.map((b) => {
+        const rt = roomTypeMap[String(b.room_type_id)] || {};
+        const baseName = rt.name || rt.code || 'Cabin';
+        const roomNameBlk = `${baseName}-BLK`;
+
+        const blockDateStr = b.blocked_date; // 'YYYY-MM-DD'
+        let checkOutStr = blockDateStr;
+        if (blockDateStr) {
+          const d = new Date(blockDateStr);
+          if (!Number.isNaN(d.getTime())) {
+            d.setDate(d.getDate() + 1);
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            checkOutStr = `${y}-${m}-${day}`;
+          }
+        }
+
+        return {
+          id: `blocked-${b.id}`,
+          confirmation_code: null,
+          group_reservation_id: null,
+          group_reservation_code: null,
+          room_type_id: b.room_type_id,
+          room_type_code: rt.code || null,
+          room_name: roomNameBlk,
+          check_in: blockDateStr,
+          check_out: checkOutStr,
+          nights: 1,
+          adults: 0,
+          children: 0,
+          status: 'blocked',
+          payment_status: 'unpaid',
+          total: 0,
+          currency: 'GHS',
+          guest_first_name: null,
+          guest_last_name: null,
+          guest_email: null,
+          guest_phone: null,
+          country_code: null,
+          notes: b.reason || 'Blocked',
+          package_code: null,
+          package_name: null,
+          is_blocked: true,
+        };
+      });
+    }
+
+    // Combine real + blocked
+    allReservations = [...(resData || []), ...blockedRows];
 
     setupReservationFilters();
     renderReservations();
@@ -64,6 +146,7 @@ async function loadReservations() {
     }
   }
 }
+
 
 /* ----------------- Filters & view toggle ----------------- */
 
@@ -88,13 +171,33 @@ function setupReservationFilters() {
   monthSelect?.addEventListener('change', () => renderReservations());
   yearSelect?.addEventListener('change', () => renderReservations());
 
-    listBtn?.addEventListener('click', () => {
+  // --- Type filter (standard / group / package / blocked) ---
+  let typeSelect = $('#res-type');
+  if (!typeSelect && yearSelect) {
+    typeSelect = document.createElement('select');
+    typeSelect.id = 'res-type';
+    typeSelect.className = yearSelect.className || '';
+    typeSelect.innerHTML = `
+      <option value="">All types</option>
+      <option value="standard">Standard</option>
+      <option value="group">Group</option>
+      <option value="package">Package</option>
+      <option value="blocked">Blocked</option>
+    `;
+    yearSelect.insertAdjacentElement('afterend', typeSelect);
+  }
+
+  typeSelect?.addEventListener('change', () => renderReservations());
+
+
+  listBtn?.addEventListener('click', () => {
     currentView = 'list';
     listBtn.classList.add('active');
     calendarBtn?.classList.remove('active');
     renderReservations();
   });
 
+  
   calendarBtn?.addEventListener('click', () => {
     currentView = 'calendar';
     calendarBtn.classList.add('active');
@@ -141,15 +244,22 @@ function setupReservationFilters() {
     const newCustomBtn = document.createElement('button');
     newCustomBtn.id = 'new-custom-booking-btn';
     newCustomBtn.className = 'btn btn-primary';
-    newCustomBtn.textContent = '+ New Custom Booking';
+    newCustomBtn.textContent = '+New Booking';
 
     const bookPkgBtn = document.createElement('button');
     bookPkgBtn.id = 'book-package-btn';
     bookPkgBtn.className = 'btn btn-primary';
-    bookPkgBtn.textContent = '+ Book New Package';
+    bookPkgBtn.textContent = '+New Package';
+    
+    // NEW: Block Dates button
+    const blockDatesBtn = document.createElement('button');
+    blockDatesBtn.id = 'block-dates-btn';
+    blockDatesBtn.className = 'btn btn-primary';
+    blockDatesBtn.textContent = '+Block Dates';
 
     btnWrap.appendChild(newCustomBtn);
     btnWrap.appendChild(bookPkgBtn);
+    btnWrap.appendChild(blockDatesBtn);
     toolbar.appendChild(btnWrap);
 
     newCustomBtn.addEventListener('click', (e) => {
@@ -161,6 +271,11 @@ function setupReservationFilters() {
       e.preventDefault();
       openBookPackageModal();
     });
+     // Wire Block Dates button
+    blockDatesBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      openBlockDatesModal();
+    });
   }
 }
 
@@ -169,6 +284,7 @@ function filterReservations() {
   const searchTerm = ($('#res-search')?.value || '').toLowerCase();
   const selectedMonth = $('#res-month')?.value ?? '';
   const selectedYear = $('#res-year')?.value ?? '';
+  const typeFilter = $('#res-type')?.value || '';
 
   return (allReservations || []).filter((r) => {
     // Text search
@@ -206,6 +322,19 @@ function filterReservations() {
       if (Number.isNaN(d.getTime()) || d.getFullYear() !== Number(selectedYear)) {
         return false;
       }
+    }
+
+        // Type filter: standard / group / package / blocked
+    if (typeFilter) {
+      const isBlocked = !!r.is_blocked;
+      const isGroup = !!r.group_reservation_id;
+      const isPackage = !!(r.package_code || r.package_name);
+      const isStandard = !isBlocked && !isGroup && !isPackage;
+
+      if (typeFilter === 'blocked' && !isBlocked) return false;
+      if (typeFilter === 'group' && !isGroup) return false;
+      if (typeFilter === 'package' && !isPackage) return false;
+      if (typeFilter === 'standard' && !isStandard) return false;
     }
 
     return true;
@@ -305,8 +434,34 @@ function renderListView(reservations) {
   }
 
 
-  // Helper function to render a single reservation item
+    // Helper function to render a single reservation item
   const renderReservationItem = (r, inGroup = false) => {
+    // Blocked rows: simple grey card, no edit/delete, no click
+    if (r.is_blocked) {
+      return `
+        <div class="item" style="border-left:4px solid #9ca3af;background:linear-gradient(to right,#f3f4f6,white);color:#6b7280;cursor:default;">
+          <div class="row">
+            <div>
+              <div class="title" style="color:#6b7280;">
+                ${r.room_name || r.room_type_code || 'Cabin'}
+              </div>
+              <div class="meta">Blocked: ${r.check_in || ''}</div>
+              ${
+                r.notes
+                  ? `<div class="meta">Reason: ${r.notes}</div>`
+                  : ''
+              }
+            </div>
+            <div style="text-align:right">
+              <span class="badge" style="background:#e5e7eb;color:#374151;font-weight:600">
+                Blocked
+              </span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
     const total = formatCurrency(r.total || 0, r.currency || 'GHS');
     const statusLabel = formatStatusLabel(r.status);
     const statusClass = getStatusBadgeClass(r.status);
@@ -631,15 +786,31 @@ for (let day = 1; day <= monthDays; day++) {
               co.getMonth() === month &&
               co.getDate() === day;
 
-            const chipClass = isCheckoutDay
+            const isBlocked = !!b.is_blocked;
+
+            let chipClass = isCheckoutDay
               ? 'calendar-chip checkout-day'
               : 'calendar-chip';
+            if (isBlocked) chipClass += ' blocked-chip';
+
+            let labelText = b.room_type_code || b.room_name || '';
+            if (isBlocked) {
+              // Ensure the label ends with -BLK
+              if (!/-BLK$/i.test(labelText)) {
+                labelText = `${labelText}-BLK`;
+              }
+            }
 
             return `
-              <div class="${chipClass}">
-                ${b.room_type_code || b.room_name || ''}
-                ${b.package_code || b.package_name ? '<span style="margin-left:4px;font-size:10px;background:#fbbf24;color:#78350f;padding:1px 4px;border-radius:4px;font-weight:600">PKG</span>' : ''}
+              <div class="${chipClass}" style="${isBlocked ? 'color:#6b7280;' : ''}">
+                ${labelText}
+                ${
+                  !isBlocked && (b.package_code || b.package_name)
+                    ? '<span style="margin-left:4px;font-size:10px;background:#fbbf24;color:#78350f;padding:1px 4px;border-radius:4px;font-weight:600">PKG</span>'
+                    : ''
+                }
               </div>`;
+
           })
           .join('') || ''
       }
@@ -751,7 +922,7 @@ async function isRoomAvailableForEdit(roomTypeId, roomTypeCode, checkInISO, chec
       return sameId || sameCode;
     });
 
-    const hasOverlap = relevant.some((r) => {
+        const hasOverlap = relevant.some((r) => {
       if (!r.check_in || !r.check_out) return false;
       const existingStart = new Date(r.check_in);
       const existingEnd   = new Date(r.check_out);
@@ -765,7 +936,32 @@ async function isRoomAvailableForEdit(roomTypeId, roomTypeCode, checkInISO, chec
       return existingStart < newEnd && existingEnd > newStart;
     });
 
-    return !hasOverlap;
+    if (hasOverlap) {
+      // clash with another reservation
+      return false;
+    }
+
+    // --- ALSO TREAT BLOCKED DATES AS UNAVAILABLE WHEN EDITING ---
+    try {
+      if (roomTypeId != null) {
+        const { data: blocked, error: blockedError } = await supabase
+          .from('blocked_dates')
+          .select('id, room_type_id, blocked_date')
+          .eq('room_type_id', roomTypeId)
+          .gte('blocked_date', checkInISO)
+          .lt('blocked_date', checkOutISO); // [in, out)
+
+        if (blockedError) {
+          console.error('Blocked dates check error (edit):', blockedError);
+        } else if (blocked && blocked.length > 0) {
+          return false;
+        }
+      }
+    } catch (blkErr) {
+      console.error('Blocked dates check exception (edit):', blkErr);
+    }
+
+    return true;
   } catch (err) {
     console.error('Availability check exception (edit):', err);
     return false;

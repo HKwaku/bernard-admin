@@ -89,7 +89,7 @@ async function isRoomAvailable(roomTypeId, roomTypeCode, checkInISO, checkOutISO
     return sameId || sameCode;
   });
 
-  const hasOverlap = relevant.some((r) => {
+    const hasOverlap = relevant.some((r) => {
     if (!r.check_in || !r.check_out) return false;
     const existingStart = new Date(r.check_in);
     const existingEnd = new Date(r.check_out);
@@ -102,8 +102,34 @@ async function isRoomAvailable(roomTypeId, roomTypeCode, checkInISO, checkOutISO
     return existingStart < newEnd && existingEnd > newStart;
   });
 
-  return !hasOverlap;
+  if (hasOverlap) {
+    // already booked
+    return false;
+  }
+
+  // --- ALSO TREAT BLOCKED DATES AS UNAVAILABLE ---
+  try {
+    if (roomTypeId != null) {
+      const { data: blocked, error: blockedError } = await supabase
+        .from('blocked_dates')
+        .select('id, room_type_id, blocked_date')
+        .eq('room_type_id', roomTypeId)
+        .gte('blocked_date', checkInISO)
+        .lt('blocked_date', checkOutISO); // [in, out)
+
+      if (blockedError) {
+        console.error('Blocked dates check error (package booking):', blockedError);
+      } else if (blocked && blocked.length > 0) {
+        return false;
+      }
+    }
+  } catch (err) {
+    console.error('Blocked dates check exception (package booking):', err);
+  }
+
+  return true;
 }
+
 
 /* ---------- Book New Package ---------- */
 

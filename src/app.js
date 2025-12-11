@@ -27,6 +27,7 @@ import { initPackages } from './packages.js';
 import { initChat } from './chat.js';
 import { openBookPackageModal } from './package_booking.js';
 import { openNewCustomBookingModal } from './custom_booking.js';
+import { openBlockDatesModal } from './blocked_bookings.js'; // NEW
 
 // Main app initializer
 export function initApp() {
@@ -94,8 +95,9 @@ export function initApp() {
               <li><button data-view="packages"     class="btn" style="width:100%">📦 Packages</button></li>
               <li><button data-view="analytics"    class="btn" style="width:100%">📊 Analytics</button></li>
               <li><hr style="border:0;border-top:1px solid var(--ring);margin:6px 0"></li>
-              <li><button id="mobile-custom-booking-btn" class="btn btn-primary" style="width:100%">+ New Custom Booking</button></li>
-              <li><button id="mobile-package-btn" class="btn btn-primary" style="width:100%">+ Book New Package</button></li>
+              <li><button id="mobile-custom-booking-btn" class="btn btn-primary" style="width:100%">+New Booking</button></li>
+              <li><button id="mobile-package-btn" class="btn btn-primary" style="width:100%">+New Package</button></li>
+              <li><button id="mobile-block-dates-btn" class="btn btn-primary" style="width:100%">Block Dates</button></li>
               <li><hr style="border:0;border-top:1px solid var(--ring);margin:6px 0"></li>
               <li><button data-view="quickstats"   class="btn" style="width:100%">📊 Quick Stats</button></li>
               <li><button data-view="recent"       class="btn" style="width:100%">🧾 Recent Bookings</button></li>
@@ -447,6 +449,18 @@ export function initApp() {
         const tab = document.querySelector('#tabs .tab[data-view="reservations"]');
         tab?.dispatchEvent(new Event('click', { bubbles: true }));
         openBookPackageModal();
+      });
+    }
+
+        const mobileBlockDatesBtn = $('#mobile-block-dates-btn');
+    if (mobileBlockDatesBtn && !mobileBlockDatesBtn.dataset._wired) {
+      mobileBlockDatesBtn.dataset._wired = '1';
+      mobileBlockDatesBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        close();
+        const tab = document.querySelector('#tabs .tab[data-view="reservations"]');
+        tab?.dispatchEvent(new Event('click', { bubbles: true }));
+        openBlockDatesModal();
       });
     }
 
