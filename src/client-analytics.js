@@ -4,6 +4,54 @@
 import { supabase } from './config/supabase.js';
 import { formatCurrency, toast } from './utils/helpers.js';
 
+// Country code to country name mapping
+const COUNTRY_CODE_MAP = {
+  // Africa
+  "+213": "Algeria", "+244": "Angola", "+229": "Benin", "+267": "Botswana",
+  "+226": "Burkina Faso", "+257": "Burundi", "+237": "Cameroon", "+238": "Cape Verde",
+  "+236": "Central African Republic", "+235": "Chad", "+269": "Comoros", "+242": "Congo",
+  "+243": "Congo (DRC)", "+225": "Côte d'Ivoire", "+253": "Djibouti", "+20": "Egypt",
+  "+240": "Equatorial Guinea", "+291": "Eritrea", "+251": "Ethiopia", "+241": "Gabon",
+  "+220": "Gambia", "+233": "Ghana", "+224": "Guinea", "+245": "Guinea-Bissau",
+  "+254": "Kenya", "+266": "Lesotho", "+231": "Liberia", "+218": "Libya",
+  "+261": "Madagascar", "+265": "Malawi", "+223": "Mali", "+222": "Mauritania",
+  "+230": "Mauritius", "+212": "Morocco", "+258": "Mozambique", "+264": "Namibia",
+  "+227": "Niger", "+234": "Nigeria", "+250": "Rwanda", "+239": "Sao Tome & Principe",
+  "+221": "Senegal", "+248": "Seychelles", "+232": "Sierra Leone", "+252": "Somalia",
+  "+27": "South Africa", "+211": "South Sudan", "+249": "Sudan", "+268": "Eswatini",
+  "+255": "Tanzania", "+216": "Tunisia", "+256": "Uganda", "+260": "Zambia", "+263": "Zimbabwe",
+  
+  // Europe
+  "+355": "Albania", "+43": "Austria", "+32": "Belgium", "+359": "Bulgaria",
+  "+385": "Croatia", "+357": "Cyprus", "+420": "Czechia", "+45": "Denmark",
+  "+372": "Estonia", "+358": "Finland", "+33": "France", "+49": "Germany",
+  "+30": "Greece", "+36": "Hungary", "+354": "Iceland", "+353": "Ireland",
+  "+39": "Italy", "+371": "Latvia", "+370": "Lithuania", "+352": "Luxembourg",
+  "+356": "Malta", "+373": "Moldova", "+377": "Monaco", "+382": "Montenegro",
+  "+31": "Netherlands", "+47": "Norway", "+48": "Poland", "+351": "Portugal",
+  "+40": "Romania", "+7": "Russia/Kazakhstan", "+381": "Serbia", "+421": "Slovakia",
+  "+386": "Slovenia", "+34": "Spain", "+46": "Sweden", "+41": "Switzerland",
+  "+44": "United Kingdom", "+380": "Ukraine",
+  
+  // Americas
+  "+1": "USA/Canada", "+52": "Mexico", "+55": "Brazil", "+54": "Argentina",
+  "+57": "Colombia", "+56": "Chile", "+51": "Peru", "+58": "Venezuela",
+  
+  // Asia
+  "+93": "Afghanistan", "+374": "Armenia", "+994": "Azerbaijan", "+880": "Bangladesh",
+  "+975": "Bhutan", "+673": "Brunei", "+855": "Cambodia", "+86": "China",
+  "+91": "India", "+62": "Indonesia", "+98": "Iran", "+964": "Iraq",
+  "+972": "Israel", "+81": "Japan", "+962": "Jordan", "+965": "Kuwait",
+  "+996": "Kyrgyzstan", "+856": "Laos", "+961": "Lebanon", "+60": "Malaysia",
+  "+960": "Maldives", "+976": "Mongolia", "+977": "Nepal", "+92": "Pakistan",
+  "+63": "Philippines", "+65": "Singapore", "+94": "Sri Lanka", "+82": "South Korea",
+  "+886": "Taiwan", "+66": "Thailand", "+90": "Turkey", "+971": "UAE",
+  "+998": "Uzbekistan", "+84": "Vietnam",
+  
+  // Oceania
+  "+61": "Australia", "+64": "New Zealand", "+679": "Fiji", "+685": "Samoa", "+676": "Tonga"
+};
+
 // Date range state (matches parent analytics.js)
 let dateRange = {
   start: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
@@ -189,7 +237,7 @@ async function renderClientOverviewMetrics() {
   }
 }
 
-// 2. Top Clients by Bookings
+// 2. Top Clients by Bookings (All-Time)
 async function renderTopClients() {
   const el = document.getElementById('top-clients');
   if (!el) return;
@@ -202,17 +250,25 @@ async function renderTopClients() {
       .in('status', ['confirmed', 'checked-in', 'checked-out'])
       .order('created_at', { ascending: false });
 
-    if (error) throw error;
+    if (error) {
+      console.error('Supabase error in renderTopClients:', error);
+      throw error;
+    }
+
+    if (!allReservations || allReservations.length === 0) {
+      el.innerHTML = '<div class="analytics-empty">No bookings found</div>';
+      return;
+    }
 
     // Group by email
     const guestData = {};
     allReservations.forEach(r => {
       if (!r.guest_email) return;
-      const email = r.guest_email.toLowerCase();
+      const email = r.guest_email.toLowerCase().trim();
       
       if (!guestData[email]) {
         guestData[email] = {
-          name: [r.guest_first_name, r.guest_last_name].filter(Boolean).join(' ') || 'Guest',
+          name: [r.guest_first_name, r.guest_last_name].filter(Boolean).join(' ').trim() || 'Guest',
           bookings: 0,
           totalSpent: 0,
           lastBooking: null
@@ -220,7 +276,7 @@ async function renderTopClients() {
       }
       
       guestData[email].bookings += 1;
-      guestData[email].totalSpent += (r.total || 0);
+      guestData[email].totalSpent += (parseFloat(r.total) || 0);
       
       const bookingDate = new Date(r.created_at);
       if (!guestData[email].lastBooking || bookingDate > new Date(guestData[email].lastBooking)) {
@@ -231,11 +287,16 @@ async function renderTopClients() {
     // Convert to array and sort by bookings
     const topClients = Object.entries(guestData)
       .map(([email, data]) => ({ email, ...data }))
-      .sort((a, b) => b.bookings - a.bookings)
+      .filter(client => client.bookings > 0) // Ensure at least 1 booking
+      .sort((a, b) => {
+        // Sort by bookings first, then by total spent
+        if (b.bookings !== a.bookings) return b.bookings - a.bookings;
+        return b.totalSpent - a.totalSpent;
+      })
       .slice(0, 10);
 
     if (topClients.length === 0) {
-      el.innerHTML = '<div class="analytics-empty">No client data available</div>';
+      el.innerHTML = '<div class="analytics-empty">No clients with valid email addresses found</div>';
       return;
     }
 
@@ -272,11 +333,11 @@ async function renderTopClients() {
     el.innerHTML = html;
   } catch (err) {
     console.error('Error rendering top clients:', err);
-    el.innerHTML = '<div class="analytics-empty">Error loading top clients</div>';
+    el.innerHTML = `<div class="analytics-empty">Error loading top clients: ${err.message}</div>`;
   }
 }
 
-// 3. Country Distribution
+// 3. Country Distribution (Based on Country Code)
 async function renderCountrySplit() {
   const el = document.getElementById('country-split');
   if (!el) return;
@@ -284,7 +345,7 @@ async function renderCountrySplit() {
   try {
     const { data: reservations, error } = await supabase
       .from('reservations')
-      .select('guest_country')
+      .select('country_code')
       .gte('created_at', sqlDate(dateRange.start))
       .lte('created_at', sqlDate(dateRange.end))
       .in('status', ['confirmed', 'checked-in', 'checked-out']);
@@ -293,7 +354,8 @@ async function renderCountrySplit() {
 
     const countryCounts = {};
     reservations.forEach(r => {
-      const country = r.guest_country || 'Unknown';
+      if (!r.country_code) return;
+      const country = COUNTRY_CODE_MAP[r.country_code] || r.country_code;
       countryCounts[country] = (countryCounts[country] || 0) + 1;
     });
 
@@ -301,7 +363,7 @@ async function renderCountrySplit() {
       .map(([country, count]) => ({ country, count }))
       .sort((a, b) => b.count - a.count);
 
-    const totalBookings = reservations.length;
+    const totalBookings = reservations.filter(r => r.country_code).length;
 
     if (countryData.length === 0) {
       el.innerHTML = '<div class="analytics-empty">No country data available</div>';

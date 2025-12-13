@@ -6,6 +6,54 @@ import { initClientAnalytics, updateClientAnalyticsDateRange } from './client-an
 import { supabase } from './config/supabase.js';
 import { formatCurrency, toast } from './utils/helpers.js';
 
+// Country code to country name mapping
+const COUNTRY_CODE_MAP = {
+  // Africa
+  "+213": "Algeria", "+244": "Angola", "+229": "Benin", "+267": "Botswana",
+  "+226": "Burkina Faso", "+257": "Burundi", "+237": "Cameroon", "+238": "Cape Verde",
+  "+236": "Central African Republic", "+235": "Chad", "+269": "Comoros", "+242": "Congo",
+  "+243": "Congo (DRC)", "+225": "Côte d'Ivoire", "+253": "Djibouti", "+20": "Egypt",
+  "+240": "Equatorial Guinea", "+291": "Eritrea", "+251": "Ethiopia", "+241": "Gabon",
+  "+220": "Gambia", "+233": "Ghana", "+224": "Guinea", "+245": "Guinea-Bissau",
+  "+254": "Kenya", "+266": "Lesotho", "+231": "Liberia", "+218": "Libya",
+  "+261": "Madagascar", "+265": "Malawi", "+223": "Mali", "+222": "Mauritania",
+  "+230": "Mauritius", "+212": "Morocco", "+258": "Mozambique", "+264": "Namibia",
+  "+227": "Niger", "+234": "Nigeria", "+250": "Rwanda", "+239": "Sao Tome & Principe",
+  "+221": "Senegal", "+248": "Seychelles", "+232": "Sierra Leone", "+252": "Somalia",
+  "+27": "South Africa", "+211": "South Sudan", "+249": "Sudan", "+268": "Eswatini",
+  "+255": "Tanzania", "+216": "Tunisia", "+256": "Uganda", "+260": "Zambia", "+263": "Zimbabwe",
+  
+  // Europe
+  "+355": "Albania", "+43": "Austria", "+32": "Belgium", "+359": "Bulgaria",
+  "+385": "Croatia", "+357": "Cyprus", "+420": "Czechia", "+45": "Denmark",
+  "+372": "Estonia", "+358": "Finland", "+33": "France", "+49": "Germany",
+  "+30": "Greece", "+36": "Hungary", "+354": "Iceland", "+353": "Ireland",
+  "+39": "Italy", "+371": "Latvia", "+370": "Lithuania", "+352": "Luxembourg",
+  "+356": "Malta", "+373": "Moldova", "+377": "Monaco", "+382": "Montenegro",
+  "+31": "Netherlands", "+47": "Norway", "+48": "Poland", "+351": "Portugal",
+  "+40": "Romania", "+7": "Russia/Kazakhstan", "+381": "Serbia", "+421": "Slovakia",
+  "+386": "Slovenia", "+34": "Spain", "+46": "Sweden", "+41": "Switzerland",
+  "+44": "United Kingdom", "+380": "Ukraine",
+  
+  // Americas
+  "+1": "USA/Canada", "+52": "Mexico", "+55": "Brazil", "+54": "Argentina",
+  "+57": "Colombia", "+56": "Chile", "+51": "Peru", "+58": "Venezuela",
+  
+  // Asia
+  "+93": "Afghanistan", "+374": "Armenia", "+994": "Azerbaijan", "+880": "Bangladesh",
+  "+975": "Bhutan", "+673": "Brunei", "+855": "Cambodia", "+86": "China",
+  "+91": "India", "+62": "Indonesia", "+98": "Iran", "+964": "Iraq",
+  "+972": "Israel", "+81": "Japan", "+962": "Jordan", "+965": "Kuwait",
+  "+996": "Kyrgyzstan", "+856": "Laos", "+961": "Lebanon", "+60": "Malaysia",
+  "+960": "Maldives", "+976": "Mongolia", "+977": "Nepal", "+92": "Pakistan",
+  "+63": "Philippines", "+65": "Singapore", "+94": "Sri Lanka", "+82": "South Korea",
+  "+886": "Taiwan", "+66": "Thailand", "+90": "Turkey", "+971": "UAE",
+  "+998": "Uzbekistan", "+84": "Vietnam",
+  
+  // Oceania
+  "+61": "Australia", "+64": "New Zealand", "+679": "Fiji", "+685": "Samoa", "+676": "Tonga"
+};
+
 // View mode state: 'standard' or 'comparison'
 let viewMode = 'standard';
 
@@ -540,32 +588,64 @@ async function loadOccupancyMetrics() {
 
     if (error) throw error;
 
-    // Nights sold (fallback to date difference if nights missing)
-    const totalNightsSold = reservations.reduce((sum, r) => {
-      if (r.nights && r.nights > 0) return sum + r.nights;
-      if (r.check_in && r.check_out) {
+    // Get blocked dates to exclude from available nights
+    const { data: blockedDates } = await supabase
+      .from('blocked_dates')
+      .select('blocked_date, room_type_id')
+      .gte('blocked_date', sqlDate(dateRange.start))
+      .lte('blocked_date', sqlDate(dateRange.end));
+
+    console.log('🔍 Occupancy Metrics Debug:', {
+      dateRange: { start: sqlDate(dateRange.start), end: sqlDate(dateRange.end) },
+      blockedDates: blockedDates || [],
+      blockedCount: (blockedDates || []).length
+    });
+
+    // Calculate days in period (+1 to include both start and end dates)
+    const daysInPeriod = Math.max(
+      1,
+      Math.ceil((dateRange.end - dateRange.start) / (1000 * 60 * 60 * 24)) + 1
+    );
+
+    // Calculate available nights (excluding blocked dates)
+    const NUM_CABINS = 3; // SAND, SEA, SUN
+    const theoreticalCapacity = daysInPeriod * NUM_CABINS;
+    const blockedNights = (blockedDates || []).length;
+    const totalAvailableNights = theoreticalCapacity - blockedNights;
+
+    // Calculate occupied nights WITHIN the date range
+    let occupiedNightsInRange = 0;
+    let totalNightsSold = 0;
+
+    reservations.forEach(r => {
+      if (!r.check_in || !r.check_out) return;
+      
+      // Total nights for ALOS calculation (use stored nights or calculate)
+      if (r.nights && r.nights > 0) {
+        totalNightsSold += r.nights;
+      } else {
         const inDate = new Date(r.check_in);
         const outDate = new Date(r.check_out);
         const diff = Math.round((outDate - inDate) / (1000 * 60 * 60 * 24));
-        return sum + Math.max(diff, 0);
+        totalNightsSold += Math.max(diff, 0);
       }
-      return sum;
-    }, 0);
+      
+      // Nights within range for occupancy calculation
+      const checkIn = new Date(r.check_in);
+      const checkOut = new Date(r.check_out);
+      const rangeStart = new Date(Math.max(checkIn, dateRange.start));
+      const rangeEnd = new Date(Math.min(checkOut, dateRange.end));
+      const nightsInRange = Math.max(0, Math.ceil((rangeEnd - rangeStart) / (1000 * 60 * 60 * 24)));
+      occupiedNightsInRange += nightsInRange;
+    });
 
-    const daysInPeriod = Math.max(
-      1,
-      Math.ceil((dateRange.end - dateRange.start) / (1000 * 60 * 60 * 24))
-    );
-
-    const NUM_CABINS = 3; // SAND, SEA, SUN
-    const totalAvailableNights = daysInPeriod * NUM_CABINS;
-
+    // Calculate metrics
     const occupancyRate =
       totalAvailableNights > 0
-        ? (totalNightsSold / totalAvailableNights) * 100
+        ? (occupiedNightsInRange / totalAvailableNights) * 100
         : 0;
 
-    const avgLOS =
+    const alos =
       reservations.length > 0 ? totalNightsSold / reservations.length : 0;
 
     const bookingsCount = reservations.length;
@@ -574,6 +654,7 @@ async function loadOccupancyMetrics() {
       <div class="metric-card">
         <div class="metric-label">Occupancy Rate</div>
         <div class="metric-value">${occupancyRate.toFixed(1)}%</div>
+        <div class="metric-subtext">${occupiedNightsInRange} of ${totalAvailableNights} nights occupied</div>
       </div>
       <div class="metric-card">
         <div class="metric-label">Nights Sold</div>
@@ -582,10 +663,12 @@ async function loadOccupancyMetrics() {
       <div class="metric-card">
         <div class="metric-label">Available Nights</div>
         <div class="metric-value">${totalAvailableNights}</div>
+        <div class="metric-subtext">${blockedNights} nights blocked</div>
       </div>
       <div class="metric-card">
-        <div class="metric-label">Avg Length of Stay</div>
-        <div class="metric-value">${avgLOS.toFixed(1)} nights</div>
+        <div class="metric-label">ALOS</div>
+        <div class="metric-value">${alos.toFixed(1)}</div>
+        <div class="metric-subtext">Average Length of Stay</div>
       </div>
       <div class="metric-card">
         <div class="metric-label">Bookings in Period</div>
@@ -605,13 +688,37 @@ async function loadRevenueMetrics() {
   try {
     const { data: reservations, error } = await supabase
       .from('reservations')
-      .select('total, room_subtotal, extras_total, check_in, nights')
+      .select('total, room_subtotal, extras_total, check_in, check_out, nights')
       .gte('check_in', sqlDate(dateRange.start))
       .lte('check_in', sqlDate(dateRange.end))
       .in('status', ['confirmed', 'checked-in', 'checked-out']);
 
     if (error) throw error;
 
+    // Get blocked dates to calculate available nights correctly
+    const { data: blockedDates } = await supabase
+      .from('blocked_dates')
+      .select('blocked_date, room_type_id')
+      .gte('blocked_date', sqlDate(dateRange.start))
+      .lte('blocked_date', sqlDate(dateRange.end));
+
+    console.log('🔍 Revenue Metrics Debug:', {
+      dateRange: { start: sqlDate(dateRange.start), end: sqlDate(dateRange.end) },
+      blockedDates: blockedDates || [],
+      blockedCount: (blockedDates || []).length
+    });
+
+    // Calculate available nights (excluding blocked dates)
+    const daysInPeriod = Math.max(
+      1,
+      Math.ceil((dateRange.end - dateRange.start) / (1000 * 60 * 60 * 24)) + 1
+    );
+    const NUM_CABINS = 3;
+    const theoreticalCapacity = daysInPeriod * NUM_CABINS;
+    const blockedNights = (blockedDates || []).length;
+    const totalAvailableNights = theoreticalCapacity - blockedNights;
+
+    // Calculate revenue totals
     const totalRevenue = reservations.reduce(
       (sum, r) => sum + (parseFloat(r.total) || 0),
       0
@@ -625,19 +732,29 @@ async function loadRevenueMetrics() {
       0
     );
 
-    const totalNights = reservations.reduce(
-      (sum, r) => sum + (r.nights || 0),
-      0
-    );
+    // Calculate occupied nights WITHIN the date range
+    let occupiedNightsInRange = 0;
+    reservations.forEach(r => {
+      if (!r.check_in || !r.check_out) return;
+      const checkIn = new Date(r.check_in);
+      const checkOut = new Date(r.check_out);
+      const rangeStart = new Date(Math.max(checkIn, dateRange.start));
+      const rangeEnd = new Date(Math.min(checkOut, dateRange.end));
+      const nightsInRange = Math.max(0, Math.ceil((rangeEnd - rangeStart) / (1000 * 60 * 60 * 24)));
+      occupiedNightsInRange += nightsInRange;
+    });
 
     const avgBookingValue =
       reservations.length > 0 ? totalRevenue / reservations.length : 0;
 
-    // RevPAR here is revenue per sold night in the range
-    const revPAR = totalNights > 0 ? totalRevenue / totalNights : 0;
+    // RevPAR = Room Revenue / Available Nights (not sold nights)
+    const revPAR = totalAvailableNights > 0 ? roomRevenue / totalAvailableNights : 0;
 
-    // ADR = room revenue per sold night
-    const adr = totalNights > 0 ? roomRevenue / totalNights : 0;
+    // TRevPAR = Total Revenue / Available Nights (includes extras)
+    const trevpar = totalAvailableNights > 0 ? totalRevenue / totalAvailableNights : 0;
+
+    // ADR = Room Revenue / Occupied Nights (in range)
+    const adr = occupiedNightsInRange > 0 ? roomRevenue / occupiedNightsInRange : 0;
 
     const html = `
       <div class="metric-card">
@@ -657,12 +774,19 @@ async function loadRevenueMetrics() {
         <div class="metric-value">${formatCurrencyCompact(avgBookingValue, 'GHS')}</div>
       </div>
       <div class="metric-card">
-        <div class="metric-label">RevPAR</div>
-        <div class="metric-value">${formatCurrencyCompact(revPAR, 'GHS')}</div>
-      </div>
-      <div class="metric-card">
         <div class="metric-label">ADR</div>
         <div class="metric-value">${formatCurrencyCompact(adr, 'GHS')}</div>
+        <div class="metric-subtext">Average Daily Rate</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">RevPAR</div>
+        <div class="metric-value">${formatCurrencyCompact(revPAR, 'GHS')}</div>
+        <div class="metric-subtext">Revenue per Available Room</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">TRevPAR</div>
+        <div class="metric-value">${formatCurrencyCompact(trevpar, 'GHS')}</div>
+        <div class="metric-subtext">Total Revenue per Available Room</div>
       </div>
     `;
 

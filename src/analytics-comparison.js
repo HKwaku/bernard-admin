@@ -116,10 +116,19 @@ async function fetchReservationsForPeriod(start, end) {
 }
 
 // Calculate occupancy metrics
-function calculateOccupancyMetrics(reservations, start, end) {
+async function calculateOccupancyMetrics(reservations, start, end) {
   const NUM_CABINS = 3;
-  const totalDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
-  const totalCabinNights = NUM_CABINS * totalDays;
+  const totalDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
+  
+  // Get blocked dates for this period
+  const { data: blockedDates } = await supabase
+    .from('blocked_dates')
+    .select('blocked_date, room_type_id')
+    .gte('blocked_date', sqlDate(start))
+    .lte('blocked_date', sqlDate(end));
+  
+  const blockedNights = (blockedDates || []).length;
+  const totalCabinNights = (NUM_CABINS * totalDays) - blockedNights;
 
   let occupiedNights = 0;
   let totalNights = 0;
@@ -140,11 +149,11 @@ function calculateOccupancyMetrics(reservations, start, end) {
   const occupancyRate = totalCabinNights > 0 ? (occupiedNights / totalCabinNights) * 100 : 0;
   const avgLOS = reservations.length > 0 ? totalNights / reservations.length : 0;
 
-  return { occupancyRate, avgLOS, totalNights, bookings: reservations.length };
+  return { occupancyRate, avgLOS, totalNights, bookings: reservations.length, availableNights: totalCabinNights };
 }
 
 // Calculate revenue metrics
-function calculateRevenueMetrics(reservations) {
+function calculateRevenueMetrics(reservations, availableNights) {
   const totalRevenue = reservations.reduce((sum, r) => sum + (parseFloat(r.total) || 0), 0);
   const roomRevenue = reservations.reduce((sum, r) => sum + (parseFloat(r.room_subtotal) || 0), 0);
   
@@ -157,9 +166,24 @@ function calculateRevenueMetrics(reservations) {
     }
   });
 
-  const avgBookingValue = reservations.length > 0 ? totalRevenue / reservations.length : 0;
+  // Calculate occupied nights within range for ADR
+  let occupiedNights = 0;
+  reservations.forEach(r => {
+    occupiedNights += r.nights || 0;
+  });
 
-  return { totalRevenue, roomRevenue, extrasRevenue, avgBookingValue };
+  const avgBookingValue = reservations.length > 0 ? totalRevenue / reservations.length : 0;
+  
+  // RevPAR = Room Revenue / Available Nights (not sold nights)
+  const revPAR = availableNights > 0 ? roomRevenue / availableNights : 0;
+  
+  // TRevPAR = Total Revenue / Available Nights (includes extras)
+  const trevpar = availableNights > 0 ? totalRevenue / availableNights : 0;
+  
+  // ADR = Room Revenue / Occupied Nights
+  const adr = occupiedNights > 0 ? roomRevenue / occupiedNights : 0;
+
+  return { totalRevenue, roomRevenue, extrasRevenue, avgBookingValue, revPAR, trevpar, adr };
 }
 
 // Calculate extras metrics
@@ -733,15 +757,15 @@ export async function renderComparisonView(dateRange) {
     ]);
 
     // Calculate metrics for each period
-    const currentOccupancy = calculateOccupancyMetrics(currentRes, periods.current.start, periods.current.end);
-    const momOccupancy = calculateOccupancyMetrics(momRes, periods.mom.start, periods.mom.end);
-    const qoqOccupancy = calculateOccupancyMetrics(qoqRes, periods.qoq.start, periods.qoq.end);
-    const yoyOccupancy = calculateOccupancyMetrics(yoyRes, periods.yoy.start, periods.yoy.end);
+    const currentOccupancy = await calculateOccupancyMetrics(currentRes, periods.current.start, periods.current.end);
+    const momOccupancy = await calculateOccupancyMetrics(momRes, periods.mom.start, periods.mom.end);
+    const qoqOccupancy = await calculateOccupancyMetrics(qoqRes, periods.qoq.start, periods.qoq.end);
+    const yoyOccupancy = await calculateOccupancyMetrics(yoyRes, periods.yoy.start, periods.yoy.end);
 
-    const currentRevenue = calculateRevenueMetrics(currentRes);
-    const momRevenue = calculateRevenueMetrics(momRes);
-    const qoqRevenue = calculateRevenueMetrics(qoqRes);
-    const yoyRevenue = calculateRevenueMetrics(yoyRes);
+    const currentRevenue = calculateRevenueMetrics(currentRes, currentOccupancy.availableNights);
+    const momRevenue = calculateRevenueMetrics(momRes, momOccupancy.availableNights);
+    const qoqRevenue = calculateRevenueMetrics(qoqRes, qoqOccupancy.availableNights);
+    const yoyRevenue = calculateRevenueMetrics(yoyRes, yoyOccupancy.availableNights);
 
     const currentExtras = calculateExtrasMetrics(currentRes);
     const momExtras = calculateExtrasMetrics(momRes);
@@ -766,7 +790,7 @@ export async function renderComparisonView(dateRange) {
             (v) => `${v.toFixed(1)}%`
           )}
           ${renderComparisonCard(
-            'Avg Length of Stay',
+            'ALOS',
             currentOccupancy.avgLOS,
             momOccupancy.avgLOS,
             qoqOccupancy.avgLOS,
@@ -851,6 +875,30 @@ export async function renderComparisonView(dateRange) {
             momRevenue.avgBookingValue,
             qoqRevenue.avgBookingValue,
             yoyRevenue.avgBookingValue,
+            formatCurrencyCompact
+          )}
+          ${renderComparisonCard(
+            'ADR',
+            currentRevenue.adr,
+            momRevenue.adr,
+            qoqRevenue.adr,
+            yoyRevenue.adr,
+            formatCurrencyCompact
+          )}
+          ${renderComparisonCard(
+            'RevPAR',
+            currentRevenue.revPAR,
+            momRevenue.revPAR,
+            qoqRevenue.revPAR,
+            yoyRevenue.revPAR,
+            formatCurrencyCompact
+          )}
+          ${renderComparisonCard(
+            'TRevPAR',
+            currentRevenue.trevpar,
+            momRevenue.trevpar,
+            qoqRevenue.trevpar,
+            yoyRevenue.trevpar,
             formatCurrencyCompact
           )}
         </div>
