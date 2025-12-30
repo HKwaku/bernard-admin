@@ -4071,3 +4071,24 @@ textarea {
 #view-chat #messages .msg .bubble > * {
   max-width: 100% !important;
 }
+/* ===== Chat tables: horizontal scroll wrapper ===== */
+#view-chat .chat-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Let table be as wide as it needs; wrapper provides scroll */
+#view-chat .chat-table-scroll table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+}
+
+/* Keep cells from wrapping weirdly */
+#view-chat .chat-table-scroll th,
+#view-chat .chat-table-scroll td {
+  white-space: nowrap;
+}
+

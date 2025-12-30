@@ -7,6 +7,17 @@ import { $, addMessage, showTyping, hideTyping } from './utils/helpers.js';
    UI HELPERS
 ----------------------------*/
 
+function wrapChatTables(html) {
+  if (!html || typeof html !== "string") return html;
+
+  // Wrap any rendered HTML tables in a scroll container
+  return html.replace(
+    /<table[\s\S]*?<\/table>/gi,
+    (tbl) => `<div class="chat-table-scroll">${tbl}</div>`
+  );
+}
+
+
 function appendStatusBubble(text = "Thinking.") {
   const messagesDiv = $("#messages");
   const statusDiv = document.createElement("div");
@@ -76,7 +87,8 @@ async function sendMessage() {
     $("#status-indicator")?.remove();
 
     const finalReply = reply || "Done.";
-    addMessage(finalReply);
+    addMessage(wrapChatTables(finalReply));
+
 
     // Push assistant reply into Bernard history
     bernardHistory.push({ role: "assistant", content: finalReply });
