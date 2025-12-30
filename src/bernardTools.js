@@ -266,14 +266,23 @@ export const deleteRoomTypeTool = tool({
     let query = supabase.from("room_types").delete();
     
     if (identifier.length < 10) {
-      query = query.eq("code", identifier.toUpperCase());
+      query = query.eq("code", identifier.toUpperCase()).select();
     } else {
-      query = query.eq("id", identifier);
+      query = query.eq("id", identifier).select();
     }
 
-    const { error } = await query;
+    const { data, error } = await query;
 
-    if (error) return `Error deleting room type: ${error.message}`;
+    if (error) {
+      if (error.code === '23503') {
+        return `✗ Cannot delete room type '${identifier}': This room is being used in packages or reservations. You must delete or reassign those first.`;
+      }
+      return `Error deleting room type: ${error.message}`;
+    }
+
+    if (!data || data.length === 0) {
+      return `✗ Room type '${identifier}' not found or could not be deleted. It may be in use.`;
+    }
 
     return `✓ Room type '${identifier}' deleted successfully. This action is permanent.`;
   },
@@ -427,14 +436,23 @@ export const deleteExtraTool = tool({
     let query = supabase.from("extras").delete();
     
     if (identifier.length > 20 && identifier.includes('-')) {
-      query = query.eq("id", identifier);
+      query = query.eq("id", identifier).select();
     } else {
-      query = query.ilike("name", `%${identifier}%`);
+      query = query.ilike("name", `%${identifier}%`).select();
     }
 
-    const { error } = await query;
+    const { data, error } = await query;
 
-    if (error) return `Error deleting extra: ${error.message}`;
+    if (error) {
+      if (error.code === '23503') {
+        return `✗ Cannot delete extra '${identifier}': This extra is being used in packages or reservations. You must remove those associations first.`;
+      }
+      return `Error deleting extra: ${error.message}`;
+    }
+
+    if (!data || data.length === 0) {
+      return `✗ Extra '${identifier}' not found or could not be deleted. It may be in use.`;
+    }
 
     return `✓ Extra '${identifier}' deleted successfully. This action is permanent.`;
   },
@@ -609,14 +627,24 @@ export const deletePackageTool = tool({
     let query = supabase.from("packages").delete();
     
     if (identifier.length > 20 && identifier.includes('-')) {
-      query = query.eq("id", identifier);
+      query = query.eq("id", identifier).select();
     } else {
-      query = query.ilike("name", `%${identifier}%`);
+      query = query.ilike("name", `%${identifier}%`).select();
     }
 
-    const { error } = await query;
+    const { data, error } = await query;
 
-    if (error) return `Error deleting package: ${error.message}`;
+    if (error) {
+      // Check for foreign key constraint error
+      if (error.code === '23503') {
+        return `✗ Cannot delete package '${identifier}': This package is being used in existing reservations. You must delete or reassign those reservations first.`;
+      }
+      return `Error deleting package: ${error.message}`;
+    }
+
+    if (!data || data.length === 0) {
+      return `✗ Package '${identifier}' not found or could not be deleted. It may be in use by reservations.`;
+    }
 
     return `✓ Package '${identifier}' deleted successfully. This action is permanent.`;
   },
@@ -796,14 +824,23 @@ export const deleteCouponTool = tool({
     let query = supabase.from("coupons").delete();
     
     if (identifier.length > 20 && identifier.includes('-')) {
-      query = query.eq("id", identifier);
+      query = query.eq("id", identifier).select();
     } else {
-      query = query.eq("code", identifier.toUpperCase());
+      query = query.eq("code", identifier.toUpperCase()).select();
     }
 
-    const { error } = await query;
+    const { data, error } = await query;
 
-    if (error) return `Error deleting coupon: ${error.message}`;
+    if (error) {
+      if (error.code === '23503') {
+        return `✗ Cannot delete coupon '${identifier}': This coupon is being used in reservations. You must remove those associations first.`;
+      }
+      return `Error deleting coupon: ${error.message}`;
+    }
+
+    if (!data || data.length === 0) {
+      return `✗ Coupon '${identifier}' not found or could not be deleted.`;
+    }
 
     return `✓ Coupon '${identifier}' deleted successfully. This action is permanent.`;
   },
@@ -1714,12 +1751,17 @@ export const deleteReservationTool = tool({
   async func({ identifier }) {
     let query = supabase.from("reservations").delete();
     if (identifier.length > 20 && identifier.includes('-')) {
-      query = query.eq("id", identifier);
+      query = query.eq("id", identifier).select();
     } else {
-      query = query.eq("confirmation_code", identifier.toUpperCase());
+      query = query.eq("confirmation_code", identifier.toUpperCase()).select();
     }
-    const { error } = await query;
+    const { data, error } = await query;
     if (error) return `Error: ${error.message}`;
+    
+    if (!data || data.length === 0) {
+      return `✗ Reservation '${identifier}' not found or could not be deleted.`;
+    }
+    
     return `✓ Reservation '${identifier}' permanently deleted.`;
   },
 });

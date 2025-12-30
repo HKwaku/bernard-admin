@@ -79,6 +79,53 @@ export function formatCurrency(amount, currency = 'GBP') {
   }
 }
 
+// Date formatter - Centralized format: dd-Mmm-yyyy (e.g., 15 Jan 2025)
+export function formatDate(dateInput) {
+  if (!dateInput) return '';
+  
+  try {
+    const date = new Date(dateInput);
+    
+    // Check if valid date
+    if (isNaN(date.getTime())) return dateInput;
+    
+    const day = date.getDate().toString().padStart(2, '0');
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = months[date.getMonth()];
+    const year = date.getFullYear();
+    
+    return `${day} ${month} ${year}`;
+  } catch (error) {
+    console.error('Date formatting error:', error);
+    return dateInput;
+  }
+}
+
+// Parse SQL date (YYYY-MM-DD) to Date object
+export function parseDate(dateString) {
+  if (!dateString) return null;
+  return new Date(dateString + 'T00:00:00');
+}
+
+// Format date for SQL/database (YYYY-MM-DD)
+export function formatDateForDB(dateInput) {
+  if (!dateInput) return '';
+  
+  try {
+    const date = new Date(dateInput);
+    if (isNaN(date.getTime())) return '';
+    
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    
+    return `${year}-${month}-${day}`;
+  } catch (error) {
+    console.error('Date DB formatting error:', error);
+    return '';
+  }
+}
+
 // Toast notification (simple version)
 export function toast(message, type = 'info') {
   console.log(`[${type.toUpperCase()}] ${message}`);
