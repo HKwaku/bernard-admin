@@ -53,7 +53,7 @@ async function sendMessage() {
     // Push user message into Bernard history
     bernardHistory.push({ role: "user", content: text });
 
-    const resp = await fetch("http://localhost:3005/api/chat", {
+    const resp = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ messages: bernardHistory }),
