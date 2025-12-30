@@ -194,6 +194,7 @@ export const createRoomTypeTool = tool({
       description: input.description || null,
       base_price_per_night_weekday: input.weekday_price,
       base_price_per_night_weekend: input.weekend_price,
+      currency: input.currency,
       max_adults: input.max_adults,
       is_active: input.is_active,
       image_url: input.image_url || null,
@@ -219,6 +220,7 @@ export const updateRoomTypeTool = tool({
       description: z.string().optional(),
       weekday_price: z.number().optional(),
       weekend_price: z.number().optional(),
+      currency: z.string().optional(),
       max_adults: z.number().optional(),
       is_active: z.boolean().optional(),
       image_url: z.string().optional(),
@@ -231,6 +233,7 @@ export const updateRoomTypeTool = tool({
     if (updates.description !== undefined) payload.description = updates.description;
     if (updates.weekday_price) payload.base_price_per_night_weekday = updates.weekday_price;
     if (updates.weekend_price) payload.base_price_per_night_weekend = updates.weekend_price;
+    if (updates.currency) payload.currency = updates.currency;
     if (updates.max_adults) payload.max_adults = updates.max_adults;
     if (updates.is_active !== undefined) payload.is_active = updates.is_active;
     if (updates.image_url !== undefined) payload.image_url = updates.image_url;
@@ -358,6 +361,7 @@ export const createExtraTool = tool({
       category: input.category || null,
       description: input.description || null,
       price: input.price,
+      currency: input.currency,
       unit_type: input.unit_type,
       is_active: input.is_active,
     });
@@ -381,6 +385,7 @@ export const updateExtraTool = tool({
       category: z.string().optional(),
       description: z.string().optional(),
       price: z.number().optional(),
+      currency: z.string().optional(),
       unit_type: z.enum(["per_booking", "per_night", "per_person", "per_person_per_night"]).optional(),
       is_active: z.boolean().optional(),
     }),
@@ -391,6 +396,7 @@ export const updateExtraTool = tool({
     if (updates.category !== undefined) payload.category = updates.category;
     if (updates.description !== undefined) payload.description = updates.description;
     if (updates.price) payload.price = updates.price;
+    if (updates.currency) payload.currency = updates.currency;
     if (updates.unit_type) payload.unit_type = updates.unit_type;
     if (updates.is_active !== undefined) payload.is_active = updates.is_active;
 
@@ -454,8 +460,11 @@ export const listPackagesTool = tool({
     return formatTable(
       data.map(p => ({
         Name: p.name,
-        "Nights": p.nights ?? 'N/A',
-        "Package Price": `${p.currency || 'GBP'} ${p.package_price ?? 'N/A'}`,
+        "Min Nights": p.nights || 'N/A',
+        "Package Price": `${p.currency || 'GHS'} ${p.package_price || 'N/A'}`,
+        "Valid From": p.valid_from || 'N/A',
+        "Valid Until": p.valid_until || 'N/A',
+        "Cabin": p.room_name || 'N/A',
         Active: p.is_active ? "✓" : "✗",
         Featured: p.is_featured ? "⭐" : "",
       })),
@@ -496,8 +505,8 @@ export const getPackageDetailsTool = tool({
 **${pkg.name}**
 - **Status**: ${pkg.is_active ? 'Active ✓' : 'Inactive ✗'}
 - **Featured**: ${pkg.is_featured ? 'Yes ⭐' : 'No'}
-- **Nights**: ${pkg.nights ?? 'N/A'}
-- **Package Price**: ${pkg.currency || 'GBP'} ${pkg.package_price ?? 'N/A'}
+- **Minimum Nights**: ${pkg.nights || 'N/A'}
+- **Package Price**: ${pkg.currency || 'GHS'} ${pkg.package_price || 'N/A'}
 - **Description**: ${pkg.description || 'N/A'}
 - **Package ID**: ${pkg.id}
 `;
@@ -521,20 +530,19 @@ export const createPackageTool = tool({
   schema: z.object({
     name: z.string().describe("Package name"),
     description: z.string().optional().describe("Package description"),
-    code: z.string().describe("Unique package code (e.g., 'XMAS25')"),
-    nights: z.number().describe("Number of nights included in the package"),
-    package_price: z.number().describe("Total package price"),
+    nights: z.number().describe("Number of nights required"),
+    package_price: z.number().optional().describe("Package price"),
     currency: z.string().default("GBP"),
     is_active: z.boolean().default(true),
     is_featured: z.boolean().default(false),
   }),
   async func(input) {
     const { error } = await supabase.from("packages").insert({
-      code: input.code.toUpperCase(),
       name: input.name,
       description: input.description || null,
       nights: input.nights,
-      package_price: input.package_price,
+      package_price: input.package_price || null,
+      currency: input.currency,
       is_active: input.is_active,
       is_featured: input.is_featured,
     });
@@ -543,7 +551,7 @@ export const createPackageTool = tool({
 
     return `✓ Package "${input.name}" created successfully!
 - Nights: ${input.nights}
-- Package Price: ${input.currency} ${Number(input.package_price).toFixed(2)}
+- Package Price: ${input.currency} ${input.package_price || 'Not set'}
 - Status: ${input.is_active ? 'Active' : 'Inactive'}
 - Featured: ${input.is_featured ? 'Yes' : 'No'}`;
   },
@@ -557,9 +565,9 @@ export const updatePackageTool = tool({
     updates: z.object({
       name: z.string().optional(),
       description: z.string().optional(),
-      code: z.string().optional(),
       nights: z.number().optional(),
       package_price: z.number().optional(),
+      currency: z.string().optional(),
       is_active: z.boolean().optional(),
       is_featured: z.boolean().optional(),
     }),
@@ -568,9 +576,9 @@ export const updatePackageTool = tool({
     const payload = {};
     if (updates.name) payload.name = updates.name;
     if (updates.description !== undefined) payload.description = updates.description;
-    if (updates.code) payload.code = updates.code.toUpperCase();
-    if (updates.nights !== undefined) payload.nights = updates.nights;
+    if (updates.nights) payload.nights = updates.nights;
     if (updates.package_price !== undefined) payload.package_price = updates.package_price;
+    if (updates.currency) payload.currency = updates.currency;
     if (updates.is_active !== undefined) payload.is_active = updates.is_active;
     if (updates.is_featured !== undefined) payload.is_featured = updates.is_featured;
 
@@ -642,7 +650,7 @@ export const listCouponsTool = tool({
         return {
           Code: c.code,
           Type: c.discount_type,
-          Value: c.discount_type === 'percentage' ? `${c.discount_value}%` : `${'GBP'} ${c.discount_value}`,
+          Value: c.discount_type === 'percentage' ? `${c.discount_value}%` : `${c.currency || 'GBP'} ${c.discount_value}`,
           "Valid Until": c.valid_until || 'No expiry',
           Active: c.is_active ? "✓" : "✗",
           Status: isValid ? "Valid ✓" : "Expired/Inactive",
@@ -680,12 +688,12 @@ export const getCouponDetailsTool = tool({
 
     return `
 **${data.code}**
-- **Discount**: ${data.discount_type === 'percentage' ? `${data.discount_value}%` : `${'GBP'} ${data.discount_value}`}
+- **Discount**: ${data.discount_type === 'percentage' ? `${data.discount_value}%` : `${data.currency || 'GBP'} ${data.discount_value}`}
 - **Type**: ${data.discount_type}
 - **Valid From**: ${data.valid_from || 'N/A'}
 - **Valid Until**: ${data.valid_until || 'No expiry'}
-- **Max Uses**: ${data.max_uses ?? 'Unlimited'}
-- **Current Uses**: ${data.current_uses ?? 0}
+- **Usage Limit**: ${data.usage_limit || 'Unlimited'}
+- **Times Used**: ${data.usage_count || 0}
 - **Status**: ${data.is_active ? 'Active' : 'Inactive'}
 - **Currently Valid**: ${isValid ? 'Yes ✓' : 'No ✗'}
 - **Description**: ${data.description || 'N/A'}
@@ -701,14 +709,11 @@ export const createCouponTool = tool({
     code: z.string().describe("Coupon code (e.g., 'SUMMER2025')"),
     discount_type: z.enum(["percentage", "fixed"]).describe("Type of discount"),
     discount_value: z.number().describe("Discount amount (e.g., 20 for 20% or $20)"),
-        description: z.string().optional(),
+    currency: z.string().default("GBP").describe("Currency for fixed discounts"),
+    description: z.string().optional(),
     valid_from: z.string().optional().describe("Valid from date (YYYY-MM-DD)"),
     valid_until: z.string().optional().describe("Valid until date (YYYY-MM-DD)"),
-    max_uses: z.number().optional().describe("Maximum number of uses"),
-    max_uses_per_guest: z.number().optional().describe("Max uses per guest"),
-    min_booking_amount: z.number().optional().describe("Minimum booking amount"),
-    applies_to: z.enum(["rooms","extras","both"]).describe("What this coupon applies to"),
-    extra_ids: z.string().optional().describe("Comma-separated extra IDs"),
+    usage_limit: z.number().optional().describe("Maximum number of uses"),
     is_active: z.boolean().default(true),
   }),
   async func(input) {
@@ -716,24 +721,21 @@ export const createCouponTool = tool({
       code: input.code.toUpperCase(),
       discount_type: input.discount_type,
       discount_value: input.discount_value,
-      applies_to: input.applies_to,
+      currency: input.currency,
       description: input.description || null,
       valid_from: input.valid_from || null,
       valid_until: input.valid_until || null,
-      max_uses: input.max_uses ?? null,
-      current_uses: 0,
-      max_uses_per_guest: input.max_uses_per_guest ?? null,
-      min_booking_amount: input.min_booking_amount ?? null,
-      extra_ids: input.extra_ids ? input.extra_ids.split(',').map(s => s.trim()).filter(Boolean) : null,
+      usage_limit: input.usage_limit || null,
+      usage_count: 0,
       is_active: input.is_active,
     });
 
     if (error) return `Error creating coupon: ${error.message}`;
 
     return `✓ Coupon "${input.code.toUpperCase()}" created successfully!
-- Discount: ${input.discount_type === 'percentage' ? `${input.discount_value}%` : `GBP ${input.discount_value}`}
+- Discount: ${input.discount_type === 'percentage' ? `${input.discount_value}%` : `${input.currency} ${input.discount_value}`}
 - Valid: ${input.valid_from || 'Now'} to ${input.valid_until || 'No expiry'}
-- Max Uses: ${input.max_uses ?? 'Unlimited'}
+- Usage Limit: ${input.usage_limit || 'Unlimited'}
 - Status: ${input.is_active ? 'Active' : 'Inactive'}`;
   },
 });
@@ -747,14 +749,11 @@ export const updateCouponTool = tool({
       code: z.string().optional(),
       discount_type: z.enum(["percentage", "fixed"]).optional(),
       discount_value: z.number().optional(),
+      currency: z.string().optional(),
       description: z.string().optional(),
       valid_from: z.string().optional(),
       valid_until: z.string().optional(),
-      max_uses: z.number().optional(),
-      max_uses_per_guest: z.number().optional(),
-      min_booking_amount: z.number().optional(),
-      applies_to: z.enum(["rooms","extras","both"]).optional(),
-      extra_ids: z.string().optional(),
+      usage_limit: z.number().optional(),
       is_active: z.boolean().optional(),
     }),
   }),
@@ -763,13 +762,11 @@ export const updateCouponTool = tool({
     if (updates.code) payload.code = updates.code.toUpperCase();
     if (updates.discount_type) payload.discount_type = updates.discount_type;
     if (updates.discount_value) payload.discount_value = updates.discount_value;
+    if (updates.currency) payload.currency = updates.currency;
     if (updates.description !== undefined) payload.description = updates.description;
     if (updates.valid_from !== undefined) payload.valid_from = updates.valid_from;
-    if (updates.valid_until !== undefined) payload.valid_until = updates.valid_until;    if (updates.max_uses !== undefined) payload.max_uses = updates.max_uses;
-    if (updates.max_uses_per_guest !== undefined) payload.max_uses_per_guest = updates.max_uses_per_guest;
-    if (updates.min_booking_amount !== undefined) payload.min_booking_amount = updates.min_booking_amount;
-    if (updates.applies_to !== undefined) payload.applies_to = updates.applies_to;
-    if (updates.extra_ids !== undefined) payload.extra_ids = updates.extra_ids ? updates.extra_ids.split(',').map(s => s.trim()).filter(Boolean) : null;
+    if (updates.valid_until !== undefined) payload.valid_until = updates.valid_until;
+    if (updates.usage_limit !== undefined) payload.usage_limit = updates.usage_limit;
     if (updates.is_active !== undefined) payload.is_active = updates.is_active;
 
     let query = supabase.from("coupons").update(payload);
@@ -843,8 +840,8 @@ export const validateCouponTool = tool({
     }
 
     // Check usage limit
-    if (c.max_uses != null && c.current_uses >= c.max_uses) {
-      return `❌ Coupon '${code}' has reached its usage limit (${c.max_uses}).`;
+    if (c.usage_limit && c.usage_count >= c.usage_limit) {
+      return `❌ Coupon '${code}' has reached its usage limit (${c.usage_limit}).`;
     }
 
     // Calculate discount
@@ -858,11 +855,11 @@ export const validateCouponTool = tool({
     const final_total = Math.max(0, booking_total - discount);
 
     return `✓ Coupon '${code}' is valid!
-- Discount: ${c.discount_type === 'percentage' ? `${c.discount_value}%` : `GBP ${c.discount_value}`}
-- Original Total: GBP ${booking_total.toFixed(2)}
-- Discount Amount: GBP ${discount.toFixed(2)}
-- Final Total: GBP ${final_total.toFixed(2)}
-- Uses Remaining: ${c.max_uses != null ? `${c.max_uses - c.current_uses}` : 'Unlimited'}`;
+- Discount: ${c.discount_type === 'percentage' ? `${c.discount_value}%` : `${c.currency} ${c.discount_value}`}
+- Original Total: ${c.currency || 'GBP'} ${booking_total.toFixed(2)}
+- Discount Amount: ${c.currency || 'GBP'} ${discount.toFixed(2)}
+- Final Total: ${c.currency || 'GBP'} ${final_total.toFixed(2)}
+- Uses Remaining: ${c.usage_limit ? `${c.usage_limit - c.usage_count}` : 'Unlimited'}`;
   },
 });
 
@@ -913,8 +910,7 @@ export const searchReservationsTool = tool({
     return formatTable(
       data.map(r => ({
         Code: r.confirmation_code,
-        Guest: r.guest_first_name,
-        guest_last_name,
+        Guest: `${r.guest_first_name || ''} ${r.guest_last_name || ''}`.trim(),
         Email: r.guest_email,
         Room: r.room_types?.name || 'N/A',
         "Check-in": r.check_in,
@@ -957,11 +953,11 @@ export const getReservationDetailsTool = tool({
 **Reservation ${r.confirmation_code}**
 
 **Guest Information:**
-- Name: ${`${r.guest_first_name || ''} ${r.guest_last_name || ''}`.trim()}
+- Name: ${r.guest_first_name || ''} ${r.guest_last_name || ''}
 - Email: ${r.guest_email}
 - Phone: ${r.guest_phone || 'N/A'}
-- Adults: ${r.number_of_adults || 1}
-- Children: ${r.number_of_children || 0}
+- Adults: ${r.adults || 1}
+- Children: ${r.children || 0}
 
 **Booking Details:**
 - Room: ${r.room_types?.name || 'N/A'} (${r.room_types?.code || ''})
@@ -977,7 +973,7 @@ export const getReservationDetailsTool = tool({
 - Total: ${r.currency || 'GBP'} ${r.total || 0}
 
 **Other:**
-- Notes: ${r.special_requests || 'None'}
+- Special Requests: ${r.notes || 'None'}
 - Is Influencer: ${r.is_influencer ? 'Yes' : 'No'}
 - Created: ${new Date(r.created_at).toLocaleString()}
 - Reservation ID: ${r.id}
@@ -1000,12 +996,12 @@ export const getTodayCheckInsTool = tool({
         guest_last_name,
         guest_email,
         guest_phone,
-        number_of_adults,
+        adults,
         room_types (name, code)
       `)
       .eq("check_in", today)
       .in("status", ["confirmed", "checked-in"])
-      .order("guest_name", { ascending: true });
+      .order("guest_first_name", { ascending: true });
 
     if (error) return `Error: ${error.message}`;
     if (!data?.length) return "No check-ins scheduled for today.";
@@ -1013,12 +1009,11 @@ export const getTodayCheckInsTool = tool({
     return formatTable(
       data.map(r => ({
         Code: r.confirmation_code,
-        Guest: r.guest_first_name,
-        guest_last_name,
+        Guest: `${r.guest_first_name || ''} ${r.guest_last_name || ''}`.trim(),
         Email: r.guest_email,
         Phone: r.guest_phone || 'N/A',
         Room: r.room_types?.name || 'N/A',
-        Adults: r.number_of_adults || 1,
+        Adults: r.adults || 1,
       })),
       { minWidth: "600px" }
     );
@@ -1043,7 +1038,7 @@ export const getTodayCheckOutsTool = tool({
       `)
       .eq("check_out", today)
       .in("status", ["confirmed", "checked-in"])
-      .order("guest_name", { ascending: true });
+      .order("guest_first_name", { ascending: true });
 
     if (error) return `Error: ${error.message}`;
     if (!data?.length) return "No check-outs scheduled for today.";
@@ -1051,8 +1046,7 @@ export const getTodayCheckOutsTool = tool({
     return formatTable(
       data.map(r => ({
         Code: r.confirmation_code,
-        Guest: r.guest_first_name,
-        guest_last_name,
+        Guest: `${r.guest_first_name || ''} ${r.guest_last_name || ''}`.trim(),
         Email: r.guest_email,
         Room: r.room_types?.name || 'N/A',
       })),
@@ -1209,7 +1203,6 @@ export const getRevenueStatsTool = tool({
         room_subtotal,
         extras_total,
         discount_amount,
-        coupon_discount,
         total,
         currency,
         package_id,
@@ -1275,8 +1268,7 @@ export const getClientAnalyticsTool = tool({
   async func({ start_date, end_date, limit }) {
     let query = supabase
       .from("reservations")
-      .select("guest_first_name,
-        guest_last_name, guest_email, total, currency, created_at")
+      .select("guest_first_name, guest_last_name, guest_email, total, currency, created_at")
       .in("status", ["confirmed", "checked-in", "checked-out"])
       .not("is_influencer", "eq", true);
 
@@ -1297,8 +1289,7 @@ export const getClientAnalyticsTool = tool({
 
       if (!guestMap[email]) {
         guestMap[email] = {
-          name: r.guest_first_name,
-        guest_last_name,
+          name: `${r.guest_first_name || ''} ${r.guest_last_name || ''}`.trim(),
           bookings: 0,
           totalSpent: 0,
           currency: r.currency || "GBP",
@@ -1556,7 +1547,7 @@ export const getSeasonalPricingTool = tool({
         Room: sp.room_types?.name || 'N/A',
         "Start Date": sp.start_date,
         "End Date": sp.end_date,
-        "Price per Night": `${sp.currency || 'GBP'} ${sp.price_per_night}`,
+        "Price per Night": `GBP ${sp.price_per_night}`,
       })),
       { minWidth: "550px" }
     );
