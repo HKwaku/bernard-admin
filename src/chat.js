@@ -45,12 +45,14 @@ async function sendMessage() {
 
   showTyping();
 
-  // Status bubble
-  const statusBubble = appendStatusBubble("🤔 Thinking (using tools)…");
+  // Status bubble with simpler message
+  const statusBubble = appendStatusBubble("🧠 Thinking...");
 
   try {
     // Push user message into Bernard history
     bernardHistory.push({ role: "user", content: text });
+
+    const startTime = Date.now();
 
     // SAME-ORIGIN in production (Vercel), and also works locally if you run the API
     const resp = await fetch("/api/chat", {
@@ -67,6 +69,8 @@ async function sendMessage() {
     }
 
     const reply = data?.reply;
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`Bernard response time: ${elapsed}s`);
 
     hideTyping();
     $("#status-indicator")?.remove();
