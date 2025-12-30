@@ -518,6 +518,40 @@ label {
   word-wrap: break-word;
   word-break: break-word;
 }
+/* ===== Chat tables: prevent overflow ===== */
+.msg .bubble table {
+  width: 100%;
+  max-width: 100%;
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+}
+
+.msg .bubble thead,
+.msg .bubble tbody,
+.msg .bubble tr {
+  width: 100%;
+}
+
+.msg .bubble th,
+.msg .bubble td {
+  padding: 6px 8px;
+  font-size: 0.8rem;
+  border: 1px solid var(--ring);
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+/* Allow horizontal scroll only when needed */
+.msg .bubble table::-webkit-scrollbar {
+  height: 6px;
+}
+
+.msg .bubble table::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 6px;
+}
 
 /* CRITICAL: Allow table containers to break out of bubble constraints */
 .msg.bot .bubble {
