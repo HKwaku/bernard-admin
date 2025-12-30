@@ -491,6 +491,24 @@ label {
   animation: slideIn 0.2s ease;
 }
 
+/* ===== Chat: ensure tables are horizontally scrollable (mobile-friendly) ===== */
+#view-chat .messages .bubble table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+#view-chat .messages .bubble table th,
+#view-chat .messages .bubble table td {
+  white-space: nowrap;
+}
+
+/* Also ensure any existing table wrapper doesn't overflow the chat bubble */
+#view-chat .messages .bubble > div[style*="overflow-x:auto"] {
+  max-width: 100%;
+}
+
 @keyframes slideIn {
   from {
     opacity: 0;
@@ -597,21 +615,132 @@ label {
   font-size: 0.875rem;
 }
 
-/* ===== Modal ===== */
-.modal {
-  display: none;
+/* ===== Modal Styles - Unified & Consistent ===== */
+
+/* Modal Backdrop */
+.modal,
+.modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(11, 18, 32, 0.55);
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(4px);
-  padding: var(--space-xl);
+  display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 50;
-  animation: fadeIn 0.2s ease;
+  z-index: 9999;
+  padding: 20px;
   overflow-y: auto;
+  animation: fadeIn 0.2s ease;
 }
 
+.modal {
+  display: none;
+}
+
+.modal.show {
+  display: flex;
+}
+
+/* Modal Dialog Container */
+.modal-dialog,
+.modal .inner,
+.modal .content,
+.modal-content {
+  max-width: 750px;
+  width: 100%;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 25px 80px rgba(0,0,0,0.4);
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  margin: auto;
+  animation: slideUp 0.3s ease;
+}
+
+/* Modal Header */
+.modal .hd,
+.modal-backdrop .hd,
+.modal-dialog .hd,
+.modal .content .hd {
+  padding: 24px;
+  border-bottom: 2px solid #e2e8f0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.modal .hd h3,
+.modal-backdrop .hd h3,
+.modal-dialog .hd h3,
+.modal .content .hd h3 {
+  margin: 0;
+  color: white;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.modal .hd p,
+.modal-backdrop .hd p,
+.modal-dialog .hd p,
+.modal .content .hd p {
+  margin: 4px 0 0 0;
+  color: rgba(255,255,255,0.9);
+  font-size: 13px;
+}
+
+/* Modal Body */
+.modal .bd,
+.modal-backdrop .bd,
+.modal-dialog .bd,
+.modal .content .bd {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* Modal Footer */
+.modal .ft,
+.modal-backdrop .ft,
+.modal-dialog .ft,
+.modal .content .ft {
+  padding: 16px 24px;
+  border-top: 2px solid #e2e8f0;
+  background: #f8fafc;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+/* Modal Close Button */
+.modal .hd button[data-modal-close],
+.modal-backdrop .hd button[data-modal-close],
+.modal-dialog .hd button[data-modal-close],
+.modal .content .hd button,
+.modal .hd .btn:last-child,
+.modal-backdrop .hd .btn:last-child,
+.modal .content .hd .btn {
+  background: transparent;
+  border: none;
+  color: white;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 6px;
+  margin-left: auto;
+}
+
+/* Animations */
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -619,40 +748,6 @@ label {
   to {
     opacity: 1;
   }
-}
-
-.modal.show {
-  display: flex;
-}
-
-/* Shared container for all modals (HTML uses .inner or .content) */
-.modal .inner,
-.modal .content {
-  width: 96%;
-  max-width: 760px;
-  background: #fff;
-  border-radius: var(--radius-xl);
-  overflow: hidden;
-  animation: slideUp 0.3s ease;
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-  margin: auto;
-}
-
-
-/* Also support .content class used in modals */
-.modal .content {
-  width: 96%;
-  max-width: 760px;
-  background: #fff;
-  border-radius: var(--radius-xl);
-  overflow: hidden;
-  animation: slideUp 0.3s ease;
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-  margin: auto;
 }
 
 @keyframes slideUp {
@@ -664,38 +759,6 @@ label {
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-.modal .hd {
-  padding: var(--space-lg);
-  border-bottom: 1px solid var(--ring);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--space-md);
-  flex-shrink: 0;
-}
-
-.modal .hd h3 {
-  margin: 0;
-  font-size: 1.125rem;
-  font-weight: 800;
-}
-
-.modal .bd {
-  padding: var(--space-lg);
-  overflow-y: auto;
-  flex: 1;
-}
-
-.modal .ft {
-  padding: var(--space-md) var(--space-lg);
-  border-top: 1px solid var(--ring);
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  flex-shrink: 0;
-  flex-wrap: wrap;
 }
 
 .frow {
@@ -870,17 +933,12 @@ label {
 }
 
 /* Large devices (desktops, 1024px and up) */
-@media (min-width: 1024px) {
+/* Bernard Admin: full-width layout (no right sidebar) */
+@media (min-width: 769px) {
   .grid {
-    /* Calendar gets most of the width, sidebar has a reasonable fixed-ish min */
-    grid-template-columns: minmax(0, 2.4fr) minmax(280px, 0.9fr);
+    grid-template-columns: 1fr !important;
+    column-gap: 0;
     align-items: flex-start;
-    column-gap: var(--space-lg);
-  }
-
-  #quick-stats-card,
-  #recent-bookings-card {
-    display: block !important;
   }
 }
 
@@ -1113,15 +1171,94 @@ label {
     padding: var(--space-md);
   }
 
-  .modal .inner {
-    width: 100%;
-    max-width: 100%;
+  .modal .inner,
+  .modal .content,
+  .modal-content,
+  .modal-dialog {
+    width: 95% !important;
+    max-width: 95% !important;
+    margin: 20px auto !important;
   }
 
   .modal .hd,
   .modal .bd,
   .modal .ft {
     padding: var(--space-md);
+  }
+  
+  /* Pricing header mobile */
+  .pricing-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  
+  .pricing-header > div {
+    width: 100% !important;
+  }
+  
+  .pricing-header select {
+    width: 100% !important;
+  }
+  
+  /* Mobile utility classes */
+  .mobile-stack {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  
+  .mobile-full-btn {
+    width: 100% !important;
+    margin-bottom: 8px !important;
+  }
+  
+  /* Revenue table wrapper */
+  .revenue-table-wrapper {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+  
+  .revenue-table-wrapper table {
+    min-width: 700px !important;
+  }
+  
+  /* Summary tiles */
+  .revenue-summary-tiles {
+    grid-template-columns: 1fr !important;
+  }
+  
+  /* Analytics sections */
+  .analytics-section {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+  
+  .analytics-section-title {
+    font-size: 18px !important;
+  }
+  
+  /* Chart card */
+  .chart-card {
+    padding: 16px !important;
+  }
+  
+  /* Chart controls */
+  .chart-controls {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  
+  .chart-btn {
+    flex: 1;
+    min-width: 100px;
+    font-size: 12px !important;
+  }
+  
+  /* Input fields - prevent zoom on iOS */
+  input[type="number"],
+  input[type="text"],
+  input[type="date"],
+  select {
+    font-size: 16px !important;
   }
 
   .chat-input {
@@ -1150,6 +1287,35 @@ label {
   
   .grid {
     grid-template-columns: 1fr !important;
+  }
+}
+
+/* Extra small screens (phones) */
+@media (max-width: 480px) {
+  .analytics-section-title {
+    font-size: 16px !important;
+  }
+  
+  .chart-card {
+    padding: 12px !important;
+  }
+  
+  .revenue-table-wrapper table {
+    font-size: 12px !important;
+  }
+  
+  .revenue-table-wrapper th,
+  .revenue-table-wrapper td {
+    padding: 8px 6px !important;
+  }
+  
+  .chart-btn {
+    font-size: 10px !important;
+    padding: 8px 6px !important;
+  }
+  
+  .pricing-header {
+    padding: 12px !important;
   }
 }
 
@@ -1699,113 +1865,116 @@ label {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(15, 23, 42, 0.4);
-  z-index: 999;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 9999;
   backdrop-filter: blur(4px);
 }
 
 #coupon-modal .content {
   background: #fff;
-  border: 1px solid var(--ring);
-  border-radius: var(--radius-lg);
-  width: min(720px, 92vw);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  border-radius: 16px;
+  width: min(750px, 100%);
+  box-shadow: 0 25px 80px rgba(0,0,0,0.4);
   max-height: 90vh;
-  overflow-y: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 #coupon-modal .hd {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--space-lg) var(--space-xl);
-  border-bottom: 1px solid var(--ring);
-  background: linear-gradient(180deg, #fafbfc 0%, #f5f7fa 100%);
-  position: sticky;
-  top: 0;
-  z-index: 1;
+  padding: 24px;
+  border-bottom: 2px solid #e2e8f0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  flex-shrink: 0;
 }
 
 #coupon-modal .hd h3 {
   margin: 0;
-  font-size: 1.25rem;
-  font-weight: 800;
+  color: white;
+  font-size: 20px;
+  font-weight: 700;
 }
 
 #coupon-modal .hd .btn {
-  font-size: 1.5rem;
+  font-size: 26px;
   line-height: 1;
-  padding: 4px 10px;
+  padding: 0 6px;
   border: none;
   background: transparent;
-  color: var(--muted);
+  color: white;
   cursor: pointer;
 }
 
 #coupon-modal .hd .btn:hover {
-  color: var(--ink);
+  opacity: 0.8;
 }
 
 #coupon-modal .bd {
-  padding: var(--space-xl);
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
 }
 
 #coupon-modal .ft {
-  padding: var(--space-lg) var(--space-xl);
-  border-top: 1px solid var(--ring);
+  padding: 16px 24px;
+  border-top: 2px solid #e2e8f0;
   display: flex;
-  gap: 10px;
+  gap: 12px;
   justify-content: flex-end;
-  background: #fafbfc;
-  position: sticky;
-  bottom: 0;
+  background: #f8fafc;
+  flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 #coupon-modal .form-group {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-bottom: var(--space-md);
+  margin-bottom: 16px;
 }
 
 #coupon-modal .form-group label {
-  font-weight: 700;
-  font-size: 0.875rem;
-  color: var(--ink);
+  font-weight: 600;
+  font-size: 13px;
+  color: #334155;
 }
 
 #coupon-modal .form-group input,
 #coupon-modal .form-group select {
   padding: 10px 12px;
-  border: 1px solid var(--ring);
-  border-radius: var(--radius-md);
-  font-size: 0.875rem;
-  transition: border-color var(--transition-fast);
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.2s;
 }
 
 #coupon-modal .form-group input:focus,
 #coupon-modal .form-group select:focus {
   outline: none;
-  border-color: var(--brand);
-  box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.1);
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
 #coupon-modal .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--space-lg);
+  gap: 16px;
 }
 
 #coupon-modal .form-grid-3 {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-lg);
+  gap: 16px;
 }
 
 #coupon-modal .muted {
-  color: var(--muted);
-  font-size: 0.875rem;
+  color: #6b7280;
+  font-size: 13px;
 }
+
 
 @media (max-width: 720px) {
   /* Make modals fit small screens */
@@ -1847,20 +2016,21 @@ label {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(15, 23, 42, 0.4);
-  z-index: 999;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 9999;
   backdrop-filter: blur(4px);
 }
 
 #room-modal .content,
 #extra-modal .content {
   background: #fff;
-  border: 1px solid var(--ring);
-  border-radius: var(--radius-lg);
-  width: min(720px, 92vw);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  border-radius: 16px;
+  width: min(750px, 100%);
+  box-shadow: 0 25px 80px rgba(0,0,0,0.4);
   max-height: 90vh;
-  overflow-y: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 #room-modal .hd,
@@ -1868,53 +2038,54 @@ label {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--space-lg) var(--space-xl);
-  border-bottom: 1px solid var(--ring);
-  background: linear-gradient(180deg, #fafbfc 0%, #f5f7fa 100%);
-  position: sticky;
-  top: 0;
-  z-index: 1;
+  padding: 24px;
+  border-bottom: 2px solid #e2e8f0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  flex-shrink: 0;
 }
 
 #room-modal .hd h3,
 #extra-modal .hd h3 {
   margin: 0;
-  font-size: 1.25rem;
-  font-weight: 800;
+  color: white;
+  font-size: 20px;
+  font-weight: 700;
 }
 
 #room-modal .hd .btn,
 #extra-modal .hd .btn {
-  font-size: 1.5rem;
+  font-size: 26px;
   line-height: 1;
-  padding: 4px 10px;
+  padding: 0 6px;
   border: none;
   background: transparent;
-  color: var(--muted);
+  color: white;
   cursor: pointer;
 }
 
 #room-modal .hd .btn:hover,
 #extra-modal .hd .btn:hover {
-  color: var(--ink);
+  opacity: 0.8;
   transform: none;
 }
 
 #room-modal .bd,
 #extra-modal .bd {
-  padding: var(--space-xl);
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
 }
 
 #room-modal .ft,
 #extra-modal .ft {
-  padding: var(--space-lg) var(--space-xl);
-  border-top: 1px solid var(--ring);
+  padding: 16px 24px;
+  border-top: 2px solid #e2e8f0;
   display: flex;
-  gap: 10px;
+  gap: 12px;
   justify-content: flex-end;
-  background: #fafbfc;
-  position: sticky;
-  bottom: 0;
+  background: #f8fafc;
+  flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 #room-modal .form-group,
@@ -1922,14 +2093,14 @@ label {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-bottom: var(--space-md);
+  margin-bottom: 16px;
 }
 
 #room-modal .form-group label,
 #extra-modal .form-group label {
-  font-weight: 700;
-  font-size: 0.875rem;
-  color: var(--ink);
+  font-weight: 600;
+  font-size: 13px;
+  color: #334155;
 }
 
 #room-modal .form-group input,
@@ -1939,10 +2110,10 @@ label {
 #extra-modal .form-group select,
 #extra-modal .form-group textarea {
   padding: 10px 12px;
-  border: 1px solid var(--ring);
-  border-radius: var(--radius-md);
-  font-size: 0.875rem;
-  transition: border-color var(--transition-fast);
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.2s;
   font-family: inherit;
 }
 
@@ -1953,7 +2124,7 @@ label {
 #extra-modal .form-group select:focus,
 #extra-modal .form-group textarea:focus {
   outline: none;
-  border-color: var(--brand);
+  border-color: #667eea;
   box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.1);
 }
 
@@ -2013,74 +2184,96 @@ label {
 }
 /* ===== Reservation Edit Modal + Block Dates Modal ===== */
 #reservation-modal .content,
-#block-dates-modal .content {
-  background:#fff;
-  border:1px solid var(--ring);
-  border-radius:var(--radius-lg);
-  width:min(720px,92vw);
-  box-shadow:0 20px 40px rgba(0,0,0,.15);
-  max-height:90vh;
-  overflow-y:auto;
+#block-dates-modal .content,
+#edit-blocked-modal .content {
+  background: #fff;
+  border-radius: 16px;
+  width: min(750px, 100%);
+  box-shadow: 0 25px 80px rgba(0,0,0,0.4);
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 #reservation-modal .hd,
-#block-dates-modal .hd {
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  padding:var(--space-lg) var(--space-xl);
-  border-bottom:1px solid var(--ring);
-  background:linear-gradient(180deg,#fafbfc 0%,#f5f7fa 100%);
-  position:sticky;
-  top:0;
-  z-index:1;
+#block-dates-modal .hd,
+#edit-blocked-modal .hd {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px;
+  border-bottom: 2px solid #e2e8f0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  flex-shrink: 0;
 }
 
 #reservation-modal .hd h3,
-#block-dates-modal .hd h3 {
-  margin:0;
-  font-size:1.25rem;
-  font-weight:800;
+#block-dates-modal .hd h3,
+#edit-blocked-modal .hd h3 {
+  margin: 0;
+  color: white;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+#reservation-modal .hd .btn,
+#block-dates-modal .hd .btn,
+#edit-blocked-modal .hd .btn {
+  background: transparent;
+  border: none;
+  color: white;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 6px;
 }
 
 #reservation-modal .bd,
-#block-dates-modal .bd {
-  padding:var(--space-xl);
+#block-dates-modal .bd,
+#edit-blocked-modal .bd {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
 }
 
 #reservation-modal .ft,
-#block-dates-modal .ft {
-  padding:var(--space-lg) var(--space-xl);
-  border-top:1px solid var(--ring);
-  display:flex;
-  gap:10px;
-  justify-content:flex-end;
-  background:#fafbfc;
-  position:sticky;
-  bottom:0;
+#block-dates-modal .ft,
+#edit-blocked-modal .ft {
+  padding: 16px 24px;
+  border-top: 2px solid #e2e8f0;
+  background: #f8fafc;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 /* Form layout (reuse your grid styles) */
 #reservation-modal .form-grid,
-#block-dates-modal .form-grid {
+#block-dates-modal .form-grid,
+#edit-blocked-modal .form-grid {
   display:grid;
   grid-template-columns:1fr 1fr;
   gap:var(--space-lg);
 }
 
 #reservation-modal .form-group,
-#block-dates-modal .form-group {
-  display:flex;
-  flex-direction:column;
-  gap:6px;
-  margin-bottom:var(--space-md);
+#block-dates-modal .form-group,
+#edit-blocked-modal .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
 }
 
 #reservation-modal .form-group label,
-#block-dates-modal .form-group label {
-  font-weight:700;
-  font-size:.875rem;
-  color:var(--ink);
+#block-dates-modal .form-group label,
+#edit-blocked-modal .form-group label {
+  font-weight: 600;
+  font-size: 13px;
+  color: #334155;
 }
 
 #reservation-modal .form-group input,
@@ -2088,13 +2281,16 @@ label {
 #reservation-modal .form-group textarea,
 #block-dates-modal .form-group input,
 #block-dates-modal .form-group select,
-#block-dates-modal .form-group textarea {
-  padding:10px 12px;
-  border:1px solid var(--ring);
-  border-radius:var(--radius-md);
-  font-size:.875rem;
-  transition:border-color var(--transition-fast);
-  font-family:inherit;
+#block-dates-modal .form-group textarea,
+#edit-blocked-modal .form-group input,
+#edit-blocked-modal .form-group select,
+#edit-blocked-modal .form-group textarea {
+  padding: 10px 12px;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.2s;
+  font-family: inherit;
 }
 
 #reservation-modal .form-group input:focus,
@@ -2102,10 +2298,13 @@ label {
 #reservation-modal .form-group textarea:focus,
 #block-dates-modal .form-group input:focus,
 #block-dates-modal .form-group select:focus,
-#block-dates-modal .form-group textarea:focus {
-  outline:none;
-  border-color:var(--brand);
-  box-shadow:0 0 0 3px rgba(108,99,255,1);
+#block-dates-modal .form-group textarea:focus,
+#edit-blocked-modal .form-group input:focus,
+#edit-blocked-modal .form-group select:focus,
+#edit-blocked-modal .form-group textarea:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
 @media (max-width:720px){
@@ -2273,38 +2472,38 @@ label {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--space-lg) var(--space-xl);
-  border-bottom: 1px solid var(--ring);
-  background: linear-gradient(180deg, #fafbfc 0%, #f5f7fa 100%);
-  position: sticky;
-  top: 0;
-  z-index: 2;
+  padding: 24px;
+  border-bottom: 2px solid #e2e8f0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  flex-shrink: 0;
 }
 
 #package-booking-modal .hd h3 {
   margin: 0;
-  font-size: 1.25rem;
-  font-weight: 800;
+  color: white;
+  font-size: 20px;
+  font-weight: 700;
 }
 
 #package-booking-modal .hd .btn {
-  font-size: 1.5rem;
+  font-size: 26px;
   line-height: 1;
-  padding: 4px 10px;
+  padding: 0 6px;
   border: none;
   background: transparent;
-  color: var(--muted);
+  color: white;
   cursor: pointer;
 }
 
 #package-booking-modal .hd .btn:hover {
-  color: var(--ink);
+  opacity: 0.8;
 }
 
 /* Body */
 #package-booking-modal .bd {
-  padding: var(--space-xl);
+  padding: 24px;
   flex: 1;
+  overflow-y: auto;
 }
 
 #package-booking-modal .form-group {
@@ -2393,28 +2592,37 @@ label {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--space-lg);
+  padding: 24px;
+  border-bottom: 2px solid #e2e8f0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  flex-shrink: 0;
 }
 
 #package-view-modal .hd h3 {
   margin: 0;
-  font-size: 1.25rem;
-  font-weight: 800;
+  color: white;
+  font-size: 20px;
+  font-weight: 700;
 }
 
 #package-view-modal .hd .btn {
-  font-size: 1.5rem;
+  font-size: 26px;
   line-height: 1;
-  padding: 4px 10px;
+  padding: 0 6px;
   border: none;
   background: transparent;
-  color: var(--muted);
+  color: white;
   cursor: pointer;
 }
 
 #package-view-modal .hd .btn:hover {
-  color: var(--ink);
+  opacity: 0.8;
   transform: none;
+}
+
+/* Body */
+#package-view-modal .bd {
+  padding: 24px;
 }
 
 /* Body text tweaks */
@@ -2449,23 +2657,33 @@ label {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--space-lg) var(--space-xl);
-  border-bottom: 1px solid var(--ring);
-  background: linear-gradient(180deg, #fafbfc 0%, #f5f7fa 100%);
-  position: sticky;
-  top: 0;
-  z-index: 2;
+  padding: 24px;
+  border-bottom: 2px solid #e2e8f0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  flex-shrink: 0;
 }
 #package-modal .hd h3 {
   margin: 0;
-  font-size: 1.25rem;
-  font-weight: 800;
+  color: white;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+#package-modal .hd .btn {
+  background: transparent;
+  border: none;
+  color: white;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 6px;
 }
 
 /* Body */
 #package-modal .bd {
-  padding: var(--space-xl);
+  padding: 24px;
   flex: 1;
+  overflow-y: auto;
 }
 #package-modal .form-grid {
   display: grid;
@@ -3058,4 +3276,670 @@ label {
 
 .pkg-badge {
   margin-left: 4px;
+}
+/* ===== Pricing Model: full-width like Reservations / Extras ===== */
+@media (min-width: 1024px) {
+  #view-pricing-model .grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  #view-pricing-model,
+  #view-pricing-model .card,
+  #view-pricing-model .card-bd,
+  #view-pricing-model .list {
+    width: 100%;
+    max-width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+  }
+}
+/* Modal Styles - REQUIRED for pricing modals */
+.modal-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background: rgba(0, 0, 0, 0.5) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 9999 !important;
+  padding: 20px !important;
+}
+
+.modal-overlay > .modal {
+  display: flex !important;
+  flex-direction: column !important;
+  background: white !important;
+  border-radius: 8px !important;
+  max-width: 600px !important;
+  width: 100% !important;
+  max-height: 90vh !important;
+  overflow-y: auto !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1) !important;
+}
+
+.modal-hd {
+  padding: 24px !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+}
+
+.modal-hd h3 {
+  margin: 0 !important;
+  font-size: 18px !important;
+  font-weight: 600 !important;
+}
+
+.btn-close {
+  background: none !important;
+  border: none !important;
+  font-size: 24px !important;
+  cursor: pointer !important;
+  color: #64748b !important;
+  padding: 0 !important;
+  width: 32px !important;
+  height: 32px !important;
+}
+
+.btn-close:hover {
+  color: #0f172a !important;
+}
+
+.modal-bd {
+  padding: 24px !important;
+}
+
+.modal-ft {
+  padding: 24px !important;
+  border-top: 1px solid #e2e8f0 !important;
+  display: flex !important;
+  justify-content: flex-end !important;
+  gap: 12px !important;
+  background: #f8fafc !important;
+}
+
+.label {
+  display: block !important;
+  margin-bottom: 8px !important;
+  font-weight: 500 !important;
+  color: #0f172a !important;
+  font-size: 14px !important;
+}
+
+.input, .select, textarea.input {
+  width: 100% !important;
+  padding: 10px !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 8px !important;
+  font-size: 14px !important;
+  font-family: inherit !important;
+}
+
+.input:focus, .select:focus, textarea.input:focus {
+  outline: none !important;
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+}
+
+.error {
+  color: #dc2626 !important;
+  background: #fee2e2 !important;
+  padding: 12px !important;
+  border-radius: 8px !important;
+  font-size: 14px !important;
+  border-left: 3px solid #dc2626 !important;
+}
+/* ===== Pricing Model: stop mobile overflow ===== */
+@media (max-width: 767px) {
+  /* Safety net: never let this view cause horizontal scroll */
+  #view-pricing-model,
+  #pricing-content {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  /* Make the model select shrink properly (it currently has min-width inline) */
+  #pm-model-select {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  /* Tabs/controls must wrap instead of forcing one row */
+  #view-pricing-model .chart-controls {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  /* Any “button rows” in pricing should be allowed to wrap */
+  #view-pricing-model [style*="display:flex"] {
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+
+  /* Tables inside pricing: allow scrolling instead of overflow */
+  #pricing-content .card,
+  #pricing-content .card-bd {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Long strings in table cells should break */
+  #pricing-content table td,
+  #pricing-content table th {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+}
+
+/* ===== MODAL STYLES - SHARED ACROSS ALL APPS ===== */
+
+/* Modal Backdrop */
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 20px;
+}
+
+/* Modal Dialog */
+.modal-dialog {
+  max-width: 750px;
+  width: 100%;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 25px 80px rgba(0, 0, 0, 0.4);
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Modal Header */
+.modal-dialog .hd {
+  padding: 24px;
+  border-bottom: 2px solid #e2e8f0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.modal-dialog .hd h3 {
+  margin: 0;
+  color: white;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.modal-dialog .hd p {
+  margin: 4px 0 0 0;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+}
+
+/* Modal Body */
+.modal-dialog .bd {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* Modal Footer */
+.modal-dialog .ft {
+  padding: 20px 24px;
+  border-top: 2px solid #e2e8f0;
+  background: #f8fafc;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+/* Modal Form Elements */
+.modal-dialog label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 600;
+  color: #334155;
+  font-size: 13px;
+}
+
+.modal-dialog input[type="text"],
+.modal-dialog input[type="number"],
+.modal-dialog input[type="date"],
+.modal-dialog select,
+.modal-dialog textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.2s;
+  box-sizing: border-box;
+}
+
+.modal-dialog input[type="text"]:focus,
+.modal-dialog input[type="number"]:focus,
+.modal-dialog input[type="date"]:focus,
+.modal-dialog select:focus,
+.modal-dialog textarea:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.modal-dialog textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+/* Modal Buttons */
+.modal-dialog .ft button {
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  transition: all 0.2s;
+  cursor: pointer;
+  border: none;
+}
+
+.modal-dialog .ft button.btn {
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.modal-dialog .ft button.btn:hover {
+  background: #e2e8f0;
+}
+
+.modal-dialog .ft button.cta {
+  background: #3b82f6;
+  color: white;
+}
+
+.modal-dialog .ft button.cta:hover {
+  background: #2563eb;
+}
+
+/* Modal Error Messages */
+.modal-dialog .error {
+  display: none;
+  margin-top: 16px;
+  padding: 12px;
+  background: #fef2f2;
+  border: 2px solid #fecaca;
+  border-radius: 8px;
+  color: #991b1b;
+  font-size: 13px;
+}
+
+/* Form Groups */
+.modal-dialog .form-group {
+  margin-bottom: 16px;
+}
+
+/* ===== MOBILE RESPONSIVE MODAL STYLES ===== */
+@media (max-width: 768px) {
+  /* Modal Backdrop - Less padding */
+  .modal-backdrop {
+    padding: 10px !important;
+  }
+
+  /* Modal Dialog - Fit screen */
+  body > div.modal-backdrop > div.modal-dialog {
+    max-width: calc(100vw - 20px) !important;
+    width: calc(100vw - 20px) !important;
+    margin: 0 auto !important;
+    max-height: 95vh !important;
+    overflow: hidden !important;
+  }
+
+  /* CRITICAL: Override ALL inline styles - Use every possible selector */
+  .modal-dialog,
+  div.modal-dialog,
+  body .modal-dialog,
+  body > div .modal-dialog,
+  body > div.modal-backdrop .modal-dialog,
+  [class="modal-dialog"],
+  div[class="modal-dialog"] {
+    max-width: calc(100vw - 20px) !important;
+    width: calc(100vw - 20px) !important;
+    min-width: 0 !important;
+    margin: 0 auto !important;
+    max-height: 95vh !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Modal Header - Reduced padding */
+  body .modal-dialog .hd {
+    padding: 12px !important;
+  }
+
+  /* Modal Body - Reduced padding, prevent overflow */
+  body .modal-dialog .bd {
+    padding: 12px !important;
+    overflow-x: hidden !important;
+  }
+
+  /* Modal Footer - Stack buttons vertically */
+  body .modal-dialog .ft {
+    padding: 12px !important;
+    flex-direction: column !important;
+    display: flex !important;
+  }
+
+  body .modal-dialog .ft button {
+    width: 100% !important;
+    margin: 4px 0 !important;
+    display: block !important;
+    padding: 12px 20px !important;
+  }
+
+  /* Force single column for all grids in modals */
+  body .modal-dialog div[style*="grid-template-columns"] {
+    grid-template-columns: 1fr !important;
+    display: grid !important;
+  }
+
+  body .modal-dialog .bd div[style*="grid"] {
+    grid-template-columns: 1fr !important;
+    display: grid !important;
+  }
+
+  body .modal-dialog .bd > div > div[style*="display:grid"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  body .modal-dialog .bd div[style*="grid-template-columns:1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+    display: grid !important;
+  }
+
+  /* Override any large gaps */
+  body .modal-dialog div[style*="gap"] {
+    gap: 12px !important;
+  }
+
+  /* Ensure all form elements fit */
+  body .modal-dialog input,
+  body .modal-dialog select,
+  body .modal-dialog textarea {
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+  }
+
+  /* Prevent ANY element from overflowing */
+  body .modal-dialog * {
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  body .modal-dialog .form-group {
+    max-width: 100% !important;
+    overflow: hidden !important;
+  }
+
+  /* Textarea mobile specific */
+  body .modal-dialog textarea {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 10px 12px !important;
+    border: 2px solid #e2e8f0 !important;
+    border-radius: 8px !important;
+    font-size: 14px !important;
+    box-sizing: border-box !important;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Even more compact on very small screens */
+  body .modal-dialog .hd {
+    padding: 10px !important;
+  }
+
+  body .modal-dialog .bd {
+    padding: 10px !important;
+  }
+
+  body .modal-dialog .ft {
+    padding: 10px !important;
+  }
+
+  body .modal-dialog .hd h3 {
+    font-size: 18px !important;
+  }
+
+  body .modal-dialog .hd p {
+    font-size: 12px !important;
+  }
+}
+
+/* Modal Close Button (× in header) */
+.modal-dialog .hd button {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  font-size: 24px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  line-height: 1;
+  padding: 0;
+}
+
+.modal-dialog .hd button:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: rotate(90deg);
+}
+
+.modal-dialog .hd {
+  position: relative;
+  padding-right: 60px !important; /* Make room for close button */
+}
+
+/* Mobile adjustments for close button */
+@media (max-width: 768px) {
+  .modal-dialog .hd button {
+    top: 12px;
+    right: 12px;
+    width: 28px;
+    height: 28px;
+    font-size: 20px;
+  }
+  
+  body .modal-dialog .hd {
+    padding-right: 50px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .modal-dialog .hd button {
+    top: 10px;
+    right: 10px;
+    width: 24px;
+    height: 24px;
+    font-size: 18px;
+  }
+  
+  body .modal-dialog .hd {
+    padding-right: 45px !important;
+  }
+}
+/* =========================
+   Global Modal System
+   ========================= */
+.modal {
+  position: fixed;
+  inset: 0;
+  display: none;              /* hidden by default */
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 9999;
+}
+
+.modal.show {
+  display: flex;              /* show when opened */
+}
+
+.modal .inner,
+.modal .content {             /* support either markup */
+  width: min(760px, 100%);
+  max-height: calc(100vh - 28px);
+  background: #fff;
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 14px 40px rgba(0,0,0,.28);
+  display: flex;
+  flex-direction: column;
+}
+
+.modal .hd {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid #eee;
+}
+
+.modal .hd h3,
+.modal .hd .title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.modal .hd .sub,
+.modal .hd .subtitle {
+  margin: 0;
+  font-size: 13px;
+  opacity: 0.85;
+  font-weight: 500;
+}
+
+.modal .bd {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 16px 18px;
+}
+
+.modal .ft {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 18px;
+  border-top: 1px solid #eee;
+
+  /* key: keeps Save visible on mobile when body scrolls */
+  position: sticky;
+  bottom: 0;
+  background: #fff;
+}
+
+/* Mobile: prevent “scattered” layout + keep buttons usable */
+@media (max-width: 640px) {
+  .modal { padding: 10px; }
+
+  .modal .inner,
+  .modal .content {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .modal .hd {
+    padding: 14px 14px;
+  }
+
+  .modal .bd {
+    padding: 14px 14px;
+  }
+
+  .modal .ft {
+    padding: 12px 14px;
+    justify-content: stretch;
+  }
+
+  .modal .ft .btn,
+  .modal .ft button {
+    width: 100%;
+  }
+}
+/* Global modal sanity (works with your .modal-backdrop + .modal-dialog + .hd/.bd/.ft structure) */
+.modal-backdrop {
+  box-sizing: border-box;
+}
+
+.modal-dialog {
+  box-sizing: border-box;
+  width: min(750px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+}
+
+.modal-dialog .hd {
+  position: relative;
+}
+
+/* close button: keep it in the top-right, never affects layout */
+.modal-x {
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: 0;
+  background: rgba(255,255,255,0.18);
+  color: #fff;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* mobile: force header/body/footer vertical flow + make body scroll and footer visible */
+@media (max-width: 768px) {
+  .modal-backdrop {
+    padding: 12px !important;
+    align-items: flex-start !important;
+  }
+
+  .modal-dialog {
+    margin-top: 10px;
+    max-height: calc(100vh - 24px) !important;
+  }
+
+  .modal-dialog .bd {
+    padding: 16px !important;
+  }
+
+  .modal-dialog .ft {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+  }
+
+  /* any inline 2-column grids inside modals collapse to 1 column on mobile */
+  .modal-dialog [style*="grid-template-columns:1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
 }

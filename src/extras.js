@@ -72,16 +72,14 @@ export async function initExtras() {
 function openExtraModal(id = null) {
   const modal = document.createElement('div');
   modal.id = 'extra-modal';
-  modal.className = 'modal';
-  modal.style.display = 'flex';
+  modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;';
 
   modal.innerHTML = `
-    <div class="content">
-      <div class="hd">
-        <h3 id="extra-modal-title" style="margin:0">${id ? 'Edit Extra' : 'Add Extra'}</h3>
-        <button id="extra-close" class="btn">×</button>
+    <div style="max-width:750px;width:100%;background:white;border-radius:16px;box-shadow:0 25px 80px rgba(0,0,0,0.4);max-height:90vh;overflow:hidden;display:flex;flex-direction:column;">
+      <div style="padding:24px;border-bottom:2px solid #e2e8f0;background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+        <h3 id="extra-modal-title" style="margin:0;color:white;font-size:20px;font-weight:700">${id ? 'Edit Extra' : 'Add Extra'}</h3>
       </div>
-      <div class="bd">
+      <div style="padding:24px;overflow-y:auto;flex:1;">
         <div id="extra-error" class="muted" style="min-height:18px"></div>
 
         <div class="form-grid">
@@ -135,7 +133,7 @@ function openExtraModal(id = null) {
           </div>
         </div>
       </div>
-      <div class="ft">
+      <div style="padding:16px 24px;border-top:2px solid #e2e8f0;display:flex;justify-content:flex-end;gap:10px;flex-shrink:0;">
         <button class="btn" id="extra-cancel">Cancel</button>
         <button class="btn btn-primary" id="extra-save">${id ? 'Update' : 'Create'}</button>
       </div>
@@ -145,8 +143,7 @@ function openExtraModal(id = null) {
 
   // Close handlers
   const close = () => modal.remove();
-  $('#extra-close').addEventListener('click', close);
-  $('#extra-cancel').addEventListener('click', close);
+  document.getElementById('extra-cancel').addEventListener('click', close);
   modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
 
   // If editing, fetch & populate
@@ -157,7 +154,7 @@ function openExtraModal(id = null) {
   }
 
   // Save
-  $('#extra-save').addEventListener('click', async () => {
+  document.getElementById('extra-save').addEventListener('click', async () => {
     try {
       const payload = collectExtraForm();
       let result;

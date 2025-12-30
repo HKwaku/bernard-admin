@@ -104,6 +104,7 @@ async function loadReservations() {
 
         return {
           id: `blocked-${b.id}`,
+          blocked_id: b.id,
           confirmation_code: null,
           group_reservation_id: null,
           group_reservation_code: null,
@@ -436,12 +437,12 @@ function renderListView(reservations) {
 
     // Helper function to render a single reservation item
   const renderReservationItem = (r, inGroup = false) => {
-    // Blocked rows: simple grey card, no edit/delete, no click
+    // Blocked rows: grey card with edit/delete buttons
     if (r.is_blocked) {
       return `
-        <div class="item" style="border-left:4px solid #9ca3af;background:linear-gradient(to right,#f3f4f6,white);color:#6b7280;cursor:default;">
-          <div class="row">
-            <div>
+        <div class="item" style="border-left:4px solid #9ca3af;background:linear-gradient(to right,#f3f4f6,white);color:#6b7280;">
+          <div class="row" style="align-items:flex-start;gap:12px">
+            <div style="flex:1">
               <div class="title" style="color:#6b7280;">
                 ${r.room_name || r.room_type_code || 'Cabin'}
               </div>
@@ -457,6 +458,10 @@ function renderListView(reservations) {
                 Blocked
               </span>
             </div>
+          </div>
+          <div class="room-card-footer">
+            <button class="btn btn-sm" onclick="editBlockedDate('${r.blocked_id}', '${r.room_type_id}', '${r.check_in}', '${r.notes || ''}'); event.stopPropagation();">Edit</button>
+            <button class="btn btn-sm" onclick="deleteBlockedDate('${r.blocked_id}'); event.stopPropagation();" style="color:#b91c1c">Delete</button>
           </div>
         </div>
       `;
@@ -789,6 +794,7 @@ for (let day = 1; day <= monthDays; day++) {
                 co.getDate() === day;
 
               const isBlocked = !!b.is_blocked;
+              const isGroup = !!b.group_reservation_id;
 
               let chipClass = isCheckoutDay
                 ? 'calendar-chip checkout-day'
@@ -805,7 +811,7 @@ for (let day = 1; day <= monthDays; day++) {
 
               return `
                 <div class="${chipClass}" style="${isBlocked ? 'color:#6b7280;' : ''}">
-                  ${labelText}
+                  ${labelText}${isGroup ? ' G' : ''}
                   ${
                     !isBlocked && (b.package_code || b.package_name)
                       ? '<span class="pkg-badge">PK</span>'
@@ -925,7 +931,9 @@ async function isRoomAvailableForEdit(roomTypeId, roomTypeCode, checkInISO, chec
       return sameId || sameCode;
     });
 
-        const hasOverlap = relevant.some((r) => {
+        // Use half-open intervals [check_in, check_out) - standard hospitality practice
+    // Overlap if: existing_start < new_end AND existing_end > new_start
+    const hasOverlap = relevant.some((r) => {
       if (!r.check_in || !r.check_out) return false;
       const existingStart = new Date(r.check_in);
       const existingEnd   = new Date(r.check_out);
@@ -935,7 +943,6 @@ async function isRoomAvailableForEdit(roomTypeId, roomTypeCode, checkInISO, chec
       ) {
         return false;
       }
-      // half-open ranges [check_in, check_out)
       return existingStart < newEnd && existingEnd > newStart;
     });
 
@@ -1092,16 +1099,15 @@ async function openEditModal(id) {
     // --- Build modal shell ---
     const modal = document.createElement('div');
     modal.id = 'reservation-modal';
-    modal.className = 'modal show';
+    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;';
 
     modal.innerHTML = `
-      <div class="content" onclick="event.stopPropagation()">
-        <div class="hd">
-          <h3 style="margin:0">Edit Reservation</h3>
-          <button class="btn" id="er-close-btn">×</button>
+      <div style="max-width:750px;width:100%;background:white;border-radius:16px;box-shadow:0 25px 80px rgba(0,0,0,0.4);max-height:90vh;overflow:hidden;display:flex;flex-direction:column;" onclick="event.stopPropagation()">
+        <div style="padding:24px;border-bottom:2px solid #e2e8f0;background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+          <h3 style="margin:0;color:white;font-size:20px;font-weight:700">Edit Reservation</h3>
         </div>
 
-        <div class="bd">
+        <div style="padding:24px;overflow-y:auto;flex:1;">
           <div class="form-grid">
             <div class="form-group">
               <label>First Name</label>
@@ -1278,7 +1284,7 @@ async function openEditModal(id) {
           </div>
         </div>
 
-        <div class="ft">
+        <div style="padding:16px 24px;border-top:2px solid #e2e8f0;display:flex;justify-content:flex-end;gap:10px;flex-shrink:0;">
           <button class="btn" id="er-cancel">Cancel</button>
           <button class="btn btn-danger" id="er-delete">Delete</button>
           <button class="btn btn-primary" id="er-save">Save Changes</button>
@@ -1372,7 +1378,7 @@ async function openEditModal(id) {
       }
     }
 
-        function computeRoomSubtotal() {
+        async function computeRoomSubtotal() {
       const selectedRoomIds = getSelectedRoomIds();
       const ci = new Date(inEl.value);
       const co = new Date(outEl.value);
@@ -1399,13 +1405,40 @@ async function openEditModal(id) {
 
       let totalSubtotal = 0;
 
-      selectedRoomIds.forEach((roomId) => {
+      // Use dynamic pricing for each selected room
+      for (const roomId of selectedRoomIds) {
         const info = roomMap[String(roomId)];
-        if (!info) return;
-        const wkdPrice = Number(info.base_price_per_night_weekday || 0);
-        const wkePrice = Number(info.base_price_per_night_weekend || 0);
-        totalSubtotal += weekdayN * wkdPrice + weekendN * wkePrice;
-      });
+        if (!info) continue;
+
+        try {
+          // Call dynamic pricing function - Supabase returns {data, error}
+          const { data: pricingData, error: pricingError } = await supabase.rpc('calculate_dynamic_price', {
+            p_room_type_id: roomId,
+            p_check_in: inEl.value,
+            p_check_out: outEl.value,
+            p_pricing_model_id: null // Uses active model
+          });
+
+          if (pricingError) {
+            throw new Error(pricingError.message || 'Dynamic pricing failed');
+          }
+
+          if (pricingData && pricingData.total) {
+            totalSubtotal += parseFloat(pricingData.total);
+          } else {
+            // Fallback to base prices if no dynamic pricing returned
+            const wkdPrice = Number(info.base_price_per_night_weekday || 0);
+            const wkePrice = Number(info.base_price_per_night_weekend || 0);
+            totalSubtotal += weekdayN * wkdPrice + weekendN * wkePrice;
+          }
+        } catch (err) {
+          // Fallback to base prices on error
+          console.warn('Dynamic pricing failed for room', roomId, '- using base prices');
+          const wkdPrice = Number(info.base_price_per_night_weekday || 0);
+          const wkePrice = Number(info.base_price_per_night_weekend || 0);
+          totalSubtotal += weekdayN * wkdPrice + weekendN * wkePrice;
+        }
+      }
 
       roomSubtotalEl.value = totalSubtotal.toFixed(2);
       updatePriceBreakdown();
@@ -1796,15 +1829,41 @@ async function openEditModal(id) {
           const info = roomMap[String(roomId)] || {};
           const code = info.code || null;
 
-          const available = await isRoomAvailableForEdit(
-            roomId,
-            code,
-            inEl.value,
-            outEl.value,
-            idsToSkip
+          // Call the same RPC that BookingWidget uses
+          const { data: availableRooms, error: availError } = await supabase.rpc('get_available_rooms', {
+            p_check_in: inEl.value,
+            p_check_out: outEl.value,
+            p_adults: 1 // Just checking availability
+          });
+
+          if (availError) {
+            console.error('Availability check failed:', availError);
+            alert('Error checking availability. Please try again.');
+            return;
+          }
+
+          // Check if this specific room is in the available list
+          // OR if the only conflict is with the current reservation being edited
+          let isAvailable = availableRooms && availableRooms.some(r => 
+            String(r.id) === String(roomId) || r.code === code
           );
 
-          if (!available) {
+          // If not available, check if it's only because of the current reservation
+          if (!isAvailable) {
+            // Manually check if there are conflicts besides the current reservation
+            const { data: conflicts } = await supabase
+              .from('reservations')
+              .select('id, room_type_id, room_type_code, check_in, check_out')
+              .not('id', 'in', `(${idsToSkip.join(',')})`)
+              .not('status', 'in', '("cancelled","no_show")')
+              .or(`room_type_id.eq.${roomId},room_type_code.eq.${code}`)
+              .gte('check_out', inEl.value)
+              .lte('check_in', outEl.value);
+
+            isAvailable = !conflicts || conflicts.length === 0;
+          }
+
+          if (!isAvailable) {
             alert(
               `${info.name || 'One of the selected cabins'} is NOT available for the selected dates.`
             );
@@ -1896,12 +1955,40 @@ async function openEditModal(id) {
           else weekdayN2++;
         }
 
-        const perRoomSubtotals = selectedRoomIds.map((roomId) => {
+        // Calculate dynamic pricing for each room
+        const perRoomSubtotals = [];
+        for (const roomId of selectedRoomIds) {
           const info = roomMap[String(roomId)] || {};
-          const wkd = Number(info.base_price_per_night_weekday || 0);
-          const wke = Number(info.base_price_per_night_weekend || 0);
-          return weekdayN2 * wkd + weekendN2 * wke;
-        });
+          
+          try {
+            // Call dynamic pricing function - Supabase returns {data, error}
+            const { data: pricingData, error: pricingError } = await supabase.rpc('calculate_dynamic_price', {
+              p_room_type_id: roomId,
+              p_check_in: inEl.value,
+              p_check_out: outEl.value,
+              p_pricing_model_id: null // Uses active model
+            });
+
+            if (pricingError) {
+              throw new Error(pricingError.message || 'Dynamic pricing failed');
+            }
+
+            if (pricingData && pricingData.total) {
+              perRoomSubtotals.push(parseFloat(pricingData.total));
+            } else {
+              // Fallback to base prices
+              const wkd = Number(info.base_price_per_night_weekday || 0);
+              const wke = Number(info.base_price_per_night_weekend || 0);
+              perRoomSubtotals.push(weekdayN2 * wkd + weekendN2 * wke);
+            }
+          } catch (err) {
+            // Fallback to base prices on error
+            console.warn('Dynamic pricing failed in save, using base prices:', err);
+            const wkd = Number(info.base_price_per_night_weekday || 0);
+            const wke = Number(info.base_price_per_night_weekend || 0);
+            perRoomSubtotals.push(weekdayN2 * wkd + weekdayN2 * wke);
+          }
+        }
 
         const primaryRoomSubtotal = perRoomSubtotals[0] || 0;
 
@@ -2195,4 +2282,118 @@ window.showReservationDetails = function (confirmationCode) {
   });
 
   document.body.appendChild(overlay);
+}
+
+// ========== BLOCKED DATES EDIT/DELETE ==========
+
+window.editBlockedDate = async function(blockedId, roomTypeId, blockedDate, reason) {
+  try {
+    // Load room types for dropdown
+    const { data: rooms, error: roomsErr } = await supabase
+      .from('room_types')
+      .select('id, code, name')
+      .eq('is_active', true)
+      .order('name', { ascending: true });
+
+    if (roomsErr) throw roomsErr;
+
+    const roomOptionsHtml = (rooms || []).map((rm) => {
+      const selected = String(rm.id) === String(roomTypeId) ? 'selected' : '';
+      return `<option value="${rm.id}" ${selected}>${(rm.code || '').toUpperCase()} — ${rm.name || ''}</option>`;
+    }).join('');
+
+    const modal = document.createElement('div');
+    modal.id = 'edit-blocked-modal';
+    modal.className = 'modal show';
+    modal.innerHTML = `
+      <div class="content" onclick="event.stopPropagation()">
+        <div class="hd">
+          <h3>Edit Blocked Date</h3>
+          <button class="btn" onclick="document.getElementById('edit-blocked-modal').remove()">×</button>
+        </div>
+        <div class="bd">
+          <div class="form-group">
+            <label>Cabin</label>
+            <select id="edit-blocked-room">
+              ${roomOptionsHtml}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Date</label>
+            <input id="edit-blocked-date" type="date" value="${blockedDate || ''}" />
+          </div>
+          <div class="form-group">
+            <label>Reason</label>
+            <select id="edit-blocked-reason">
+              <option value="maintenance" ${reason === 'maintenance' ? 'selected' : ''}>Maintenance</option>
+              <option value="staff holiday" ${reason === 'staff holiday' ? 'selected' : ''}>Staff holiday</option>
+              <option value="other" ${reason === 'other' || (!reason || (reason !== 'maintenance' && reason !== 'staff holiday')) ? 'selected' : ''}>Other</option>
+            </select>
+          </div>
+        </div>
+        <div class="ft">
+          <button class="btn" onclick="document.getElementById('edit-blocked-modal').remove()">Cancel</button>
+          <button class="btn btn-primary" id="save-blocked-btn">Save</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    modal.querySelector('#save-blocked-btn').addEventListener('click', async () => {
+      const newRoomId = modal.querySelector('#edit-blocked-room').value;
+      const newDate = modal.querySelector('#edit-blocked-date').value;
+      const newReason = modal.querySelector('#edit-blocked-reason').value;
+
+      if (!newRoomId || !newDate) {
+        alert('Please select cabin and date');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('blocked_dates')
+        .update({
+          room_type_id: newRoomId,
+          blocked_date: newDate,
+          reason: newReason
+        })
+        .eq('id', blockedId);
+
+      if (error) {
+        alert('Error updating blocked date: ' + (error.message || error));
+        return;
+      }
+
+      toast('Blocked date updated successfully');
+      modal.remove();
+      await initReservations();
+    });
+
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) modal.remove();
+    });
+
+  } catch (e) {
+    alert('Error loading edit form: ' + (e.message || e));
+  }
+};
+
+window.deleteBlockedDate = async function(blockedId) {
+  if (!confirm('Are you sure you want to delete this blocked date?')) {
+    return;
+  }
+
+  try {
+    const { error } = await supabase
+      .from('blocked_dates')
+      .delete()
+      .eq('id', blockedId);
+
+    if (error) throw error;
+
+    toast('Blocked date deleted successfully');
+    await initReservations();
+  } catch (e) {
+    alert('Error deleting blocked date: ' + (e.message || e));
+  }
 };

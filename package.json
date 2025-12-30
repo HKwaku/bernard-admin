@@ -14,6 +14,7 @@
     "@langchain/core": "^1.0.5",
     "@langchain/langgraph": "^1.0.2",
     "@langchain/openai": "^1.1.1",
-    "@supabase/supabase-js": "^2.78.0"
+    "@supabase/supabase-js": "^2.78.0",
+    "xlsx": "^0.18.5"
   }
 }

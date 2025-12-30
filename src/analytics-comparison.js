@@ -285,117 +285,29 @@ async function getWeekdayWeekendComparison(start, end) {
 
 // Generate time series for occupancy comparison with granularity support
 async function generateOccupancyTimeSeries(periods, granularity = 'day') {
-  const NUM_CABINS = 3;
   const datasets = [];
 
   for (const [label, period] of Object.entries(periods)) {
-    const { data: reservations } = await supabase
-      .from('reservations')
-      .select('check_in, check_out, nights')
-      .gte('check_in', sqlDate(period.start))
-      .lte('check_in', sqlDate(period.end))
-      .in('status', ['confirmed', 'checked-in', 'checked-out']);
+    // Use database function for occupancy trend
+    const { data, error } = await supabase
+      .rpc('calculate_occupancy_trend', {
+        p_start_date: sqlDate(period.start),
+        p_end_date: sqlDate(period.end),
+        p_granularity: granularity
+      });
 
-    const occupancyByDate = {};
-    
-    (reservations || []).forEach(r => {
-      if (!r.check_in || !r.check_out) return;
-      const checkIn = new Date(r.check_in);
-      const checkOut = new Date(r.check_out);
-      let d = new Date(checkIn);
-      
-      while (d < checkOut) {
-        const key = sqlDate(d);
-        occupancyByDate[key] = (occupancyByDate[key] || 0) + 1;
-        d.setDate(d.getDate() + 1);
-      }
-    });
-
-    let points = [];
-
-    if (granularity === 'day') {
-      // Daily granularity
-      let currentDate = new Date(period.start);
-      const endDate = new Date(period.end);
-      
-      while (currentDate <= endDate) {
-        const key = sqlDate(currentDate);
-        const occupied = occupancyByDate[key] || 0;
-        const rate = (occupied / NUM_CABINS) * 100;
-        
-        points.push({
-          label: currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-          value: rate
-        });
-        
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
-    } else if (granularity === 'week') {
-      // Weekly granularity
-      const weekBuckets = {};
-      let currentDate = new Date(period.start);
-      const endDate = new Date(period.end);
-      
-      while (currentDate <= endDate) {
-        const key = sqlDate(currentDate);
-        const occupied = occupancyByDate[key] || 0;
-        const rate = (occupied / NUM_CABINS) * 100;
-        
-        // Get Monday of the week
-        const weekStart = new Date(currentDate);
-        const day = weekStart.getDay();
-        const diff = (day + 6) % 7;
-        weekStart.setDate(weekStart.getDate() - diff);
-        const weekKey = sqlDate(weekStart);
-        
-        if (!weekBuckets[weekKey]) {
-          weekBuckets[weekKey] = { sum: 0, count: 0, date: new Date(weekStart) };
-        }
-        weekBuckets[weekKey].sum += rate;
-        weekBuckets[weekKey].count += 1;
-        
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
-      
-      points = Object.values(weekBuckets)
-        .sort((a, b) => a.date - b.date)
-        .map(bucket => ({
-          label: bucket.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-          value: bucket.count > 0 ? bucket.sum / bucket.count : 0
-        }));
-    } else if (granularity === 'month') {
-      // Monthly granularity
-      const monthBuckets = {};
-      let currentDate = new Date(period.start);
-      const endDate = new Date(period.end);
-      
-      while (currentDate <= endDate) {
-        const key = sqlDate(currentDate);
-        const occupied = occupancyByDate[key] || 0;
-        const rate = (occupied / NUM_CABINS) * 100;
-        
-        const monthKey = `${currentDate.getFullYear()}-${currentDate.getMonth()}`;
-        
-        if (!monthBuckets[monthKey]) {
-          monthBuckets[monthKey] = { 
-            sum: 0, 
-            count: 0, 
-            date: new Date(currentDate.getFullYear(), currentDate.getMonth(), 1) 
-          };
-        }
-        monthBuckets[monthKey].sum += rate;
-        monthBuckets[monthKey].count += 1;
-        
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
-      
-      points = Object.values(monthBuckets)
-        .sort((a, b) => a.date - b.date)
-        .map(bucket => ({
-          label: bucket.date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-          value: bucket.count > 0 ? bucket.sum / bucket.count : 0
-        }));
+    if (error) {
+      console.error('Error generating occupancy time series:', error);
+      throw new Error(`Database function error: ${error.message}. Have you deployed occupancy_functions.sql?`);
     }
+
+    // Transform database result into chart points
+    const points = (data || []).map(item => ({
+      label: granularity === 'month'
+        ? new Date(item.date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+        : new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      value: item.occupancy_rate
+    }));
     
     datasets.push({ label, points });
   }
@@ -756,11 +668,54 @@ export async function renderComparisonView(dateRange) {
       fetchReservationsForPeriod(periods.yoy.start, periods.yoy.end)
     ]);
 
-    // Calculate metrics for each period
-    const currentOccupancy = await calculateOccupancyMetrics(currentRes, periods.current.start, periods.current.end);
-    const momOccupancy = await calculateOccupancyMetrics(momRes, periods.mom.start, periods.mom.end);
-    const qoqOccupancy = await calculateOccupancyMetrics(qoqRes, periods.qoq.start, periods.qoq.end);
-    const yoyOccupancy = await calculateOccupancyMetrics(yoyRes, periods.yoy.start, periods.yoy.end);
+    // Use database function for occupancy comparison
+    const { data: occupancyData, error: occError } = await supabase
+      .rpc('calculate_occupancy_comparison', {
+        p_periods: {
+          current: { start: sqlDate(periods.current.start), end: sqlDate(periods.current.end) },
+          mom: { start: sqlDate(periods.mom.start), end: sqlDate(periods.mom.end) },
+          qoq: { start: sqlDate(periods.qoq.start), end: sqlDate(periods.qoq.end) },
+          yoy: { start: sqlDate(periods.yoy.start), end: sqlDate(periods.yoy.end) }
+        }
+      });
+
+    if (occError) {
+      console.error('Database function error:', occError);
+      throw new Error(`Failed to calculate occupancy: ${occError.message}. Have you deployed the SQL functions?`);
+    }
+
+    if (!occupancyData) {
+      throw new Error('No occupancy data returned from database function');
+    }
+
+    // Extract occupancy metrics from database function response
+    const currentOccupancy = {
+      occupancyRate: occupancyData.current.occupancy.occupancy_rate,
+      avgLOS: occupancyData.current.occupancy.alos,
+      bookings: occupancyData.current.occupancy.bookings_count,
+      availableNights: occupancyData.current.capacity.available
+    };
+    
+    const momOccupancy = {
+      occupancyRate: occupancyData.mom.occupancy.occupancy_rate,
+      avgLOS: occupancyData.mom.occupancy.alos,
+      bookings: occupancyData.mom.occupancy.bookings_count,
+      availableNights: occupancyData.mom.capacity.available
+    };
+    
+    const qoqOccupancy = {
+      occupancyRate: occupancyData.qoq.occupancy.occupancy_rate,
+      avgLOS: occupancyData.qoq.occupancy.alos,
+      bookings: occupancyData.qoq.occupancy.bookings_count,
+      availableNights: occupancyData.qoq.capacity.available
+    };
+    
+    const yoyOccupancy = {
+      occupancyRate: occupancyData.yoy.occupancy.occupancy_rate,
+      avgLOS: occupancyData.yoy.occupancy.alos,
+      bookings: occupancyData.yoy.occupancy.bookings_count,
+      availableNights: occupancyData.yoy.capacity.available
+    };
 
     const currentRevenue = calculateRevenueMetrics(currentRes, currentOccupancy.availableNights);
     const momRevenue = calculateRevenueMetrics(momRes, momOccupancy.availableNights);
@@ -945,8 +900,8 @@ export async function renderComparisonView(dateRange) {
     `;
 
     // Generate and render comparison charts with dateRange
-    const occupancyData = await generateOccupancyTimeSeries(periods, 'day');
-    renderComparisonLineChart('occupancy-trend-comparison', occupancyData, { 
+    const occupancyTrendData = await generateOccupancyTimeSeries(periods, 'day');
+    renderComparisonLineChart('occupancy-trend-comparison', occupancyTrendData, { 
       min: 0, 
       max: 100, 
       dateRange: { start: dateRange.start, end: dateRange.end } 

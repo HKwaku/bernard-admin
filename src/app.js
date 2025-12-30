@@ -19,6 +19,7 @@ import {
 } from './utils/helpers.js';
 
 import { initAnalytics } from './analytics.js';
+import { initPricingModel } from './pricing-model/pricing_model.js';
 import { initReservations } from './reservations.js';
 import { initRooms } from './rooms.js';
 import { initExtras } from './extras.js';
@@ -66,6 +67,8 @@ export function initApp() {
             <button class="tab" data-view="coupons">🎟️ Coupons</button>
             <button class="tab" data-view="packages">📦 Packages</button>
             <button class="tab" data-view="analytics">📊 Analytics</button>
+            <button class="tab" data-view="pricing-model">💷 Pricing Model</button>
+
           </div>        
 
           <div class="now" id="now"></div>
@@ -94,13 +97,13 @@ export function initApp() {
               <li><button data-view="coupons"      class="btn" style="width:100%">🎟️ Coupons</button></li>
               <li><button data-view="packages"     class="btn" style="width:100%">📦 Packages</button></li>
               <li><button data-view="analytics"    class="btn" style="width:100%">📊 Analytics</button></li>
+              <li><button data-view="pricing-model" class="btn" style="width:100%">💷 Pricing Model</button></li>
+
               <li><hr style="border:0;border-top:1px solid var(--ring);margin:6px 0"></li>
               <li><button id="mobile-custom-booking-btn" class="btn btn-primary" style="width:100%">+New Booking</button></li>
               <li><button id="mobile-package-btn" class="btn btn-primary" style="width:100%">+New Package</button></li>
               <li><button id="mobile-block-dates-btn" class="btn btn-primary" style="width:100%">Block Dates</button></li>
               <li><hr style="border:0;border-top:1px solid var(--ring);margin:6px 0"></li>
-              <li><button data-view="quickstats"   class="btn" style="width:100%">📊 Quick Stats</button></li>
-              <li><button data-view="recent"       class="btn" style="width:100%">🧾 Recent Bookings</button></li>
             </ul>
           </nav>
         </div>
@@ -185,25 +188,12 @@ export function initApp() {
                 <!-- Content will be injected by analytics.js -->
               </div>
             </div>
-          </div>
 
-          <div>
-            <!-- ids so the mobile menu can scroll to these cards -->
-            <div class="card" id="quick-stats-card">
-              <div class="card-hd">Quick Stats</div>
+            <div id="view-pricing-model" class="card panel">
               <div class="card-bd">
-                <div class="stat-row"><span>Today's Check-ins</span><strong id="stat-checkins">—</strong></div>
-                <div class="stat-row"><span>Active Bookings</span><strong id="stat-total">—</strong></div>
-                <div class="stat-row"><span>This Month</span><strong id="stat-month">—</strong></div>
-                <div class="stat-row"><span>Total Nights Booked</span><strong id="stat-nights">—</strong></div>
+                <!-- Content injected by pricing_model.js -->
               </div>
             </div>
-
-            <div class="card" id="recent-bookings-card" style="margin-top:18px">
-              <div class="card-hd">Recent Bookings</div>
-              <div class="card-bd" id="recent-bookings">Loading…</div>
-            </div>
-          </div>
         </div>
       </div>
     </div>
@@ -274,6 +264,8 @@ export function initApp() {
         coupons: 'Coupons',
         packages: 'Packages',
         analytics: 'Analytics',
+        'pricing-model': 'Pricing Model',
+
       };
       $('#section-title').textContent = titles[btn.dataset.view] || 'Dashboard';
 
@@ -284,7 +276,7 @@ export function initApp() {
       if (btn.dataset.view === 'coupons') initCoupons();
       if (btn.dataset.view === 'packages') initPackages();
       if (btn.dataset.view === 'analytics') initAnalytics();
-      
+      if (btn.dataset.view === 'pricing-model') initPricingModel();
     })
   );
 
@@ -314,30 +306,6 @@ export function initApp() {
         const view = b.getAttribute('data-view');
         close();
 
-        if (view === 'quickstats') {
-          // Hide all panels
-          $$('.panel').forEach((p) => p.classList.remove('show'));
-          // Show only stats card
-          const statsCard = document.getElementById('quick-stats-card');
-          const recentCard = document.getElementById('recent-bookings-card');
-          if (statsCard) statsCard.style.display = 'block';
-          if (recentCard) recentCard.style.display = 'none';
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-          $('#section-title').textContent = 'Quick Stats';
-          return;
-        }
-        if (view === 'recent') {
-          // Hide all panels
-          $$('.panel').forEach((p) => p.classList.remove('show'));
-          // Show only recent bookings card
-          const statsCard = document.getElementById('quick-stats-card');
-          const recentCard = document.getElementById('recent-bookings-card');
-          if (statsCard) statsCard.style.display = 'none';
-          if (recentCard) recentCard.style.display = 'block';
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-          $('#section-title').textContent = 'Recent Bookings';
-          return;
-        }
         if (view === 'newbooking') {
           document.getElementById('new-booking-btn')?.click();
           return;
@@ -373,30 +341,6 @@ export function initApp() {
         const view = b.getAttribute('data-view');
         close();
 
-        if (view === 'quickstats') {
-          // Hide all panels
-          $$('.panel').forEach((p) => p.classList.remove('show'));
-          // Show only stats card
-          const statsCard = document.getElementById('quick-stats-card');
-          const recentCard = document.getElementById('recent-bookings-card');
-          if (statsCard) statsCard.style.display = 'block';
-          if (recentCard) recentCard.style.display = 'none';
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-          $('#section-title').textContent = 'Quick Stats';
-          return;
-        }
-        if (view === 'recent') {
-          // Hide all panels
-          $$('.panel').forEach((p) => p.classList.remove('show'));
-          // Show only recent bookings card
-          const statsCard = document.getElementById('quick-stats-card');
-          const recentCard = document.getElementById('recent-bookings-card');
-          if (statsCard) statsCard.style.display = 'none';
-          if (recentCard) recentCard.style.display = 'block';
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-          $('#section-title').textContent = 'Recent Bookings';
-          return;
-        }
         if (view === 'newbooking') {
           document.getElementById('new-booking-btn')?.click();
           return;
@@ -466,155 +410,77 @@ export function initApp() {
 
   }
 
-// ---------- Quick Stats ----------
-loadStats();
-async function loadStats() {
-  try {
-    const today = new Date().toISOString().slice(0, 10);
-    const now = new Date();
-    const year = now.getFullYear();
-    const monthIndex = now.getMonth(); // 0–11
+} // End of initApp
 
-    // First day of current month (YYYY-MM-DD)
-    const firstOfMonth = new Date(year, monthIndex, 1)
-      .toISOString()
-      .slice(0, 10);
+// ========== SHARED MODAL HELPER ==========
+export function openSharedModal({
+  id,
+  title,
+  subtitle,
+  bodyHtml = '',
+  footerHtml = '',
+  onMount = () => {}
+}) {
+  // Remove any existing modal with same id
+  const existing = document.getElementById(id);
+  if (existing) existing.remove();
 
-    // First day of next month (YYYY-MM-DD) – safe for any month length
-    const firstOfNextMonth = new Date(year, monthIndex + 1, 1)
-      .toISOString()
-      .slice(0, 10);
+  const wrap = document.createElement('div');
+  wrap.id = id;
+  wrap.className = 'modal-backdrop';
+  wrap.style.cssText =
+    'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;';
+  document.body.appendChild(wrap);
 
-    const [
-      checkins,   // count only
-      confirmed,  // count only
-      monthCnt,   // count only
-      nightsSum   // rows (for sum)
-    ] = await Promise.all([
-      // Today's check-ins
-      supabase.from('reservations')
-        .select('id', { count: 'exact', head: true })
-        .gte('check_in', today)
-        .lte('check_in', today),
+  // Click outside closes
+  wrap.addEventListener('click', (e) => {
+    if (e.target === wrap) wrap.remove();
+  });
 
-      // Active bookings (confirmed)
-      supabase.from('reservations')
-        .select('id', { count: 'exact', head: true })
-        .eq('status', 'confirmed'),
+  wrap.innerHTML = `
+    <div class="modal-dialog" style="background:white;border-radius:16px;box-shadow:0 25px 80px rgba(0,0,0,0.4);max-height:90vh;overflow:hidden;display:flex;flex-direction:column;">
+      <div class="hd" style="padding:24px;border-bottom:2px solid #e2e8f0;background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+          <div style="min-width:0">
+            <h3 style="margin:0;color:white;font-size:20px;font-weight:700;">${title || ''}</h3>
+            ${subtitle ? `<p style="margin:4px 0 0 0;color:rgba(255,255,255,0.9);font-size:13px;">${subtitle}</p>` : ''}
+          </div>
+          <button type="button" aria-label="Close" class="btn" data-modal-close style="background:transparent;border:none;color:white;font-size:26px;line-height:1;cursor:pointer;padding:0 6px;">
+            ×
+          </button>
+        </div>
+      </div>
 
-      // This month: check-in date in current month AND not cancelled / no-show
-      supabase.from('reservations')
-        .select('id', { count: 'exact', head: true })
-        .gte('check_in', firstOfMonth)
-        .lt('check_in', firstOfNextMonth)
-        .not('status', 'in', '("cancelled","no_show")'),
+      <div class="bd" style="padding:24px;overflow-y:auto;flex:1;">
+        ${bodyHtml}
+      </div>
 
-      // Total nights booked
-      supabase.from('reservations')
-        .select('nights')
-    ]);
+      <div class="ft" style="padding:20px 24px;border-top:2px solid #e2e8f0;background:#f8fafc;display:flex;justify-content:flex-end;gap:12px;flex-wrap:wrap;">
+        ${footerHtml}
+      </div>
+    </div>
+  `;
 
-    $('#stat-checkins').textContent = checkins?.count ?? 0;
-    $('#stat-total').textContent    = confirmed?.count ?? 0;
-    $('#stat-month').textContent    = monthCnt?.count ?? 0;
-    $('#stat-nights').textContent   = (nightsSum?.data || [])
-      .reduce((t, r) => t + (r.nights || 0), 0);
-  } catch (e) {
-    console.warn('stats error', e);
+  // CRITICAL: Force width on mobile with JavaScript (overrides everything)
+  const modalDialog = wrap.querySelector('.modal-dialog');
+  if (modalDialog && window.innerWidth <= 768) {
+    modalDialog.style.maxWidth = 'calc(100vw - 20px)';
+    modalDialog.style.width = 'calc(100vw - 20px)';
+    modalDialog.style.minWidth = '0';
+    modalDialog.style.margin = '0 auto';
+    modalDialog.style.boxSizing = 'border-box';
   }
+
+  // Wire close button
+  wrap.querySelector('[data-modal-close]')?.addEventListener('click', () => wrap.remove());
+
+  // Let caller attach listeners
+  onMount(wrap);
+
+  return wrap;
 }
 
-    // ---------- Recent Bookings ----------
-  loadRecent();
-  async function loadRecent() {
-    try {
-      const { data } = await supabase
-        .from('reservations')
-        .select(
-          'guest_first_name,guest_last_name,confirmation_code,status,payment_status,created_at,room_name,check_in'
-        )
-        .order('created_at', { ascending: false })
-        .limit(7);
-
-      const rows = data || [];
-
-      function renderStatusBadge(status) {
-        if (!status) return '';
-        const s = String(status).toLowerCase();
-
-        switch (s) {
-          case 'pending':
-            return '<span class="badge pending">Pending</span>';
-          case 'confirmed':
-            return '<span class="badge ok">Confirmed</span>';
-          case 'checked-in':
-            return '<span class="badge checked-in">Checked in</span>';
-          case 'checked-out':
-            return '<span class="badge checked-out">Checked out</span>';
-          case 'cancelled':
-            return '<span class="badge err">Cancelled</span>';
-          case 'no_show':
-          case 'no-show':
-            return '<span class="badge err">No-show</span>';
-          default:
-            return `<span class="badge">${status}</span>`;
-        }
-      }
-
-      function renderPaymentBadge(paymentStatus) {
-        if (!paymentStatus) return '';
-        const p = String(paymentStatus).toLowerCase();
-
-        switch (p) {
-          case 'unpaid':
-            return '<span class="badge err">Unpaid</span>';
-          case 'partial':
-          case 'partially_paid':
-            return '<span class="badge partial">Partially paid</span>';
-          case 'paid':
-            return '<span class="badge ok">Paid</span>';
-          case 'refunded':
-            return '<span class="badge refunded">Refunded</span>';
-          default:
-            return `<span class="badge">${paymentStatus}</span>`;
-        }
-      }
-
-      $('#recent-bookings').innerHTML =
-        rows
-          .map((r) => {
-            const fullName = [r.guest_first_name, r.guest_last_name]
-              .filter(Boolean)
-              .join(' ') || 'Unknown guest';
-
-            const when = r.check_in || '';
-            const room = r.room_name || '';
-
-            const statusBadge = renderStatusBadge(r.status);
-            const paymentBadge = renderPaymentBadge(r.payment_status);
-
-            return `
-              <div class="recent-item">
-                <div>
-                  <div style="font-weight:700">${fullName}</div>
-                  <div style="color:#6b7280">${room} • ${when}</div>
-                  <div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:6px">
-                    ${statusBadge}
-                    ${paymentBadge}
-                  </div>
-                </div>
-                <span class="code">${r.confirmation_code || ''}</span>
-              </div>
-            `;
-          })
-          .join('') || 'No data';
-    } catch (e) {
-      $('#recent-bookings').textContent = 'Error loading';
-    }
-  }
-
-
-// optional: hook a button with id="package-add-btn"
-document.getElementById("package-add-btn")?.addEventListener("click", () => openPackageModal("add"));
-
+export function closeSharedModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.remove();
 }

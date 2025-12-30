@@ -1,5 +1,7 @@
 // src/custom_booking.js
 // Custom Booking Modal for Sojourn Cabins
+// VERSION: Dynamic Pricing v1.0 - Dec 28, 2024
+console.log('✅ Custom Booking with Dynamic Pricing v1.0 loaded');
 
 import { supabase } from './config/supabase.js';
 import { toast } from './utils/helpers.js';
@@ -144,6 +146,8 @@ function addDaysISO(isoDate, nights) {
 
 // Prevent double booking: correct date overlap check
 async function isRoomAvailable(roomTypeId, roomTypeCode, checkInISO, checkOutISO) {
+  console.log('🔍 isRoomAvailable called:', { roomTypeId, roomTypeCode, checkInISO, checkOutISO });
+  
   if (!roomTypeId && !roomTypeCode) return false;
   if (!checkInISO || !checkOutISO) return false;
 
@@ -175,6 +179,7 @@ async function isRoomAvailable(roomTypeId, roomTypeCode, checkInISO, checkOutISO
 
     data = res.data || [];
     error = res.error;
+    console.log('📋 All reservations fetched:', data.length);
   } catch (err) {
     console.error('Availability check exception:', err);
     return false;
@@ -191,12 +196,28 @@ async function isRoomAvailable(roomTypeId, roomTypeCode, checkInISO, checkOutISO
   const relevant = data.filter((r) => {
     const sameId   = idNum !== null && Number(r.room_type_id) === idNum;
     const sameCode = roomTypeCode && r.room_type_code === roomTypeCode;
-    return sameId || sameCode;
+    const match = sameId || sameCode;
+    
+    console.log('Filtering reservation:', {
+      resId: r.id,
+      resRoomTypeId: r.room_type_id,
+      resRoomCode: r.room_type_code,
+      checkingId: idNum,
+      checkingCode: roomTypeCode,
+      sameId,
+      sameCode,
+      match
+    });
+    
+    return match;
   });
 
-  // Treat stays as half-open ranges [check_in, check_out)
+  console.log('📋 Relevant reservations for this cabin:', relevant.length, relevant);
+
+  // Use half-open intervals [check_in, check_out) - standard hospitality practice
+  // Guest checks out on checkout day, so room becomes available for new check-in
   // Overlap if: existing_start < new_end AND existing_end > new_start
-    const hasOverlap = relevant.some((r) => {
+  const hasOverlap = relevant.some((r) => {
     if (!r.check_in || !r.check_out) return false;
 
     const existingStart = new Date(r.check_in);
@@ -209,8 +230,18 @@ async function isRoomAvailable(roomTypeId, roomTypeCode, checkInISO, checkOutISO
       return false;
     }
 
-    return existingStart < newEnd && existingEnd > newStart;
+    // Half-open interval overlap check
+    const overlaps = existingStart < newEnd && existingEnd > newStart;
+    console.log('Checking overlap:', { 
+      existing: `${r.check_in} to ${r.check_out}`, 
+      new: `${checkInISO} to ${checkOutISO}`,
+      overlaps 
+    });
+    
+    return overlaps;
   });
+
+  console.log('❌ Has overlap?', hasOverlap);
 
   if (hasOverlap) {
     // already booked
@@ -227,10 +258,13 @@ async function isRoomAvailable(roomTypeId, roomTypeCode, checkInISO, checkOutISO
         .gte('blocked_date', checkInISO)
         .lt('blocked_date', checkOutISO); // half-open [in, out)
 
+      console.log('🚫 Blocked dates found:', blocked?.length || 0, blocked);
+
       if (blockedError) {
         console.error('Blocked dates check error (custom booking):', blockedError);
       } else if (blocked && blocked.length > 0) {
         // there is at least one blocked day in the range
+        console.log('🚫 UNAVAILABLE - Blocked dates exist');
         return false;
       }
     }
@@ -239,6 +273,7 @@ async function isRoomAvailable(roomTypeId, roomTypeCode, checkInISO, checkOutISO
   }
 
   // Available only if there is NO overlapping stay and NO blocked dates
+  console.log('✅ AVAILABLE - No conflicts found');
   return true;
 }
 
@@ -517,13 +552,12 @@ export async function openNewCustomBookingModal() {
   let selectedExtras = [];
 
   wrap.innerHTML = `
-    <div class="content" onclick="event.stopPropagation()">
-      <div class="hd">
-        <h3>New Custom Booking</h3>
-        <button class="btn" onclick="document.getElementById('reservation-modal').remove()">×</button>
+    <div style="max-width:750px;width:100%;background:white;border-radius:16px;box-shadow:0 25px 80px rgba(0,0,0,0.4);max-height:90vh;overflow:hidden;display:flex;flex-direction:column;" onclick="event.stopPropagation()">
+      <div style="padding:24px;border-bottom:2px solid #e2e8f0;background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+        <h3 style="margin:0;color:white;font-size:20px;font-weight:700">New Custom Booking</h3>
       </div>
 
-      <div class="bd">
+      <div style="padding:24px;overflow-y:auto;flex:1;">
         <div class="form-grid">
           <div class="form-group">
             <label>First Name</label>
@@ -711,7 +745,7 @@ export async function openNewCustomBookingModal() {
         </div>
       </div>
 
-      <div class="ft">
+      <div style="padding:16px 24px;border-top:2px solid #e2e8f0;display:flex;justify-content:flex-end;gap:10px;flex-shrink:0;">
         <button class="btn" onclick="document.getElementById('reservation-modal').remove()">Cancel</button>
         <button class="btn btn-primary" id="nb-save">Save</button>
       </div>
@@ -762,7 +796,7 @@ export async function openNewCustomBookingModal() {
     return dow === 5 || dow === 6;
   }
 
-  function computeRoomSubtotal() {
+  async function computeRoomSubtotal() {
     const selectedRoomIds = getSelectedRoomIds();
     const ci = new Date(inEl.value);
     const co = new Date(outEl.value);
@@ -792,14 +826,48 @@ export async function openNewCustomBookingModal() {
 
     let totalSubtotal = 0;
 
-    selectedRoomIds.forEach((roomId) => {
+    // Use dynamic pricing for each selected room
+    for (const roomId of selectedRoomIds) {
       const info = roomMap[String(roomId)];
-      if (!info) return;
+      if (!info) continue;
 
-      const wkdPrice = Number(info.base_price_per_night_weekday || 0);
-      const wkePrice = Number(info.base_price_per_night_weekend || 0);
-      totalSubtotal += weekdayN * wkdPrice + weekendN * wkePrice;
-    });
+      try {
+        console.log('Calling calculate_dynamic_price for room:', roomId, 'dates:', inEl.value, 'to', outEl.value);
+        
+        // Call dynamic pricing function - Supabase returns {data, error}
+        const { data: pricingData, error: pricingError } = await supabase.rpc('calculate_dynamic_price', {
+          p_room_type_id: roomId,
+          p_check_in: inEl.value,
+          p_check_out: outEl.value,
+          p_pricing_model_id: null // Uses active model
+        });
+
+        console.log('Dynamic pricing response:', pricingData);
+        console.log('Dynamic pricing error:', pricingError);
+
+        if (pricingError) {
+          console.error('RPC Error:', pricingError);
+          throw new Error(pricingError.message || 'Dynamic pricing failed');
+        }
+
+        if (pricingData && pricingData.total) {
+          console.log('Using dynamic price:', pricingData.total);
+          totalSubtotal += parseFloat(pricingData.total);
+        } else {
+          // Fallback to base prices if no dynamic pricing returned
+          console.log('No dynamic pricing data, using base prices');
+          const wkdPrice = Number(info.base_price_per_night_weekday || 0);
+          const wkePrice = Number(info.base_price_per_night_weekend || 0);
+          totalSubtotal += weekdayN * wkdPrice + weekendN * wkePrice;
+        }
+      } catch (err) {
+        // Fallback to base prices on error
+        console.error('Dynamic pricing failed for room', roomId, '- using base prices. Error:', err);
+        const wkdPrice = Number(info.base_price_per_night_weekday || 0);
+        const wkePrice = Number(info.base_price_per_night_weekend || 0);
+        totalSubtotal += weekdayN * wkdPrice + weekendN * wkePrice;
+      }
+    }
 
     roomSubtotalEl.value = String(totalSubtotal.toFixed(2));
     updatePriceBreakdown();
@@ -1146,17 +1214,41 @@ export async function openNewCustomBookingModal() {
       }
 
       // ---- AVAILABILITY CHECK FOR EACH CABIN ----
+      // Use the same RPC as BookingWidget for consistency
       for (const roomId of selectedRoomIds) {
         const info = roomMap[String(roomId)] || {};
         const roomTypeCode = info.code || null;
-        const available = await isRoomAvailable(
+        
+        console.log('Checking availability for:', {
           roomId,
           roomTypeCode,
-          inEl.value,
-          outEl.value
+          checkIn: inEl.value,
+          checkOut: outEl.value
+        });
+        
+        // Call the same RPC that BookingWidget uses
+        const { data: availableRooms, error: availError } = await supabase.rpc('get_available_rooms', {
+          p_check_in: inEl.value,
+          p_check_out: outEl.value,
+          p_adults: 1 // Just checking availability, not capacity
+        });
+        
+        if (availError) {
+          console.error('Availability check failed:', availError);
+          alert('Error checking availability. Please try again.');
+          return;
+        }
+        
+        console.log('Available rooms from RPC:', availableRooms);
+        
+        // Check if this specific room is in the available list
+        const isAvailable = availableRooms && availableRooms.some(r => 
+          String(r.id) === String(roomId) || r.code === roomTypeCode
         );
+        
+        console.log('Availability result for', roomTypeCode, ':', isAvailable);
 
-        if (!available) {
+        if (!isAvailable) {
           alert(
             `${info.name || 'One of the selected cabins'} is NOT available for the selected dates.`
           );
@@ -1164,7 +1256,7 @@ export async function openNewCustomBookingModal() {
         }
       }
 
-      // ---- PRICING (recompute per-cabin subtotals) ----
+      // ---- PRICING (recompute per-cabin subtotals using dynamic pricing) ----
       const ci = new Date(inEl.value);
       const co = new Date(outEl.value);
 
@@ -1175,12 +1267,40 @@ export async function openNewCustomBookingModal() {
         else weekdayN++;
       }
 
-            const perRoomSubtotals = selectedRoomIds.map((roomId) => {
+      // Calculate dynamic pricing for each room
+      const perRoomSubtotals = [];
+      for (const roomId of selectedRoomIds) {
         const info = roomMap[String(roomId)] || {};
-        const wkdPrice = Number(info.base_price_per_night_weekday || 0);
-        const wkePrice = Number(info.base_price_per_night_weekend || 0);
-        return weekdayN * wkdPrice + weekendN * wkePrice;
-      });
+        
+        try {
+          // Call dynamic pricing function - Supabase returns {data, error}
+          const { data: pricingData, error: pricingError } = await supabase.rpc('calculate_dynamic_price', {
+            p_room_type_id: roomId,
+            p_check_in: inEl.value,
+            p_check_out: outEl.value,
+            p_pricing_model_id: null // Uses active model
+          });
+
+          if (pricingError) {
+            throw new Error(pricingError.message || 'Dynamic pricing failed');
+          }
+
+          if (pricingData && pricingData.total) {
+            perRoomSubtotals.push(parseFloat(pricingData.total));
+          } else {
+            // Fallback to base prices
+            const wkdPrice = Number(info.base_price_per_night_weekday || 0);
+            const wkePrice = Number(info.base_price_per_night_weekend || 0);
+            perRoomSubtotals.push(weekdayN * wkdPrice + weekendN * wkePrice);
+          }
+        } catch (err) {
+          // Fallback to base prices on error
+          console.warn('Dynamic pricing failed in save, using base prices:', err);
+          const wkdPrice = Number(info.base_price_per_night_weekday || 0);
+          const wkePrice = Number(info.base_price_per_night_weekend || 0);
+          perRoomSubtotals.push(weekdayN * wkdPrice + weekendN * wkePrice);
+        }
+      }
 
       const roomSubtotal =
         perRoomSubtotals.reduce((sum, v) => sum + v, 0) || 0;

@@ -579,100 +579,49 @@ async function loadAllAnalytics() {
 
 async function loadOccupancyMetrics() {
   try {
-    const { data: reservations, error } = await supabase
-      .from('reservations')
-      .select('check_in, check_out, nights, room_type_code')
-      .gte('check_in', sqlDate(dateRange.start))
-      .lte('check_in', sqlDate(dateRange.end))
-      .in('status', ['confirmed', 'checked-in', 'checked-out']);
+    // Call database function for occupancy calculation
+    const { data, error } = await supabase
+      .rpc('calculate_occupancy_metrics', {
+        p_start_date: sqlDate(dateRange.start),
+        p_end_date: sqlDate(dateRange.end),
+        p_room_type_id: null
+      });
 
-    if (error) throw error;
+    if (error) {
+      console.error('Database function error:', error);
+      throw new Error(`Failed to load occupancy metrics: ${error.message}. Have you deployed occupancy_functions.sql?`);
+    }
 
-    // Get blocked dates to exclude from available nights
-    const { data: blockedDates } = await supabase
-      .from('blocked_dates')
-      .select('blocked_date, room_type_id')
-      .gte('blocked_date', sqlDate(dateRange.start))
-      .lte('blocked_date', sqlDate(dateRange.end));
+    if (!data) {
+      throw new Error('No data returned from database function');
+    }
 
-    console.log('🔍 Occupancy Metrics Debug:', {
-      dateRange: { start: sqlDate(dateRange.start), end: sqlDate(dateRange.end) },
-      blockedDates: blockedDates || [],
-      blockedCount: (blockedDates || []).length
-    });
-
-    // Calculate days in period (+1 to include both start and end dates)
-    const daysInPeriod = Math.max(
-      1,
-      Math.ceil((dateRange.end - dateRange.start) / (1000 * 60 * 60 * 24)) + 1
-    );
-
-    // Calculate available nights (excluding blocked dates)
-    const NUM_CABINS = 3; // SAND, SEA, SUN
-    const theoreticalCapacity = daysInPeriod * NUM_CABINS;
-    const blockedNights = (blockedDates || []).length;
-    const totalAvailableNights = theoreticalCapacity - blockedNights;
-
-    // Calculate occupied nights WITHIN the date range
-    let occupiedNightsInRange = 0;
-    let totalNightsSold = 0;
-
-    reservations.forEach(r => {
-      if (!r.check_in || !r.check_out) return;
-      
-      // Total nights for ALOS calculation (use stored nights or calculate)
-      if (r.nights && r.nights > 0) {
-        totalNightsSold += r.nights;
-      } else {
-        const inDate = new Date(r.check_in);
-        const outDate = new Date(r.check_out);
-        const diff = Math.round((outDate - inDate) / (1000 * 60 * 60 * 24));
-        totalNightsSold += Math.max(diff, 0);
-      }
-      
-      // Nights within range for occupancy calculation
-      const checkIn = new Date(r.check_in);
-      const checkOut = new Date(r.check_out);
-      const rangeStart = new Date(Math.max(checkIn, dateRange.start));
-      const rangeEnd = new Date(Math.min(checkOut, dateRange.end));
-      const nightsInRange = Math.max(0, Math.ceil((rangeEnd - rangeStart) / (1000 * 60 * 60 * 24)));
-      occupiedNightsInRange += nightsInRange;
-    });
-
-    // Calculate metrics
-    const occupancyRate =
-      totalAvailableNights > 0
-        ? (occupiedNightsInRange / totalAvailableNights) * 100
-        : 0;
-
-    const alos =
-      reservations.length > 0 ? totalNightsSold / reservations.length : 0;
-
-    const bookingsCount = reservations.length;
+    const capacity = data.capacity;
+    const occupancy = data.occupancy;
 
     const html = `
       <div class="metric-card">
         <div class="metric-label">Occupancy Rate</div>
-        <div class="metric-value">${occupancyRate.toFixed(1)}%</div>
-        <div class="metric-subtext">${occupiedNightsInRange} of ${totalAvailableNights} nights occupied</div>
+        <div class="metric-value">${occupancy.occupancy_rate}%</div>
+        <div class="metric-subtext">${occupancy.occupied_nights} of ${capacity.available} nights occupied</div>
       </div>
       <div class="metric-card">
         <div class="metric-label">Nights Sold</div>
-        <div class="metric-value">${totalNightsSold}</div>
+        <div class="metric-value">${occupancy.nights_sold}</div>
       </div>
       <div class="metric-card">
         <div class="metric-label">Available Nights</div>
-        <div class="metric-value">${totalAvailableNights}</div>
-        <div class="metric-subtext">${blockedNights} nights blocked</div>
+        <div class="metric-value">${capacity.available}</div>
+        <div class="metric-subtext">${capacity.blocked} nights blocked</div>
       </div>
       <div class="metric-card">
         <div class="metric-label">ALOS</div>
-        <div class="metric-value">${alos.toFixed(1)}</div>
+        <div class="metric-value">${occupancy.alos}</div>
         <div class="metric-subtext">Average Length of Stay</div>
       </div>
       <div class="metric-card">
         <div class="metric-label">Bookings in Period</div>
-        <div class="metric-value">${bookingsCount}</div>
+        <div class="metric-value">${occupancy.bookings_count}</div>
       </div>
     `;
 
@@ -1026,119 +975,28 @@ async function loadRevenueChart() {
 
 async function loadOccupancyTrendChart() {
   try {
-    const { data: reservations, error } = await supabase
-      .from('reservations')
-      .select('check_in, check_out')
-      .gte('check_in', sqlDate(dateRange.start))
-      .lte('check_in', sqlDate(dateRange.end))
-      .in('status', ['confirmed', 'checked-in', 'checked-out'])
-      .order('check_in');
-
-    if (error) throw error;
-
-    const NUM_CABINS = 3;
-    const occupancyByDate = {};
-
-    // Expand each reservation into per-night occupancy
-    (reservations || []).forEach((r) => {
-      if (!r.check_in || !r.check_out) return;
-
-      const start = new Date(r.check_in);
-      const end = new Date(r.check_out);
-
-      let d = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-      const last = new Date(end.getFullYear(), end.getMonth(), end.getDate());
-
-      while (d < last) {
-        const key = sqlDate(d);
-        if (d >= dateRange.start && d <= dateRange.end) {
-          occupancyByDate[key] = (occupancyByDate[key] || 0) + 1;
-        }
-        d.setDate(d.getDate() + 1);
-      }
-    });
-
-    // --- Daily occupancy series (% of cabins) ---
-    const dailySeries = [];
-    let cursor = new Date(
-      dateRange.start.getFullYear(),
-      dateRange.start.getMonth(),
-      dateRange.start.getDate()
-    );
-    const endDay = new Date(
-      dateRange.end.getFullYear(),
-      dateRange.end.getMonth(),
-      dateRange.end.getDate()
-    );
-
-    while (cursor <= endDay) {
-      const key = sqlDate(cursor);
-      const occupiedCabins = occupancyByDate[key] || 0;
-      const rate = Math.min(100, (occupiedCabins / NUM_CABINS) * 100);
-      dailySeries.push({
-        date: new Date(cursor),
-        value: rate,
-      });
-      cursor.setDate(cursor.getDate() + 1);
-    }
-
     const mode = chartGranularity.occupancy || 'day';
-    let points = [];
-
-    if (mode === 'day') {
-      points = dailySeries.map(({ date, value }) => ({
-        label: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        value: parseFloat(value.toFixed(1)),
-      }));
-    } else {
-      // --- Weekly / Monthly buckets (average occupancy %) ---
-      const buckets = {};
-
-      dailySeries.forEach(({ date, value }) => {
-        let bucketKey;
-        let labelDate;
-
-        if (mode === 'week') {
-          const weekStart = new Date(date);
-          const day = weekStart.getDay();
-          const diff = (day + 6) % 7;
-          weekStart.setDate(weekStart.getDate() - diff);
-          bucketKey = sqlDate(weekStart);
-          labelDate = weekStart;
-        } else {
-          const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
-          bucketKey = `${monthStart.getFullYear()}-${monthStart.getMonth()}`;
-          labelDate = monthStart;
-        }
-
-        const bucket =
-          buckets[bucketKey] || { sum: 0, count: 0, date: labelDate };
-        bucket.sum += value;
-        bucket.count += 1;
-        buckets[bucketKey] = bucket;
+    
+    // Call database function for occupancy trend
+    const { data, error } = await supabase
+      .rpc('calculate_occupancy_trend', {
+        p_start_date: sqlDate(dateRange.start),
+        p_end_date: sqlDate(dateRange.end),
+        p_granularity: mode
       });
 
-      const sortedBuckets = Object.values(buckets).sort(
-        (a, b) => a.date - b.date
-      );
-
-      points = sortedBuckets.map(({ date, sum, count }) => {
-        const avg = count > 0 ? sum / count : 0;
-        return {
-          label:
-            mode === 'month'
-              ? date.toLocaleDateString('en-US', {
-                  month: 'short',
-                  year: 'numeric',
-                })
-              : date.toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                }),
-          value: parseFloat(avg.toFixed(1)),
-        };
-      });
+    if (error) {
+      console.error('Database function error:', error);
+      throw new Error(`Failed to load occupancy trend: ${error.message}`);
     }
+
+    // Transform database result into chart points
+    const points = (data || []).map(item => ({
+      label: mode === 'month'
+        ? new Date(item.date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+        : new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      value: item.occupancy_rate
+    }));
 
     renderLineChart('occupancy-trend-chart', points, {
       min: 0,
@@ -1156,29 +1014,29 @@ async function loadOccupancyTrendChart() {
 
 async function loadOccupancyChart() {
   try {
-    const { data: reservations, error } = await supabase
-      .from('reservations')
-      .select('room_type_code, nights')
-      .gte('check_in', dateRange.start.toISOString().split('T')[0].split('T')[0])
-      .lte('check_in', dateRange.end.toISOString().split('T')[0].split('T')[0])
-      .in('status', ['confirmed', 'checked-in', 'checked-out']);
+    // Call database function for occupancy by room
+    const { data, error } = await supabase
+      .rpc('calculate_occupancy_by_room', {
+        p_start_date: sqlDate(dateRange.start),
+        p_end_date: sqlDate(dateRange.end)
+      });
 
-    if (error) throw error;
+    if (error) {
+      console.error('Database function error:', error);
+      throw new Error(`Failed to load occupancy by cabin: ${error.message}`);
+    }
 
+    // Extract occupancy rates for each cabin
     const cabins = { SAND: 0, SEA: 0, SUN: 0 };
-    reservations.forEach(r => {
-      if (cabins.hasOwnProperty(r.room_type_code)) {
-        cabins[r.room_type_code] += r.nights || 0;
+    (data || []).forEach(room => {
+      if (cabins.hasOwnProperty(room.room_code)) {
+        cabins[room.room_code] = room.occupancy_rate;
       }
     });
 
-    const daysInPeriod = Math.ceil((dateRange.end - dateRange.start) / (1000 * 60 * 60 * 24));
-    const maxNights = daysInPeriod;
-
     let html = '<div style="display: flex; flex-direction: column; gap: 16px;">';
     
-    Object.entries(cabins).forEach(([cabin, nights]) => {
-      const percentage = maxNights > 0 ? (nights / maxNights) * 100 : 0;
+    Object.entries(cabins).forEach(([cabin, percentage]) => {
       html += `
         <div style="display: flex; align-items: center; gap: 12px;">
           <div style="min-width: 60px; font-weight: 600; color: #0f172a;">${cabin}</div>

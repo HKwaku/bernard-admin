@@ -2,13 +2,13 @@
 // Chat module for Bernard Admin
 
 import { $, addMessage, showTyping, hideTyping } from './utils/helpers.js';
-import { callOpenAI, conversationHistory } from './config/openai.js';
+
 
 /* ---------------------------
    UI HELPERS
 ----------------------------*/
 
-function appendStatusBubble(text = "Thinking...") {
+function appendStatusBubble(text = "Thinking.") {
   const messagesDiv = $("#messages");
   const statusDiv = document.createElement("div");
   statusDiv.className = "msg bot";
@@ -26,6 +26,9 @@ function appendStatusBubble(text = "Thinking...") {
   return bubble;
 }
 
+// Bernard conversation state for LangGraph agent
+let bernardHistory = [];
+
 /* ---------------------------
    SEND HANDLER
 ----------------------------*/
@@ -37,28 +40,49 @@ async function sendMessage() {
   const text = (input.value || "").trim();
   if (!text) return;
 
-  // Add the user message to UI + memory
+  // Add the user message to UI
   addMessage(text, true);
   input.value = "";
 
   showTyping();
 
-  // Status bubble (updated dynamically)
-  const statusBubble = appendStatusBubble("🤔 Thinking...");
+  // Status bubble
+  const statusBubble = appendStatusBubble("🤔 Thinking (using tools)…");
 
   try {
-    const reply = await callOpenAI(conversationHistory, text, (status) => {
-      if (status && statusBubble) statusBubble.textContent = status;
+    // Push user message into Bernard history
+    bernardHistory.push({ role: "user", content: text });
+
+    const resp = await fetch("http://localhost:3005/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: bernardHistory }),
     });
+
+    let data = null;
+    try { data = await resp.json(); } catch (_) {}
+
+    if (!resp.ok) {
+      throw new Error(data?.error || `Bernard API failed (${resp.status})`);
+    }
+
+    const reply = data?.reply;
+
+
+
 
     hideTyping();
     $("#status-indicator")?.remove();
 
-    addMessage(reply || "Done.");
+    const finalReply = reply || "Done.";
+    addMessage(finalReply);
+
+    // Push assistant reply into Bernard history
+    bernardHistory.push({ role: "assistant", content: finalReply });
   } catch (err) {
     hideTyping();
     $("#status-indicator")?.remove();
-    addMessage(`<span style="color:#b91c1c">✖ AI service temporarily unavailable.</span>`);
+    addMessage(`<span style="color:#b91c1c">✖ Bernard is temporarily unavailable.</span>`);
     console.error(err);
   }
 }
@@ -68,6 +92,13 @@ async function sendMessage() {
 ----------------------------*/
 
 function initChat() {
+  // Clear messages so the welcome appears immediately on Chat tab click
+  const messagesDiv = $("#messages");
+  if (messagesDiv) messagesDiv.innerHTML = "";
+
+  // Reset Bernard memory for the UI session (keeps things consistent & avoids stale context)
+  bernardHistory = [];
+
   // Clear old listeners by cloning the button
   const sendBtn = $("#send-btn");
   if (sendBtn) {
@@ -78,13 +109,18 @@ function initChat() {
 
   const input = $("#user-input");
   if (input) {
+    input.value = "";
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter") sendMessage();
     });
   }
 
-  // Intro message shown once when the Chat tab is first loaded
-  addMessage(`Hello! My name is <strong>Bernard</strong>. What would you like to do today?`);
+  // Welcome message should pop immediately when user clicks Chat tab
+  const welcome = `Hello! My name is <strong>Bernard</strong>. What would you like to do today?`;
+  addMessage(welcome);
+
+  // Also add it into Bernard history so the agent stays consistent with the UI
+  bernardHistory.push({ role: "assistant", content: "Hello! My name is Bernard. What would you like to do today?" });
 }
 
 export { initChat };

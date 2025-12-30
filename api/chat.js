@@ -9,7 +9,9 @@ export default async function handler(req, res) {
       return res.status(405).json({ error: "Method not allowed" });
     }
 
-    const { messages } = JSON.parse(req.body || "{}");
+    const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+    const { messages } = body;
+
     if (!Array.isArray(messages)) {
       return res.status(400).json({ error: "messages array required" });
     }
