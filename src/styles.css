@@ -4045,50 +4045,39 @@ textarea {
    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
    
    ============================================ */
+/* =========================================================
+   HARD FIX: Chat tables must never overflow or truncate
+   (Overrides earlier conflicting table rules)
+   ========================================================= */
 
-   /* ===== FINAL OVERRIDE: Chat tables must NEVER overflow bubbles ===== */
-#view-chat #messages .msg .bubble {
+#view-chat .msg.bot .bubble{
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* wrapper created in chat.js */
+#view-chat .chat-table-scroll{
+  display: block !important;
+  width: 100% !important;
   max-width: 100% !important;
   overflow-x: auto !important;
+  overflow-y: hidden !important;
   -webkit-overflow-scrolling: touch;
+  padding-bottom: 6px; /* ensures scrollbar isn't visually clipped */
 }
 
-/* Make tables behave like scrollable content inside bubble */
-#view-chat #messages .msg .bubble table {
-  display: block !important;      /* beats your display:table rules */
-  max-width: 100% !important;
-  width: max-content !important;  /* table can be wider, bubble scrolls */
-  border-collapse: collapse;
+/* force table to be wider than wrapper when needed, so wrapper scrolls */
+#view-chat .chat-table-scroll > table{
+  display: table !important;
+  width: max-content !important;
+  min-width: 100% !important;
+  max-width: none !important;
+  table-layout: auto !important;
 }
 
-/* Keep cells readable; don’t force bubble expansion */
-#view-chat #messages .msg .bubble th,
-#view-chat #messages .msg .bubble td {
-  white-space: nowrap !important; /* prevents awkward wrapping */
-}
-
-/* In case the table is wrapped in some element, ensure that wrapper doesn't overflow */
-#view-chat #messages .msg .bubble > * {
-  max-width: 100% !important;
-}
-/* ===== Chat tables: horizontal scroll wrapper ===== */
-#view-chat .chat-table-scroll {
-  max-width: 100%;
-  overflow-x: auto;
-  overflow-y: hidden;
-  -webkit-overflow-scrolling: touch;
-}
-
-/* Let table be as wide as it needs; wrapper provides scroll */
-#view-chat .chat-table-scroll table {
-  width: max-content;
-  min-width: 100%;
-  border-collapse: collapse;
-}
-
-/* Keep cells from wrapping weirdly */
-#view-chat .chat-table-scroll th,
-#view-chat .chat-table-scroll td {
-  white-space: nowrap;
+/* prevent any inherited max-width from collapsing the table */
+#view-chat .chat-table-scroll > table *{
+  max-width: none !important;
 }
 
