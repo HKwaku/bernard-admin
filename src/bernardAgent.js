@@ -1,6 +1,5 @@
 // src/bernardAgent.js
-// --------------------
-// Bernard agent: server-side tool-using assistant for Bernard Admin.
+// Bernard agent with robust tool loading
 
 import { ChatOpenAI } from "@langchain/openai";
 import { tool } from "@langchain/core/tools";
@@ -12,144 +11,358 @@ import {
 } from "@langchain/core/messages";
 import { z } from "zod";
 
-// Import all tools
-import * as bernardTools from "./bernardTools.js";
+// Import the supabase client and helper functions from bernardTools
+import { supabase, formatTable } from "./bernardTools.js";
 
 // ---------------------------------------------------------------------------
-// ORCHESTRATOR (lightweight planner)
+// DEFINE ALL TOOLS INLINE (avoid import issues)
 // ---------------------------------------------------------------------------
 
-const orchestratorTool = tool({
-  name: "orchestrate_request",
-  description:
-    "Route the user request to the right domain/tools. Return a short plan with domains and suggested tools.",
-  schema: z.object({
-    message: z.string().describe("The user's latest message"),
-  }),
-  async func({ message }) {
-    const m = (message || "").toLowerCase();
-    const domains = [];
+// ROOM TOOLS
+const listRoomsTool = tool({
+  name: "list_room_types",
+  description: "List all room types with details including pricing, capacity, and status.",
+  schema: z.object({}),
+  async func() {
+    const { data, error } = await supabase
+      .from("room_types")
+      .select("*")
+      .order("code", { ascending: true });
 
-    if (/(coupon|discount|promo|voucher|code)/.test(m)) domains.push("coupons");
-    if (/(room|cabin|room type|availability)/.test(m)) domains.push("rooms");
-    if (/(extra|add\-on|addon)/.test(m)) domains.push("extras");
-    if (/(package)/.test(m)) domains.push("packages");
-    if (
-      /(reservation|booking|check\-in|check in|check\-out|check out|guest|confirmation)/.test(m)
-    )
-      domains.push("reservations");
-    if (/(analytics|revenue|occupancy|stats|performance)/.test(m)) domains.push("analytics");
-    if (/(pricing model|tier|override|pricing)/.test(m)) domains.push("pricing");
+    if (error) return `Error: ${error.message}`;
+    if (!data?.length) return "No room types found.";
 
-    if (!domains.length) domains.push("general");
-
-    return JSON.stringify(
-      {
-        domains,
-        guidance:
-          "Use list_/get_/search_/check_/validate_ tools for facts. For create_/update_/delete_ tools, ask for explicit confirmation before executing.",
-      },
-      null,
-      2
+    return formatTable(
+      data.map(r => ({
+        Code: r.code,
+        Name: r.name,
+        "Max Adults": r.max_adults || 2,
+        "Weekday Price": `${r.currency || 'GHS'} ${r.base_price_per_night_weekday}`,
+        "Weekend Price": `${r.currency || 'GHS'} ${r.base_price_per_night_weekend}`,
+        Active: r.is_active ? "✓" : "✗",
+      })),
+      { minWidth: "600px" }
     );
   },
 });
 
+const getRoomDetailsTool = tool({
+  name: "get_room_details",
+  description: "Get detailed information about a specific room type by code.",
+  schema: z.object({
+    code: z.string().describe("Room code (e.g., 'SAND', 'SEA', 'SUN')"),
+  }),
+  async func({ code }) {
+    const { data, error } = await supabase
+      .from("room_types")
+      .select("*")
+      .eq("code", code.toUpperCase())
+      .single();
+
+    if (error) return `Error: ${error.message}`;
+    if (!data) return `Room type '${code}' not found.`;
+
+    return `**${data.name}** (${data.code})
+- Status: ${data.is_active ? 'Active ✓' : 'Inactive ✗'}
+- Capacity: Up to ${data.max_adults || 2} adults
+- Weekday Price: ${data.currency} ${data.base_price_per_night_weekday}
+- Weekend Price: ${data.currency} ${data.base_price_per_night_weekend}
+- Description: ${data.description || 'N/A'}`;
+  },
+});
+
+// EXTRAS TOOLS
+const listExtrasTool = tool({
+  name: "list_extras",
+  description: "List all extras/add-ons with pricing and details.",
+  schema: z.object({}),
+  async func() {
+    const { data, error } = await supabase
+      .from("extras")
+      .select("*")
+      .order("category, name");
+
+    if (error) return `Error: ${error.message}`;
+    if (!data?.length) return "No extras found.";
+
+    return formatTable(
+      data.map(e => ({
+        Name: e.name,
+        Category: e.category,
+        Price: `${e.currency} ${e.price_per_unit}`,
+        Unit: e.unit_type,
+        Active: e.is_active ? "✓" : "✗",
+      }))
+    );
+  },
+});
+
+// PACKAGES TOOLS
+const listPackagesTool = tool({
+  name: "list_packages",
+  description: "List all packages with pricing and details.",
+  schema: z.object({}),
+  async func() {
+    const { data, error } = await supabase
+      .from("packages")
+      .select("*")
+      .order("code");
+
+    if (error) return `Error: ${error.message}`;
+    if (!data?.length) return "No packages found.";
+
+    return formatTable(
+      data.map(p => ({
+        Code: p.code,
+        Name: p.name,
+        Price: `${p.currency} ${p.price}`,
+        "Min Nights": p.min_nights,
+        Active: p.is_active ? "✓" : "✗",
+      }))
+    );
+  },
+});
+
+// COUPON TOOLS
+const listCouponsTool = tool({
+  name: "list_coupons",
+  description: "List all coupons with discount details.",
+  schema: z.object({}),
+  async func() {
+    const { data, error } = await supabase
+      .from("coupons")
+      .select("*")
+      .order("code");
+
+    if (error) return `Error: ${error.message}`;
+    if (!data?.length) return "No coupons found.";
+
+    return formatTable(
+      data.map(c => ({
+        Code: c.code,
+        Type: c.discount_type,
+        Value: c.discount_type === 'percentage' ? `${c.discount_value}%` : `${c.currency} ${c.discount_value}`,
+        "Valid Until": c.valid_until || 'No expiry',
+        Active: c.is_active ? "✓" : "✗",
+      }))
+    );
+  },
+});
+
+// RESERVATION TOOLS
+const searchReservationsTool = tool({
+  name: "search_reservations",
+  description: "Search for reservations by guest name, email, or confirmation code.",
+  schema: z.object({
+    search: z.string().describe("Search term (name, email, or confirmation code)"),
+  }),
+  async func({ search }) {
+    let query = supabase.from("reservations").select("*");
+    
+    if (search) {
+      query = query.or(`guest_first_name.ilike.%${search}%,guest_last_name.ilike.%${search}%,guest_email.ilike.%${search}%,confirmation_code.ilike.%${search}%`);
+    }
+    
+    const { data, error } = await query
+      .order("check_in", { ascending: false })
+      .limit(20);
+
+    if (error) return `Error: ${error.message}`;
+    if (!data?.length) return `No reservations found${search ? ` for "${search}"` : ""}.`;
+
+    return formatTable(
+      data.map(r => ({
+        Code: r.confirmation_code,
+        Guest: `${r.guest_first_name} ${r.guest_last_name}`,
+        Room: r.room_name,
+        "Check In": r.check_in,
+        "Check Out": r.check_out,
+        Status: r.status,
+        Total: `${r.currency} ${r.total}`,
+      }))
+    );
+  },
+});
+
+const getTodayCheckInsTool = tool({
+  name: "get_today_checkins",
+  description: "Get all reservations checking in today.",
+  schema: z.object({}),
+  async func() {
+    const today = new Date().toISOString().split('T')[0];
+    const { data, error } = await supabase
+      .from("reservations")
+      .select("*")
+      .eq("check_in", today)
+      .order("guest_last_name");
+
+    if (error) return `Error: ${error.message}`;
+    if (!data?.length) return "No check-ins scheduled for today.";
+
+    return formatTable(
+      data.map(r => ({
+        Guest: `${r.guest_first_name} ${r.guest_last_name}`,
+        Room: r.room_name,
+        Nights: r.nights,
+        Adults: r.adults,
+        Status: r.status,
+      }))
+    );
+  },
+});
+
+const getTodayCheckOutsTool = tool({
+  name: "get_today_checkouts",
+  description: "Get all reservations checking out today.",
+  schema: z.object({}),
+  async func() {
+    const today = new Date().toISOString().split('T')[0];
+    const { data, error } = await supabase
+      .from("reservations")
+      .select("*")
+      .eq("check_out", today)
+      .order("guest_last_name");
+
+    if (error) return `Error: ${error.message}`;
+    if (!data?.length) return "No check-outs scheduled for today.";
+
+    return formatTable(
+      data.map(r => ({
+        Guest: `${r.guest_first_name} ${r.guest_last_name}`,
+        Room: r.room_name,
+        Status: r.status,
+      }))
+    );
+  },
+});
+
+const checkAvailabilityTool = tool({
+  name: "check_availability",
+  description: "Check room availability for specific dates.",
+  schema: z.object({
+    check_in: z.string().describe("Check-in date (YYYY-MM-DD)"),
+    check_out: z.string().describe("Check-out date (YYYY-MM-DD)"),
+    room_code: z.string().optional().describe("Optional: specific room code to check"),
+  }),
+  async func({ check_in, check_out, room_code }) {
+    const { data, error } = await supabase.rpc('check_availability', {
+      p_check_in: check_in,
+      p_check_out: check_out,
+      p_room_type_code: room_code || null,
+    });
+
+    if (error) return `Error: ${error.message}`;
+    
+    if (data && data.length > 0) {
+      return formatTable(
+        data.map(r => ({
+          Room: r.room_name,
+          Code: r.room_code,
+          Available: r.is_available ? "✓ Yes" : "✗ No",
+        }))
+      );
+    }
+    
+    return "No availability information found.";
+  },
+});
+
+// ANALYTICS TOOLS
+const getOccupancyStatsTool = tool({
+  name: "get_occupancy_stats",
+  description: "Get occupancy statistics for a date range.",
+  schema: z.object({
+    start_date: z.string().describe("Start date (YYYY-MM-DD)"),
+    end_date: z.string().describe("End date (YYYY-MM-DD)"),
+  }),
+  async func({ start_date, end_date }) {
+    const { data, error } = await supabase.rpc('get_occupancy_stats', {
+      p_start_date: start_date,
+      p_end_date: end_date,
+    });
+
+    if (error) return `Error: ${error.message}`;
+    if (!data) return "No data available for this period.";
+
+    return `**Occupancy Statistics** (${start_date} to ${end_date})
+- Total Bookings: ${data.total_bookings || 0}
+- Occupancy Rate: ${data.occupancy_rate || 0}%
+- Total Nights: ${data.total_nights || 0}`;
+  },
+});
+
+const getRevenueStatsTool = tool({
+  name: "get_revenue_stats",
+  description: "Get revenue statistics for a date range.",
+  schema: z.object({
+    start_date: z.string().describe("Start date (YYYY-MM-DD)"),
+    end_date: z.string().describe("End date (YYYY-MM-DD)"),
+  }),
+  async func({ start_date, end_date }) {
+    const { data, error } = await supabase.rpc('get_revenue_stats', {
+      p_start_date: start_date,
+      p_end_date: end_date,
+    });
+
+    if (error) return `Error: ${error.message}`;
+    if (!data) return "No data available for this period.";
+
+    return `**Revenue Statistics** (${start_date} to ${end_date})
+- Total Revenue: GHS ${data.total_revenue || 0}
+- Room Revenue: GHS ${data.room_revenue || 0}
+- Extras Revenue: GHS ${data.extras_revenue || 0}
+- Average Booking Value: GHS ${data.avg_booking_value || 0}`;
+  },
+});
+
 // ---------------------------------------------------------------------------
-// TOOL REGISTRATION (with defensive checks)
+// TOOL REGISTRATION
 // ---------------------------------------------------------------------------
 
-// Validate each tool before adding it
-function validateTool(tool, name) {
-  if (!tool) {
-    console.warn(`⚠️  Tool ${name} is undefined - skipping`);
-    return false;
-  }
-  if (!tool.schema) {
-    console.error(`❌ Tool ${name} is missing schema property`);
-    return false;
-  }
-  return true;
-}
-
-const toolsList = [
-  orchestratorTool,
+const tools = [
   // Room Management
-  bernardTools.listRoomsTool,
-  bernardTools.getRoomDetailsTool,
-  bernardTools.createRoomTypeTool,
-  bernardTools.updateRoomTypeTool,
-  bernardTools.deleteRoomTypeTool,
+  listRoomsTool,
+  getRoomDetailsTool,
+  
   // Extras Management
-  bernardTools.listExtrasTool,
-  bernardTools.getExtraDetailsTool,
-  bernardTools.createExtraTool,
-  bernardTools.updateExtraTool,
-  bernardTools.deleteExtraTool,
+  listExtrasTool,
+  
   // Package Management
-  bernardTools.listPackagesTool,
-  bernardTools.getPackageDetailsTool,
-  bernardTools.createPackageTool,
-  bernardTools.updatePackageTool,
-  bernardTools.deletePackageTool,
+  listPackagesTool,
+  
   // Coupon Management
-  bernardTools.listCouponsTool,
-  bernardTools.getCouponDetailsTool,
-  bernardTools.createCouponTool,
-  bernardTools.updateCouponTool,
-  bernardTools.deleteCouponTool,
-  bernardTools.validateCouponTool,
+  listCouponsTool,
+  
   // Reservation Management
-  bernardTools.searchReservationsTool,
-  bernardTools.getReservationDetailsTool,
-  bernardTools.getTodayCheckInsTool,
-  bernardTools.getTodayCheckOutsTool,
-  bernardTools.checkAvailabilityTool,
+  searchReservationsTool,
+  getTodayCheckInsTool,
+  getTodayCheckOutsTool,
+  checkAvailabilityTool,
+  
   // Analytics
-  bernardTools.getOccupancyStatsTool,
-  bernardTools.getRevenueStatsTool,
-  bernardTools.getClientAnalyticsTool,
-  bernardTools.comparePeriodsAnalyticsTool,
-  // Pricing Models
-  bernardTools.listPricingModelsTool,
-  bernardTools.getPricingModelDetailsTool,
-  bernardTools.simulatePricingTool,
-  bernardTools.getSeasonalPricingTool,
+  getOccupancyStatsTool,
+  getRevenueStatsTool,
 ];
 
-// Filter out any undefined/invalid tools
-const tools = toolsList.filter((t, i) => validateTool(t, `tool_${i}`));
-
-console.log(`✅ Loaded ${tools.length}/${toolsList.length} Bernard tools`);
-
-if (tools.length !== toolsList.length) {
-  console.warn(`⚠️  ${toolsList.length - tools.length} tools were skipped due to validation errors`);
-}
-
 const TOOL_BY_NAME = new Map(tools.map((t) => [t.name, t]));
+
+console.log(`✅ Bernard loaded ${tools.length} tools successfully`);
 
 // ---------------------------------------------------------------------------
 // SYSTEM PROMPT
 // ---------------------------------------------------------------------------
 
-const SYSTEM_PROMPT = `
-You are Bernard, the AI assistant for the Sojourn Cabins internal admin dashboard.
+const SYSTEM_PROMPT = `You are Bernard, the AI assistant for the Sojourn Cabins admin dashboard.
 
-You have access to tools that read and (with confirmation) modify admin data.
+You help manage:
+- Room types, packages, extras, and coupons
+- Reservations and bookings
+- Check-ins and check-outs
+- Occupancy and revenue analytics
 
-ORCHESTRATION (MANDATORY)
-1) For each new user message, first call orchestrate_request with that message.
-2) Use the suggested domain tools to fetch facts.
-3) Do NOT guess database facts – use tools.
+Use the available tools to fetch accurate data from the database. Be concise and helpful.
 
-MUTATIONS REQUIRE CONFIRMATION
-- Any create_, update_, or delete_ tool changes data.
-- Always explain what you will change and ask for explicit yes/no confirmation.
-
-RESPONSE FORMAT
-- Use the tool output directly (many tools return HTML tables).
-- Keep answers short, accurate, and actionable.
-`.trim();
+When showing data, the tools return formatted HTML tables - display them directly.`;
 
 // ---------------------------------------------------------------------------
 // LLM
@@ -161,14 +374,7 @@ const model = new ChatOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-let modelWithTools;
-try {
-  modelWithTools = model.bindTools(tools);
-  console.log('✅ Successfully bound tools to model');
-} catch (error) {
-  console.error('❌ Failed to bind tools to model:', error.message);
-  throw error;
-}
+const modelWithTools = model.bindTools(tools);
 
 // ---------------------------------------------------------------------------
 // PUBLIC ENTRYPOINT
@@ -187,12 +393,6 @@ function toLcMessage(m) {
   return new HumanMessage(content);
 }
 
-/**
- * Run Bernard on a list of messages.
- * @param {Array<{ role: 'user'|'assistant'|'system'|'tool', content: string }>} messages
- * @param {string} [threadId]
- * @returns {Promise<string>}
- */
 export async function runBernardAgent(messages, threadId = "bernard-default-thread") {
   if (!process.env.OPENAI_API_KEY) {
     throw new Error("OPENAI_API_KEY is missing in server env vars.");
@@ -204,7 +404,7 @@ export async function runBernardAgent(messages, threadId = "bernard-default-thre
     if (lm) lcMessages.push(lm);
   }
 
-  // Tool-calling loop (no LangGraph dependency)
+  // Tool-calling loop
   for (let step = 0; step < 8; step++) {
     const ai = await modelWithTools.invoke(lcMessages, {
       configurable: { thread_id: threadId },
