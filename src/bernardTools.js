@@ -21,6 +21,12 @@ const SUPABASE_KEY =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
   "";
 
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+  throw new Error(
+    "Supabase server configuration missing. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_ANON_KEY) in your Vercel env vars."
+  );
+}
+
 // Create a server-side Supabase client for Bernard tools
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { persistSession: false },
