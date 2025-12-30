@@ -79,7 +79,7 @@ async function sendMessage() {
   } catch (err) {
     hideTyping();
     $("#status-indicator")?.remove();
-    addMessage(`<span style="color:#b91c1c">✖ Bernard is temporarily unavailable.</span>`);
+    addMessage(`<span style="color:#b91c1c">✖ ${err?.message || "Bernard is temporarily unavailable."}</span>`);
     console.error(err);
   }
 }

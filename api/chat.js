@@ -1,6 +1,6 @@
 // /api/chat.js (Vercel serverless function)
 
-import { runBernardAgent } from "../lib/bernardAgent.js"; // adjust relative path
+import { runBernardAgent } from "../src/bernardAgent.js"; // adjust relative path
 
 export default async function handler(req, res) {
   try {
