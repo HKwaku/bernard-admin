@@ -87,6 +87,7 @@ export function formatTable(rows, options = {}) {
 export const listRoomsTool = tool({
   name: "list_room_types",
   description: "List all room types (active and inactive) with their details including pricing, capacity, and status.",
+  schema: z.object({}),
   async func(_input) {
     const { data, error } = await supabase
       .from("room_types")
@@ -261,6 +262,7 @@ export const deleteRoomTypeTool = tool({
 export const listExtrasTool = tool({
   name: "list_extras",
   description: "List all extras/add-ons with their pricing, category, and unit type.",
+  schema: z.object({}),
   async func(_input) {
     const { data, error } = await supabase
       .from("extras")
@@ -421,6 +423,7 @@ export const deleteExtraTool = tool({
 export const listPackagesTool = tool({
   name: "list_packages",
   description: "List all packages (active and inactive) with their pricing and minimum nights.",
+  schema: z.object({}),
   async func(_input) {
     const { data, error } = await supabase
       .from("packages")
@@ -599,6 +602,7 @@ export const deletePackageTool = tool({
 export const listCouponsTool = tool({
   name: "list_coupons",
   description: "List all coupons with their discount type, value, and validity.",
+  schema: z.object({}),
   async func(_input) {
     const { data, error } = await supabase
       .from("coupons")
@@ -952,6 +956,7 @@ export const getReservationDetailsTool = tool({
 export const getTodayCheckInsTool = tool({
   name: "get_today_checkins",
   description: "Get all reservations checking in today.",
+  schema: z.object({}),
   async func(_input) {
     const today = new Date().toISOString().split('T')[0];
 
@@ -989,6 +994,7 @@ export const getTodayCheckInsTool = tool({
 export const getTodayCheckOutsTool = tool({
   name: "get_today_checkouts",
   description: "Get all reservations checking out today.",
+  schema: z.object({}),
   async func(_input) {
     const today = new Date().toISOString().split('T')[0];
 
@@ -1296,6 +1302,7 @@ ${formatTable(guests, { minWidth: "700px" })}
 export const listPricingModelsTool = tool({
   name: "list_pricing_models",
   description: "List all pricing models with their configuration and status.",
+  schema: z.object({}),
   async func(_input) {
     const { data, error } = await supabase
       .from("pricing_models")
