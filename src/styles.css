@@ -529,16 +529,17 @@ label {
   max-width: 80%;
   word-wrap: break-word;
   word-break: break-word;
+  overflow: visible;
 }
 
-/* Chat: allow wide tables to scroll on mobile */
-.msg .bubble {
+/* Chat: Tables inside bubbles */
+.msg .bubble > div[style*="overflow-x"] {
+  max-width: calc(90vw - 40px);
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .msg .bubble table {
-  width: max-content;
-  min-width: 100%;
   border-collapse: collapse;
 }
 
@@ -932,7 +933,22 @@ label {
   }
 
   .msg .bubble {
-    max-width: 75%;
+    max-width: 85%;
+  }
+
+  .msg .bubble > div[style*="overflow-x"] {
+    max-width: calc(85vw - 40px);
+  }
+
+  /* Mobile: Ensure tables scroll properly */
+  .msg .bubble table {
+    display: table;
+    width: auto;
+  }
+
+  .msg .bubble table th,
+  .msg .bubble table td {
+    white-space: nowrap;
   }
 
   .grid {
