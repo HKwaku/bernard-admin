@@ -1,12 +1,6 @@
 // src/bernardAgent.js
 // --------------------
 // Bernard agent: server-side tool-using assistant for Bernard Admin.
-//
-// NOTE:
-// The previous implementation used @langchain/langgraph. That package is not
-// present in your Vercel runtime (see: "Cannot find module ...@langchain/langgraph...").
-// This version removes LangGraph entirely and runs a lightweight tool-calling loop
-// using ChatOpenAI + the same Bernard tools.
 
 import { ChatOpenAI } from "@langchain/openai";
 import { tool } from "@langchain/core/tools";
@@ -18,62 +12,13 @@ import {
 } from "@langchain/core/messages";
 import { z } from "zod";
 
-import {
-  // Room Tools
-  listRoomsTool,
-  getRoomDetailsTool,
-  createRoomTypeTool,
-  updateRoomTypeTool,
-  deleteRoomTypeTool,
-
-  // Extra Tools
-  listExtrasTool,
-  getExtraDetailsTool,
-  createExtraTool,
-  updateExtraTool,
-  deleteExtraTool,
-
-  // Package Tools
-  listPackagesTool,
-  getPackageDetailsTool,
-  createPackageTool,
-  updatePackageTool,
-  deletePackageTool,
-
-  // Coupon Tools
-  listCouponsTool,
-  getCouponDetailsTool,
-  createCouponTool,
-  updateCouponTool,
-  deleteCouponTool,
-  validateCouponTool,
-
-  // Reservation Tools
-  searchReservationsTool,
-  getReservationDetailsTool,
-  getTodayCheckInsTool,
-  getTodayCheckOutsTool,
-  checkAvailabilityTool,
-
-  // Analytics Tools
-  getOccupancyStatsTool,
-  getRevenueStatsTool,
-  getClientAnalyticsTool,
-  comparePeriodsAnalyticsTool,
-
-  // Pricing Model Tools
-  listPricingModelsTool,
-  getPricingModelDetailsTool,
-  simulatePricingTool,
-  getSeasonalPricingTool,
-} from "./bernardTools.js";
+// Import all tools
+import * as bernardTools from "./bernardTools.js";
 
 // ---------------------------------------------------------------------------
 // ORCHESTRATOR (lightweight planner)
 // ---------------------------------------------------------------------------
 
-// This tool is intentionally simple: it helps the model decide which domain to hit.
-// It does NOT call any DB itself.
 const orchestratorTool = tool({
   name: "orchestrate_request",
   description:
@@ -111,60 +56,75 @@ const orchestratorTool = tool({
 });
 
 // ---------------------------------------------------------------------------
-// TOOL REGISTRATION
+// TOOL REGISTRATION (with defensive checks)
 // ---------------------------------------------------------------------------
 
-const tools = [
+// Validate each tool before adding it
+function validateTool(tool, name) {
+  if (!tool) {
+    console.warn(`⚠️  Tool ${name} is undefined - skipping`);
+    return false;
+  }
+  if (!tool.schema) {
+    console.error(`❌ Tool ${name} is missing schema property`);
+    return false;
+  }
+  return true;
+}
+
+const toolsList = [
   orchestratorTool,
-
-  // === Room Management ===
-  listRoomsTool,
-  getRoomDetailsTool,
-  createRoomTypeTool,
-  updateRoomTypeTool,
-  deleteRoomTypeTool,
-
-  // === Extras Management ===
-  listExtrasTool,
-  getExtraDetailsTool,
-  createExtraTool,
-  updateExtraTool,
-  deleteExtraTool,
-
-  // === Package Management ===
-  listPackagesTool,
-  getPackageDetailsTool,
-  createPackageTool,
-  updatePackageTool,
-  deletePackageTool,
-
-  // === Coupon Management ===
-  listCouponsTool,
-  getCouponDetailsTool,
-  createCouponTool,
-  updateCouponTool,
-  deleteCouponTool,
-  validateCouponTool,
-
-  // === Reservation Management ===
-  searchReservationsTool,
-  getReservationDetailsTool,
-  getTodayCheckInsTool,
-  getTodayCheckOutsTool,
-  checkAvailabilityTool,
-
-  // === Analytics ===
-  getOccupancyStatsTool,
-  getRevenueStatsTool,
-  getClientAnalyticsTool,
-  comparePeriodsAnalyticsTool,
-
-  // === Pricing Models ===
-  listPricingModelsTool,
-  getPricingModelDetailsTool,
-  simulatePricingTool,
-  getSeasonalPricingTool,
+  // Room Management
+  bernardTools.listRoomsTool,
+  bernardTools.getRoomDetailsTool,
+  bernardTools.createRoomTypeTool,
+  bernardTools.updateRoomTypeTool,
+  bernardTools.deleteRoomTypeTool,
+  // Extras Management
+  bernardTools.listExtrasTool,
+  bernardTools.getExtraDetailsTool,
+  bernardTools.createExtraTool,
+  bernardTools.updateExtraTool,
+  bernardTools.deleteExtraTool,
+  // Package Management
+  bernardTools.listPackagesTool,
+  bernardTools.getPackageDetailsTool,
+  bernardTools.createPackageTool,
+  bernardTools.updatePackageTool,
+  bernardTools.deletePackageTool,
+  // Coupon Management
+  bernardTools.listCouponsTool,
+  bernardTools.getCouponDetailsTool,
+  bernardTools.createCouponTool,
+  bernardTools.updateCouponTool,
+  bernardTools.deleteCouponTool,
+  bernardTools.validateCouponTool,
+  // Reservation Management
+  bernardTools.searchReservationsTool,
+  bernardTools.getReservationDetailsTool,
+  bernardTools.getTodayCheckInsTool,
+  bernardTools.getTodayCheckOutsTool,
+  bernardTools.checkAvailabilityTool,
+  // Analytics
+  bernardTools.getOccupancyStatsTool,
+  bernardTools.getRevenueStatsTool,
+  bernardTools.getClientAnalyticsTool,
+  bernardTools.comparePeriodsAnalyticsTool,
+  // Pricing Models
+  bernardTools.listPricingModelsTool,
+  bernardTools.getPricingModelDetailsTool,
+  bernardTools.simulatePricingTool,
+  bernardTools.getSeasonalPricingTool,
 ];
+
+// Filter out any undefined/invalid tools
+const tools = toolsList.filter((t, i) => validateTool(t, `tool_${i}`));
+
+console.log(`✅ Loaded ${tools.length}/${toolsList.length} Bernard tools`);
+
+if (tools.length !== toolsList.length) {
+  console.warn(`⚠️  ${toolsList.length - tools.length} tools were skipped due to validation errors`);
+}
 
 const TOOL_BY_NAME = new Map(tools.map((t) => [t.name, t]));
 
@@ -180,7 +140,7 @@ You have access to tools that read and (with confirmation) modify admin data.
 ORCHESTRATION (MANDATORY)
 1) For each new user message, first call orchestrate_request with that message.
 2) Use the suggested domain tools to fetch facts.
-3) Do NOT guess database facts — use tools.
+3) Do NOT guess database facts – use tools.
 
 MUTATIONS REQUIRE CONFIRMATION
 - Any create_, update_, or delete_ tool changes data.
@@ -201,7 +161,14 @@ const model = new ChatOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const modelWithTools = model.bindTools(tools);
+let modelWithTools;
+try {
+  modelWithTools = model.bindTools(tools);
+  console.log('✅ Successfully bound tools to model');
+} catch (error) {
+  console.error('❌ Failed to bind tools to model:', error.message);
+  throw error;
+}
 
 // ---------------------------------------------------------------------------
 // PUBLIC ENTRYPOINT
