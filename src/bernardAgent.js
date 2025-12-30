@@ -105,11 +105,12 @@ const tools = [
   {
     type: "function",
     function: {
-      name: "get_room_details",
+      name: "get_room_type_details",
       description: "Get detailed information about a specific room type",
       parameters: {
         type: "object",
         properties: {
+          confirm: { type: "boolean", description: "Set true only after the user explicitly confirms." }
           identifier: { type: "string", description: "Room code (e.g., 'SAND') or room ID" }
         },
         required: ["identifier"]
@@ -146,6 +147,7 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
+          confirm: { type: "boolean", description: "Set true only after the user explicitly confirms." }
           identifier: { type: "string", description: "Room code or ID to update" },
           updates: {
             type: "object",
@@ -173,6 +175,7 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
+          confirm: { type: "boolean", description: "Set true only after the user explicitly confirms." },
           identifier: { type: "string", description: "Room code or ID to delete" }
         },
         required: ["identifier"]
@@ -195,6 +198,7 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
+          confirm: { type: "boolean", description: "Set true only after the user explicitly confirms." }
           identifier: { type: "string", description: "Extra name or ID" }
         },
         required: ["identifier"]
@@ -229,6 +233,7 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
+          confirm: { type: "boolean", description: "Set true only after the user explicitly confirms." },
           identifier: { type: "string", description: "Extra name or ID" },
           updates: {
             type: "object",
@@ -255,6 +260,7 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
+          confirm: { type: "boolean", description: "Set true only after the user explicitly confirms." },
           identifier: { type: "string", description: "Extra name or ID to delete" }
         },
         required: ["identifier"]
@@ -277,6 +283,7 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
+          confirm: { type: "boolean", description: "Set true only after the user explicitly confirms." }
           identifier: { type: "string", description: "Package code or ID" }
         },
         required: ["identifier"]
@@ -311,7 +318,7 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
-          identifier: { type: "string", description: "Package name or ID" },
+          confirm: { type: "boolean", description: "Set true only after the user explicitly confirms." },
           updates: {
             type: "object",
             properties: {
@@ -337,6 +344,7 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
+          confirm: { type: "boolean", description: "Set true only after the user explicitly confirms." },
           identifier: { type: "string", description: "Package name or ID to delete" }
         },
         required: ["identifier"]
@@ -359,6 +367,7 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
+          confirm: { type: "boolean", description: "Set true only after the user explicitly confirms." },
           identifier: { type: "string", description: "Coupon code" }
         },
         required: ["identifier"]
@@ -395,7 +404,7 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
-          identifier: { type: "string", description: "Coupon code" },
+          confirm: { type: "boolean", description: "Set true only after the user explicitly confirms." },
           updates: {
             type: "object",
             properties: {
@@ -422,6 +431,7 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
+          confirm: { type: "boolean", description: "Set true only after the user explicitly confirms." },
           identifier: { type: "string", description: "Coupon code to delete" }
         },
         required: ["identifier"]
@@ -429,35 +439,37 @@ const tools = [
     }
   },
   {
-    type: "function",
-    function: {
-      name: "validate_coupon",
-      description: "Validate a coupon code and check if it's currently valid",
-      parameters: {
-        type: "object",
-        properties: {
-          code: { type: "string", description: "Coupon code to validate" }
-        },
-        required: ["code"]
-      }
+  type: "function",
+  function: {
+    name: "validate_coupon",
+    description: "Validate a coupon and calculate discount for a booking total.",
+    parameters: {
+      type: "object",
+      properties: {
+        code: { type: "string", description: "Coupon code to validate" },
+        booking_total: { type: "number", description: "Booking total before discount" }
+      },
+      required: ["code", "booking_total"]
     }
-  },
+  }
+}
+,
   {
-    type: "function",
-    function: {
-      name: "search_reservations",
-      description: "Search for reservations by guest name, email, or confirmation code",
-      parameters: {
-        type: "object",
-        properties: {
-          searchTerm: { type: "string", description: "Search term (name, email, or confirmation code)" },
-          status: { type: "string", description: "Optional: filter by status (confirmed, checked-in, checked-out, cancelled)" },
-          limit: { type: "number", description: "Optional: maximum number of results (default 10)" }
-        },
-        required: []
-      }
+  type: "function",
+  function: {
+    name: "search_reservations",
+    description: "Search for reservations by guest name, email, confirmation code, or status.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Search term (name, email, or confirmation code)" },
+        status: { type: "string", description: "Optional: filter by status (confirmed, cancelled, etc.)" },
+        limit: { type: "number", description: "Maximum number of results (default 10)" }
+      },
+      required: []
     }
-  },
+  }
+},
   {
     type: "function",
     function: {
@@ -466,6 +478,7 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
+          confirm: { type: "boolean", description: "Set true only after the user explicitly confirms." }
           identifier: { type: "string", description: "Confirmation code or reservation ID" }
         },
         required: ["identifier"]
@@ -480,7 +493,7 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
-          identifier: { type: "string", description: "Confirmation code or reservation ID" },
+          confirm: { type: "boolean", description: "Set true only after the user explicitly confirms." },
           new_status: { type: "string", description: "New status: confirmed, checked-in, checked-out, cancelled" }
         },
         required: ["identifier", "new_status"]
@@ -495,6 +508,7 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
+          confirm: { type: "boolean", description: "Set true only after the user explicitly confirms." },
           identifier: { type: "string", description: "Confirmation code or reservation ID" },
           updates: {
             type: "object",
@@ -524,6 +538,7 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
+          confirm: { type: "boolean", description: "Set true only after the user explicitly confirms." },
           identifier: { type: "string", description: "Confirmation code or reservation ID" }
         },
         required: ["identifier"]
@@ -538,6 +553,7 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
+          confirm: { type: "boolean", description: "Set true only after the user explicitly confirms." },
           identifier: { type: "string", description: "Confirmation code or reservation ID" }
         },
         required: ["identifier"]
@@ -561,21 +577,22 @@ const tools = [
     }
   },
   {
-    type: "function",
-    function: {
-      name: "check_availability",
-      description: "Check room availability for specific dates",
-      parameters: {
-        type: "object",
-        properties: {
-          check_in: { type: "string", description: "Check-in date (YYYY-MM-DD)" },
-          check_out: { type: "string", description: "Check-out date (YYYY-MM-DD)" },
-          room_code: { type: "string", description: "Optional: specific room code to check" }
-        },
-        required: ["check_in", "check_out"]
-      }
+  type: "function",
+  function: {
+    name: "check_availability",
+    description: "Check if a room type is available for specific dates.",
+    parameters: {
+      type: "object",
+      properties: {
+        room_code: { type: "string", description: "Room code (e.g., 'SAND')" },
+        check_in: { type: "string", description: "Check-in date (YYYY-MM-DD)" },
+        check_out: { type: "string", description: "Check-out date (YYYY-MM-DD)" }
+      },
+      required: ["room_code", "check_in", "check_out"]
     }
-  },
+  }
+}
+,
   {
     type: "function",
     function: {
@@ -656,6 +673,7 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
+          confirm: { type: "boolean", description: "Set true only after the user explicitly confirms." },
           identifier: { type: "string", description: "Pricing model name or ID" }
         },
         required: ["identifier"]
@@ -698,6 +716,19 @@ const tools = [
 async function executeTool(name, args) {
   try {
     console.log(`🔧 Executing tool: ${name}`, args);
+
+    const MUTATING = new Set([
+      "create_room_type","update_room_type","delete_room_type",
+      "create_extra","update_extra","delete_extra",
+      "create_package","update_package","delete_package",
+      "create_coupon","update_coupon","delete_coupon",
+      "update_reservation_status","update_reservation_details","cancel_reservation","delete_reservation",
+    ]);
+
+    if (MUTATING.has(name) && !args?.confirm) {
+      return `⚠️ Confirm required.\n\nReply: "confirm" to proceed.\n\nPending action: ${name}\nArgs: ${JSON.stringify(args, null, 2)}`;
+    }
+
     
     const toolFunc = toolMap[name];
     if (!toolFunc || !toolFunc.func) {
