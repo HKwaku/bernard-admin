@@ -4050,25 +4050,30 @@ textarea {
    (Overrides earlier conflicting table rules)
    ========================================================= */
 
-#view-chat .msg.bot .bubble{
+/* =========================================================
+   CHAT TABLES: STOP CLIP + RESTORE HORIZONTAL SCROLL
+   (Final authoritative override)
+   ========================================================= */
+
+#view-chat #messages .msg.bot .bubble{
   display: block !important;
   width: 100% !important;
-  max-width: 100% !important;
+  max-width: 100% !important;      /* overrides 90vw rules */
+  box-sizing: border-box !important;
 }
 
-/* wrapper created in chat.js */
-#view-chat .chat-table-scroll{
+/* The wrapper your chat.js adds around <table> */
+#view-chat #messages .chat-table-scroll{
   display: block !important;
   width: 100% !important;
   max-width: 100% !important;
   overflow-x: auto !important;
   overflow-y: hidden !important;
   -webkit-overflow-scrolling: touch;
-  padding-bottom: 6px; /* ensures scrollbar isn't visually clipped */
 }
 
-/* force table to be wider than wrapper when needed, so wrapper scrolls */
-#view-chat .chat-table-scroll > table{
+/* Make the TABLE wider than the wrapper when needed so the wrapper scrolls */
+#view-chat #messages .chat-table-scroll > table{
   display: table !important;
   width: max-content !important;
   min-width: 100% !important;
@@ -4076,8 +4081,8 @@ textarea {
   table-layout: auto !important;
 }
 
-/* prevent any inherited max-width from collapsing the table */
-#view-chat .chat-table-scroll > table *{
-  max-width: none !important;
+/* Prevent long values from forcing weird wrapping */
+#view-chat #messages .chat-table-scroll th,
+#view-chat #messages .chat-table-scroll td{
+  white-space: nowrap !important;
 }
-
