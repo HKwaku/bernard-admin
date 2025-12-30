@@ -4045,3 +4045,29 @@ textarea {
    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
    
    ============================================ */
+
+   /* ===== FINAL OVERRIDE: Chat tables must NEVER overflow bubbles ===== */
+#view-chat #messages .msg .bubble {
+  max-width: 100% !important;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Make tables behave like scrollable content inside bubble */
+#view-chat #messages .msg .bubble table {
+  display: block !important;      /* beats your display:table rules */
+  max-width: 100% !important;
+  width: max-content !important;  /* table can be wider, bubble scrolls */
+  border-collapse: collapse;
+}
+
+/* Keep cells readable; don’t force bubble expansion */
+#view-chat #messages .msg .bubble th,
+#view-chat #messages .msg .bubble td {
+  white-space: nowrap !important; /* prevents awkward wrapping */
+}
+
+/* In case the table is wrapped in some element, ensure that wrapper doesn't overflow */
+#view-chat #messages .msg .bubble > * {
+  max-width: 100% !important;
+}
