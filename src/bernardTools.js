@@ -499,8 +499,8 @@ export const listPackagesTool = tool({
         Name: p.name,
         "Min Nights": p.nights || 'N/A',
         "Package Price": `${p.currency || 'GHS'} ${p.package_price || 'N/A'}`,
-        "Valid From": p.valid_from || 'N/A',
-        "Valid Until": p.valid_until || 'N/A',
+        "Valid From": formatDate(p.valid_from) || 'N/A',
+        "Valid Until": formatDate(p.valid_until) || 'N/A',
         "Cabin": p.room_name || 'N/A',
         Active: p.is_active ? "✓" : "✗",
         Featured: p.is_featured ? "⭐" : "",
@@ -698,7 +698,7 @@ export const listCouponsTool = tool({
           Code: c.code,
           Type: c.discount_type,
           Value: c.discount_type === 'percentage' ? `${c.discount_value}%` : `${c.currency || 'GBP'} ${c.discount_value}`,
-          "Valid Until": c.valid_until || 'No expiry',
+          "Valid Until": formatDate(c.valid_until) || 'No expiry',
           Active: c.is_active ? "✓" : "✗",
           Status: isValid ? "Valid ✓" : "Expired/Inactive",
         };
@@ -737,8 +737,8 @@ export const getCouponDetailsTool = tool({
 **${data.code}**
 - **Discount**: ${data.discount_type === 'percentage' ? `${data.discount_value}%` : `${data.currency || 'GBP'} ${data.discount_value}`}
 - **Type**: ${data.discount_type}
-- **Valid From**: ${data.valid_from || 'N/A'}
-- **Valid Until**: ${data.valid_until || 'No expiry'}
+- **Valid From**: ${formatDate(data.valid_from) || 'N/A'}
+- **Valid Until**: ${formatDate(data.valid_until) || 'No expiry'}
 - **Usage Limit**: ${data.usage_limit || 'Unlimited'}
 - **Times Used**: ${data.usage_count || 0}
 - **Status**: ${data.is_active ? 'Active' : 'Inactive'}
