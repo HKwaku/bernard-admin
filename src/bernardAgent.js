@@ -110,7 +110,7 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
-          confirm: { type: "boolean", description: "Set true only after the user explicitly confirms." }
+          confirm: { type: "boolean", description: "Set true only after the user explicitly confirms." },
           identifier: { type: "string", description: "Room code (e.g., 'SAND') or room ID" }
         },
         required: ["identifier"]
@@ -147,7 +147,7 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
-          confirm: { type: "boolean", description: "Set true only after the user explicitly confirms." }
+          confirm: { type: "boolean", description: "Set true only after the user explicitly confirms." },
           identifier: { type: "string", description: "Room code or ID to update" },
           updates: {
             type: "object",
@@ -198,7 +198,7 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
-          confirm: { type: "boolean", description: "Set true only after the user explicitly confirms." }
+          confirm: { type: "boolean", description: "Set true only after the user explicitly confirms." },
           identifier: { type: "string", description: "Extra name or ID" }
         },
         required: ["identifier"]
@@ -283,7 +283,7 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
-          confirm: { type: "boolean", description: "Set true only after the user explicitly confirms." }
+          confirm: { type: "boolean", description: "Set true only after the user explicitly confirms." },
           identifier: { type: "string", description: "Package code or ID" }
         },
         required: ["identifier"]
@@ -478,7 +478,7 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
-          confirm: { type: "boolean", description: "Set true only after the user explicitly confirms." }
+          confirm: { type: "boolean", description: "Set true only after the user explicitly confirms." },
           identifier: { type: "string", description: "Confirmation code or reservation ID" }
         },
         required: ["identifier"]
