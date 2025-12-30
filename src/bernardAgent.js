@@ -388,14 +388,17 @@ const model = new ChatOpenAI({
   apiKey: process.env.OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY,
 });
 
-const checkpointer = new MemorySaver();
+// NOTE: Avoid using MemorySaver/checkpointing here.
+// Conversation continuity should be handled by the UI sending message history.
+const checkpointer = null;
 
 const bernardAgent = createReactAgent({
   llm: model,
   tools,
   stateModifier: SYSTEM_PROMPT,
-  checkpointSaver: checkpointer,
+  ...(checkpointer ? { checkpointSaver: checkpointer } : {}),
 });
+
 
 // ---------------------------------------------------------------------------
 // PUBLIC ENTRYPOINT
