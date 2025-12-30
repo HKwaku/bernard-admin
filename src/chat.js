@@ -53,7 +53,10 @@ async function sendMessage() {
     // Push user message into Bernard history
     bernardHistory.push({ role: "user", content: text });
 
-    const resp = await fetch("/api/chat", {
+    const API_BASE =
+    (window.BERNARD_API_BASE_URL || "").replace(/\/$/, ""); // optional override
+    const resp = await fetch(`${API_BASE}/api/chat`, {
+
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ messages: bernardHistory }),

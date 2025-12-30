@@ -15,27 +15,41 @@
     
     <!-- Service Worker Registration (DISABLED ON LOCAL DEV) -->
     <script>
-      const isLocalhost =
-        location.hostname === 'localhost' ||
-        location.hostname === '127.0.0.1' ||
-        location.hostname === '';
+  const isLocalhost =
+    location.hostname === "localhost" ||
+    location.hostname === "127.0.0.1" ||
+    location.hostname === "";
 
-      if ('serviceWorker' in navigator && !isLocalhost) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
-            .then(() => console.log('Service Worker registered'))
-            .catch(err => console.log('Service Worker registration failed:', err));
-        });
+  async function nukeServiceWorkersAndCaches() {
+    try {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for (const reg of regs) await reg.unregister();
+    } catch (_) {}
+
+    try {
+      const keys = await caches.keys();
+      for (const k of keys) await caches.delete(k);
+    } catch (_) {}
+  }
+
+    if ("serviceWorker" in navigator) {
+      if (isLocalhost) {
+        // Dev: ensure SW is fully disabled
+        nukeServiceWorkersAndCaches();
       } else {
-        // If a SW was previously registered on localhost, ensure it’s removed
-        window.addEventListener('load', async () => {
-          try {
-            const regs = await navigator.serviceWorker.getRegistrations();
-            for (const reg of regs) await reg.unregister();
-          } catch (_) {}
+        // Prod: register SW normally
+        window.addEventListener("load", () => {
+          navigator.serviceWorker
+            .register("/sw.js")
+            .then(() => console.log("Service Worker registered"))
+            .catch((err) =>
+              console.log("Service Worker registration failed:", err)
+            );
         });
       }
-    </script>
+    }
+  </script>
+
 
 
 
