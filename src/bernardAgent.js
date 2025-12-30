@@ -1,189 +1,393 @@
 // src/bernardAgent.js
-// --------------------
-// Server-side Bernard agent (NO LangChain/LangGraph dependencies).
-// Fixes Vercel: "Cannot find module @langchain/langgraph/dist/index.cjs"
-// and prevents tool schema wiring crashes.
+// OpenAI function calling with proper parameter extraction
 
+import OpenAI from "openai";
+import { supabase, formatTable } from "./bernardTools.js";
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+// Import all tool functions from bernardTools
 import {
-  // Rooms
   listRoomsTool,
   getRoomDetailsTool,
-
-  // Extras
   listExtrasTool,
   getExtraDetailsTool,
-
-  // Packages
   listPackagesTool,
   getPackageDetailsTool,
-
-  // Coupons
   listCouponsTool,
   getCouponDetailsTool,
   validateCouponTool,
-
-  // Reservations
   searchReservationsTool,
   getReservationDetailsTool,
   getTodayCheckInsTool,
   getTodayCheckOutsTool,
   checkAvailabilityTool,
-
-  // Analytics
   getOccupancyStatsTool,
   getRevenueStatsTool,
-
-  // Pricing
   listPricingModelsTool,
   getPricingModelDetailsTool,
   simulatePricingTool,
   getSeasonalPricingTool,
 } from "./bernardTools.js";
 
-const OPENAI_KEY = process.env.OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY || "";
+// Map tool names to their functions
+const toolMap = {
+  list_room_types: listRoomsTool,
+  get_room_details: getRoomDetailsTool,
+  list_extras: listExtrasTool,
+  get_extra_details: getExtraDetailsTool,
+  list_packages: listPackagesTool,
+  get_package_details: getPackageDetailsTool,
+  list_coupons: listCouponsTool,
+  get_coupon_details: getCouponDetailsTool,
+  validate_coupon: validateCouponTool,
+  search_reservations: searchReservationsTool,
+  get_reservation_details: getReservationDetailsTool,
+  get_today_checkins: getTodayCheckInsTool,
+  get_today_checkouts: getTodayCheckOutsTool,
+  check_availability: checkAvailabilityTool,
+  get_occupancy_stats: getOccupancyStatsTool,
+  get_revenue_stats: getRevenueStatsTool,
+  list_pricing_models: listPricingModelsTool,
+  get_pricing_model_details: getPricingModelDetailsTool,
+  simulate_pricing: simulatePricingTool,
+  get_seasonal_pricing: getSeasonalPricingTool,
+};
 
-const SYSTEM_PROMPT = `
-You are Bernard, the AI assistant for the Sojourn Cabins internal admin dashboard.
-
-Rules:
-- Do NOT guess database facts. Use tools when the user is asking for admin data.
-- For CREATE/UPDATE/DELETE operations: ask for explicit confirmation before you execute.
-- Prefer returning tool results (tables / structured outputs) for lists.
-- Be concise and helpful.
-`.trim();
-
-function lastUserMessage(messages = []) {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i]?.role === "user") return String(messages[i]?.content || "");
-  }
-  return "";
-}
-
-function normalize(s) {
-  return String(s || "").trim().toLowerCase();
-}
-
-function route(userText) {
-  const q = normalize(userText);
-  const has = (...words) => words.some((w) => q.includes(w));
-
-  // LISTS
-  if (has("list rooms", "show rooms", "room types", "cabins")) {
-    return { tool: listRoomsTool, args: {} };
-  }
-  if (has("list extras", "show extras", "add-ons", "addons")) {
-    return { tool: listExtrasTool, args: {} };
-  }
-  if (has("list packages", "show packages")) {
-    return { tool: listPackagesTool, args: {} };
-  }
-  if (has("list coupons", "show coupons", "promo codes", "discount codes")) {
-    return { tool: listCouponsTool, args: {} };
-  }
-  if (has("list pricing models", "show pricing models")) {
-    return { tool: listPricingModelsTool, args: {} };
-  }
-
-  // DETAILS (pass raw userText; tools already fuzzy-match with ilike)
-  if (has("room details", "details for room", "tell me about") && has("room", "cabin")) {
-    return { tool: getRoomDetailsTool, args: { identifier: userText } };
-  }
-  if (has("extra details", "details for extra") && has("extra")) {
-    return { tool: getExtraDetailsTool, args: { identifier: userText } };
-  }
-  if (has("package details", "details for package") && has("package")) {
-    return { tool: getPackageDetailsTool, args: { identifier: userText } };
-  }
-  if (has("coupon details", "details for coupon") && has("coupon")) {
-    return { tool: getCouponDetailsTool, args: { identifier: userText } };
-  }
-
-  // COUPON VALIDATION
-  if (has("validate", "check") && has("coupon", "code", "promo")) {
-    return { tool: validateCouponTool, args: { code: userText } };
-  }
-
-  // RESERVATIONS
-  if (has("search reservation", "find reservation", "find booking", "search booking")) {
-    return { tool: searchReservationsTool, args: { searchTerm: userText } };
-  }
-  if (has("reservation details", "booking details") && has("reservation", "booking")) {
-    return { tool: getReservationDetailsTool, args: { identifier: userText } };
-  }
-  if (has("arrivals today", "today check in", "today check-in")) {
-    return { tool: getTodayCheckInsTool, args: {} };
-  }
-  if (has("departures today", "today check out", "today check-out")) {
-    return { tool: getTodayCheckOutsTool, args: {} };
-  }
-  if (has("availability", "available") && has("check-in", "checkin", "check in")) {
-    return { tool: checkAvailabilityTool, args: { query: userText } };
-  }
-
-  // ANALYTICS
-  if (has("occupancy")) return { tool: getOccupancyStatsTool, args: { query: userText } };
-  if (has("revenue")) return { tool: getRevenueStatsTool, args: { query: userText } };
-
-  // PRICING
-  if (has("pricing model details", "pricing model") && has("details")) {
-    return { tool: getPricingModelDetailsTool, args: { identifier: userText } };
-  }
-  if (has("simulate", "simulation") && has("pricing")) {
-    return { tool: simulatePricingTool, args: { query: userText } };
-  }
-  if (has("season", "seasonal")) {
-    return { tool: getSeasonalPricingTool, args: { query: userText } };
-  }
-
-  return null; // fallback to OpenAI text response
-}
-
-async function callOpenAI(messages) {
-  if (!OPENAI_KEY) {
-    return "Missing OPENAI_API_KEY in server runtime. Set OPENAI_API_KEY on Vercel.";
-  }
-
-  const payload = {
-    model: "gpt-4o-mini",
-    temperature: 0.2,
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      ...messages.map((m) => ({ role: m.role, content: String(m.content ?? "") })),
-    ],
-  };
-
-  const resp = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${OPENAI_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!resp.ok) {
-    const txt = await resp.text().catch(() => "");
-    throw new Error(`OpenAI error (${resp.status}): ${txt || resp.statusText}`);
-  }
-
-  const data = await resp.json();
-  return data?.choices?.[0]?.message?.content || "No response.";
-}
-
-// PUBLIC ENTRYPOINT used by /api/chat.js
-export async function runBernardAgent(messages, threadId = "bernard-default-thread") {
-  const userText = lastUserMessage(messages);
-
-  const planned = route(userText);
-
-  if (planned?.tool?.func) {
-    try {
-      const out = await planned.tool.func(planned.args || {});
-      return typeof out === "string" ? out : JSON.stringify(out);
-    } catch (e) {
-      return `Tool error: ${e?.message || String(e)}`;
+// OpenAI function definitions
+const tools = [
+  {
+    type: "function",
+    function: {
+      name: "list_room_types",
+      description: "List all room types with pricing, capacity, and status",
+      parameters: { type: "object", properties: {}, required: [] }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_room_details",
+      description: "Get detailed information about a specific room type",
+      parameters: {
+        type: "object",
+        properties: {
+          identifier: { type: "string", description: "Room code (e.g., 'SAND') or room ID" }
+        },
+        required: ["identifier"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_extras",
+      description: "List all extras/add-ons with pricing",
+      parameters: { type: "object", properties: {}, required: [] }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_extra_details",
+      description: "Get details about a specific extra/add-on",
+      parameters: {
+        type: "object",
+        properties: {
+          identifier: { type: "string", description: "Extra name or ID" }
+        },
+        required: ["identifier"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_packages",
+      description: "List all packages with pricing and details",
+      parameters: { type: "object", properties: {}, required: [] }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_package_details",
+      description: "Get details about a specific package",
+      parameters: {
+        type: "object",
+        properties: {
+          identifier: { type: "string", description: "Package code or ID" }
+        },
+        required: ["identifier"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_coupons",
+      description: "List all coupons with discount details",
+      parameters: { type: "object", properties: {}, required: [] }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_coupon_details",
+      description: "Get details about a specific coupon",
+      parameters: {
+        type: "object",
+        properties: {
+          identifier: { type: "string", description: "Coupon code" }
+        },
+        required: ["identifier"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "validate_coupon",
+      description: "Validate a coupon code and check if it's currently valid",
+      parameters: {
+        type: "object",
+        properties: {
+          code: { type: "string", description: "Coupon code to validate" }
+        },
+        required: ["code"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "search_reservations",
+      description: "Search for reservations by guest name, email, or confirmation code",
+      parameters: {
+        type: "object",
+        properties: {
+          searchTerm: { type: "string", description: "Search term (name, email, or confirmation code)" },
+          status: { type: "string", description: "Optional: filter by status (confirmed, checked-in, checked-out, cancelled)" },
+          limit: { type: "number", description: "Optional: maximum number of results (default 10)" }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_reservation_details",
+      description: "Get full details of a specific reservation",
+      parameters: {
+        type: "object",
+        properties: {
+          identifier: { type: "string", description: "Confirmation code or reservation ID" }
+        },
+        required: ["identifier"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_today_checkins",
+      description: "Get all reservations checking in today",
+      parameters: { type: "object", properties: {}, required: [] }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_today_checkouts",
+      description: "Get all reservations checking out today",
+      parameters: { type: "object", properties: {}, required: [] }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "check_availability",
+      description: "Check room availability for specific dates",
+      parameters: {
+        type: "object",
+        properties: {
+          check_in: { type: "string", description: "Check-in date (YYYY-MM-DD)" },
+          check_out: { type: "string", description: "Check-out date (YYYY-MM-DD)" },
+          room_code: { type: "string", description: "Optional: specific room code to check" }
+        },
+        required: ["check_in", "check_out"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_occupancy_stats",
+      description: "Get occupancy statistics for a date range. Defaults to current month if no dates provided.",
+      parameters: {
+        type: "object",
+        properties: {
+          start_date: { type: "string", description: "Start date (YYYY-MM-DD). Optional, defaults to first day of current month." },
+          end_date: { type: "string", description: "End date (YYYY-MM-DD). Optional, defaults to first day of next month." },
+          room_code: { type: "string", description: "Optional: specific room code to filter by" }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_revenue_stats",
+      description: "Get revenue statistics for a date range. Defaults to current month if no dates provided.",
+      parameters: {
+        type: "object",
+        properties: {
+          start_date: { type: "string", description: "Start date (YYYY-MM-DD). Optional, defaults to first day of current month." },
+          end_date: { type: "string", description: "End date (YYYY-MM-DD). Optional, defaults to first day of next month." }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_pricing_models",
+      description: "List all pricing models with their configuration",
+      parameters: { type: "object", properties: {}, required: [] }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_pricing_model_details",
+      description: "Get details about a specific pricing model",
+      parameters: {
+        type: "object",
+        properties: {
+          identifier: { type: "string", description: "Pricing model name or ID" }
+        },
+        required: ["identifier"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "simulate_pricing",
+      description: "Simulate dynamic pricing for a specific booking scenario",
+      parameters: {
+        type: "object",
+        properties: {
+          room_code: { type: "string", description: "Room code (e.g., 'SAND')" },
+          check_in: { type: "string", description: "Check-in date (YYYY-MM-DD)" },
+          check_out: { type: "string", description: "Check-out date (YYYY-MM-DD)" }
+        },
+        required: ["room_code", "check_in", "check_out"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_seasonal_pricing",
+      description: "Get seasonal pricing rules for rooms",
+      parameters: {
+        type: "object",
+        properties: {
+          room_code: { type: "string", description: "Optional: specific room code" }
+        },
+        required: []
+      }
     }
   }
+];
 
-  return await callOpenAI(messages);
+// Execute tool by name
+async function executeTool(name, args) {
+  try {
+    console.log(`🔧 Executing tool: ${name}`, args);
+    
+    const toolFunc = toolMap[name];
+    if (!toolFunc || !toolFunc.func) {
+      return `Tool '${name}' not found`;
+    }
+    
+    const result = await toolFunc.func(args);
+    return typeof result === "string" ? result : JSON.stringify(result);
+  } catch (error) {
+    console.error(`Error executing ${name}:`, error);
+    return `Error: ${error.message}`;
+  }
+}
+
+// Main agent function
+export async function runBernardAgent(messages) {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error("OPENAI_API_KEY is missing");
+  }
+
+  console.log('🤖 Bernard starting with', messages.length, 'messages');
+
+  const systemMessage = {
+    role: "system",
+    content: `You are Bernard, the AI assistant for Sojourn Cabins admin dashboard in Ghana.
+
+You help manage rooms, packages, extras, coupons, reservations, and analytics.
+
+IMPORTANT:
+- Use tools to get accurate data from the database
+- For analytics tools (occupancy/revenue stats), if the user doesn't specify dates, call without parameters to get current month data
+- When users ask for "occupancy" or "revenue" without dates, assume they want current month stats
+- Display HTML tables returned by tools directly
+- Currency is GHS (Ghanaian Cedi)
+- Be concise and helpful`
+  };
+
+  const allMessages = [systemMessage, ...messages];
+
+  // Call OpenAI with function calling
+  let response = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: allMessages,
+    tools: tools,
+    tool_choice: "auto",
+  });
+
+  let message = response.choices[0].message;
+  const responseMessages = [message];
+
+  // Handle tool calls (max 5 iterations)
+  for (let iteration = 0; iteration < 5 && message.tool_calls; iteration++) {
+    console.log(`🔄 Iteration ${iteration + 1}: ${message.tool_calls.length} tool calls`);
+    
+    for (const toolCall of message.tool_calls) {
+      const args = JSON.parse(toolCall.function.arguments || "{}");
+      const result = await executeTool(toolCall.function.name, args);
+      
+      responseMessages.push({
+        role: "tool",
+        tool_call_id: toolCall.id,
+        content: result
+      });
+    }
+
+    // Get next response from OpenAI
+    response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [...allMessages, ...responseMessages],
+      tools: tools,
+      tool_choice: "auto",
+    });
+
+    message = response.choices[0].message;
+    responseMessages.push(message);
+  }
+
+  console.log('✅ Bernard completed');
+  return message.content || "Done.";
 }
