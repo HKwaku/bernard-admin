@@ -2,27 +2,49 @@
 
 import { runBernardAgent } from "../src/bernardAgent.js"; // adjust relative path
 
+// /api/chat.js
+// Vercel Serverless Function (Node) — runs Bernard server-side only
+
 export default async function handler(req, res) {
   try {
     if (req.method !== "POST") {
       res.setHeader("Allow", "POST");
-      return res.status(405).json({ error: "Method not allowed" });
+      return res.status(405).json({ error: "Method Not Allowed" });
     }
 
-    const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
-    const { messages } = body;
+    // Body can be string or object depending on environment
+    const body =
+      typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
 
-    if (!Array.isArray(messages)) {
-      return res.status(400).json({ error: "messages array required" });
+    const messages = Array.isArray(body.messages) ? body.messages : [];
+    const threadId = body.threadId || "bernard-default-thread";
+
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(500).json({
+        error:
+          "Server missing OPENAI_API_KEY. Add it to Vercel environment variables.",
+      });
     }
 
-    // We let the LangGraph agent handle system prompts through stateModifier,
-    // so we just pass messages through as-is from the frontend
-    const reply = await runBernardAgent(messages);
+    // IMPORTANT:
+    // Use dynamic import so this function works whether your project is ESM or CJS.
+    // Also ensures LangGraph never ends up in the browser bundle.
+    const mod = await import("../src/bernardAgent.js");
+    const runBernardAgent = mod.runBernardAgent;
 
+    if (typeof runBernardAgent !== "function") {
+      return res.status(500).json({
+        error:
+          "runBernardAgent export not found. Check ../src/bernardAgent.js exports.",
+      });
+    }
+
+    const reply = await runBernardAgent(messages, threadId);
     return res.status(200).json({ reply });
-  } catch (e) {
-    console.error("Bernard agent error:", e);
-    return res.status(500).json({ error: e.message || "Server error" });
+  } catch (err) {
+    console.error("API /chat error:", err);
+    return res.status(500).json({
+      error: err?.message || "Bernard API failed (500)",
+    });
   }
 }
