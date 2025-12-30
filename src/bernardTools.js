@@ -1096,11 +1096,20 @@ export const getOccupancyStatsTool = tool({
   name: "get_occupancy_stats",
   description: "Get occupancy statistics for a date range. Returns overall and per-room occupancy percentages.",
   schema: z.object({
-    start_date: z.string().describe("Start date (YYYY-MM-DD)"),
-    end_date: z.string().describe("End date (YYYY-MM-DD)"),
+    // Allow the agent to call this without dates; we will default to the current month.
+    start_date: z.string().optional().describe("Start date (YYYY-MM-DD). If omitted, defaults to the first day of the current month."),
+    end_date: z.string().optional().describe("End date (YYYY-MM-DD). If omitted, defaults to the first day of next month."),
     room_code: z.string().optional().describe("Optional: specific room code to filter by"),
   }),
   async func({ start_date, end_date, room_code }) {
+    // Defaults: current month (start = 1st of month, end = 1st of next month)
+    const now = new Date();
+    const defaultStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const defaultEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+
+    const start_date_safe = start_date || defaultStart.toISOString().slice(0, 10);
+    const end_date_safe = end_date || defaultEnd.toISOString().slice(0, 10);
+
     // Get all room types or specific room
     let roomQuery = supabase.from("room_types").select("id, code, name");
     if (room_code) {

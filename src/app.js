@@ -280,6 +280,17 @@ export function initApp() {
     })
   );
 
+    // ---------- Default Landing (Chat) ----------
+  // Ensure the Chat view is initialised immediately on page load so it's
+  // refreshed and ready to use without requiring a tab click.
+  try {
+    $('#section-title').textContent = 'Chat';
+    initChat();
+  } catch (e) {
+    console.error('Chat init failed on load:', e);
+  }
+
+
   // ---------- Mobile Menu (right-aligned dropdown) ----------
   const mBtn = $('#mobile-menu-btn');
   const mDrawer = $('#mobile-menu-drawer');
