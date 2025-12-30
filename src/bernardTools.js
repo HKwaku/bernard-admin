@@ -3,9 +3,33 @@
 // Comprehensive Bernard AI tools covering ALL admin dashboard functionality.
 // Organized by domain: Rooms, Extras, Packages, Coupons, Reservations, Analytics.
 
-import { tool } from "@langchain/core/tools";
-import { z } from "zod";
+// src/bernardTools.js
+// --------------------
+// Tools are used server-side (Vercel). Do NOT import LangChain/LangGraph here.
+// We keep the file structure the same by providing a tiny local `tool()` wrapper.
+// Schemas are not enforced at runtime; they’re only documentation.
+
+const tool = (definition) => definition;
+
+// Minimal zod-like stub so the existing `schema:` blocks don’t crash.
+// (We do NOT validate schemas here; the tools already do internal checks.)
+const _chain = () => {
+  const o = {};
+  o.optional = () => o;
+  o.default = () => o;
+  o.describe = () => o;
+  return o;
+};
+const z = {
+  object: (_shape) => _chain(),
+  string: () => _chain(),
+  number: () => _chain(),
+  boolean: () => _chain(),
+  enum: (_vals) => _chain(),
+};
+
 import { createClient } from "@supabase/supabase-js";
+
 
 // Server-safe env resolution (works on Vercel + locally)
 const SUPABASE_URL =
