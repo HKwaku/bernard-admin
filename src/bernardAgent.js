@@ -383,7 +383,7 @@ Remember: Your tools are powerful. Use them wisely, ask first, confirm always!
 const model = new ChatOpenAI({
   model: "gpt-4o-mini",
   temperature: 0.2,
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY,
 });
 
 const checkpointer = new MemorySaver();

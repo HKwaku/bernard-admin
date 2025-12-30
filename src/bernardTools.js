@@ -5,7 +5,27 @@
 
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import { supabase } from "./config/supabase.js";
+import { createClient } from "@supabase/supabase-js";
+
+// Server-safe env resolution (works on Vercel + locally)
+const SUPABASE_URL =
+  process.env.SUPABASE_URL ||
+  process.env.VITE_SUPABASE_URL ||
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  "";
+
+const SUPABASE_KEY =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.SUPABASE_ANON_KEY ||
+  process.env.VITE_SUPABASE_ANON_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  "";
+
+// Create a server-side Supabase client for Bernard tools
+export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: { persistSession: false },
+});
+
 
 // =====================
 // UNIVERSAL TABLE FORMATTER
