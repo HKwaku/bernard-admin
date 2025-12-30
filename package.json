@@ -1,6 +1,7 @@
 {
   "name": "bernard-admin",
   "version": "1.0.0",
+  "type": "module",
   "description": "Admin dashboard for Sojourn Cabins reservations",
   "scripts": {
     "dev": "vite",
@@ -15,6 +16,7 @@
     "@langchain/langgraph": "^1.0.2",
     "@langchain/openai": "^1.1.1",
     "@supabase/supabase-js": "^2.78.0",
+    "openai": "^4.20.0",
     "xlsx": "^0.18.5"
   }
 }
