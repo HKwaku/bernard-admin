@@ -1658,6 +1658,116 @@ export const comparePeriodsAnalyticsTool = tool({
   },
 });
 
+// ============================================================================
+// RESERVATION MANAGEMENT TOOLS
+// ============================================================================
+
+export const updateReservationStatusTool = tool({
+  name: "update_reservation_status",
+  description: "Update the status of a reservation. Requires explicit user confirmation.",
+  schema: z.object({
+    identifier: z.string().describe("Confirmation code or reservation ID"),
+    new_status: z.string().describe("New status: confirmed, checked-in, checked-out, or cancelled"),
+  }),
+  async func({ identifier, new_status }) {
+    const validStatuses = ['confirmed', 'checked-in', 'checked-out', 'cancelled'];
+    if (!validStatuses.includes(new_status.toLowerCase())) {
+      return `Invalid status. Must be one of: ${validStatuses.join(', ')}`;
+    }
+    let query = supabase.from("reservations").update({ status: new_status.toLowerCase() });
+    if (identifier.length > 20 && identifier.includes('-')) {
+      query = query.eq("id", identifier);
+    } else {
+      query = query.eq("confirmation_code", identifier.toUpperCase());
+    }
+    const { error } = await query;
+    if (error) return `Error: ${error.message}`;
+    return `✓ Reservation '${identifier}' status updated to '${new_status}' successfully!`;
+  },
+});
+
+export const cancelReservationTool = tool({
+  name: "cancel_reservation",
+  description: "Cancel a reservation. Requires explicit user confirmation.",
+  schema: z.object({
+    identifier: z.string().describe("Confirmation code or reservation ID"),
+  }),
+  async func({ identifier }) {
+    let query = supabase.from("reservations").update({ status: 'cancelled' });
+    if (identifier.length > 20 && identifier.includes('-')) {
+      query = query.eq("id", identifier);
+    } else {
+      query = query.eq("confirmation_code", identifier.toUpperCase());
+    }
+    const { error } = await query;
+    if (error) return `Error: ${error.message}`;
+    return `✓ Reservation '${identifier}' cancelled successfully!`;
+  },
+});
+
+export const deleteReservationTool = tool({
+  name: "delete_reservation",
+  description: "Permanently delete a reservation. WARNING: Cannot be undone! Requires explicit user confirmation.",
+  schema: z.object({
+    identifier: z.string().describe("Confirmation code or reservation ID"),
+  }),
+  async func({ identifier }) {
+    let query = supabase.from("reservations").delete();
+    if (identifier.length > 20 && identifier.includes('-')) {
+      query = query.eq("id", identifier);
+    } else {
+      query = query.eq("confirmation_code", identifier.toUpperCase());
+    }
+    const { error } = await query;
+    if (error) return `Error: ${error.message}`;
+    return `✓ Reservation '${identifier}' permanently deleted.`;
+  },
+});
+
+export const updateReservationDetailsTool = tool({
+  name: "update_reservation_details",
+  description: "Update reservation details. Requires explicit user confirmation.",
+  schema: z.object({
+    identifier: z.string().describe("Confirmation code or reservation ID"),
+    updates: z.object({
+      check_in: z.string().optional(),
+      check_out: z.string().optional(),
+      adults: z.number().optional(),
+      children: z.number().optional(),
+      guest_first_name: z.string().optional(),
+      guest_last_name: z.string().optional(),
+      guest_email: z.string().optional(),
+      guest_phone: z.string().optional(),
+      notes: z.string().optional(),
+      payment_status: z.string().optional(),
+    }),
+  }),
+  async func({ identifier, updates }) {
+    const payload = {};
+    if (updates.check_in) payload.check_in = updates.check_in;
+    if (updates.check_out) payload.check_out = updates.check_out;
+    if (updates.adults !== undefined) payload.adults = updates.adults;
+    if (updates.children !== undefined) payload.children = updates.children;
+    if (updates.guest_first_name) payload.guest_first_name = updates.guest_first_name;
+    if (updates.guest_last_name) payload.guest_last_name = updates.guest_last_name;
+    if (updates.guest_email) payload.guest_email = updates.guest_email;
+    if (updates.guest_phone) payload.guest_phone = updates.guest_phone;
+    if (updates.notes !== undefined) payload.notes = updates.notes;
+    if (updates.payment_status) payload.payment_status = updates.payment_status;
+
+    let query = supabase.from("reservations").update(payload);
+    if (identifier.length > 20 && identifier.includes('-')) {
+      query = query.eq("id", identifier);
+    } else {
+      query = query.eq("confirmation_code", identifier.toUpperCase());
+    }
+    const { error } = await query;
+    if (error) return `Error: ${error.message}`;
+    return `✓ Reservation '${identifier}' updated: ${Object.keys(payload).join(', ')}`;
+  },
+});
+
+
 
 // Export all tools
 export const allTools = [
@@ -1693,6 +1803,10 @@ export const allTools = [
   // Reservations
   searchReservationsTool,
   getReservationDetailsTool,
+  updateReservationStatusTool,
+  updateReservationDetailsTool,
+  cancelReservationTool,
+  deleteReservationTool,
   getTodayCheckInsTool,
   getTodayCheckOutsTool,
   checkAvailabilityTool,

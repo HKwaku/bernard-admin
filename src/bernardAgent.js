@@ -33,6 +33,10 @@ import {
   validateCouponTool,
   searchReservationsTool,
   getReservationDetailsTool,
+  updateReservationStatusTool,
+  updateReservationDetailsTool,
+  cancelReservationTool,
+  deleteReservationTool,
   getTodayCheckInsTool,
   getTodayCheckOutsTool,
   checkAvailabilityTool,
@@ -71,6 +75,10 @@ const toolMap = {
   validate_coupon: validateCouponTool,
   search_reservations: searchReservationsTool,
   get_reservation_details: getReservationDetailsTool,
+  update_reservation_status: updateReservationStatusTool,
+  update_reservation_details: updateReservationDetailsTool,
+  cancel_reservation: cancelReservationTool,
+  delete_reservation: deleteReservationTool,
   get_today_checkins: getTodayCheckInsTool,
   get_today_checkouts: getTodayCheckOutsTool,
   check_availability: checkAvailabilityTool,
@@ -467,6 +475,78 @@ const tools = [
   {
     type: "function",
     function: {
+      name: "update_reservation_status",
+      description: "Update reservation status. IMPORTANT: Always confirm with user before updating.",
+      parameters: {
+        type: "object",
+        properties: {
+          identifier: { type: "string", description: "Confirmation code or reservation ID" },
+          new_status: { type: "string", description: "New status: confirmed, checked-in, checked-out, cancelled" }
+        },
+        required: ["identifier", "new_status"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_reservation_details",
+      description: "Update reservation details. IMPORTANT: Always confirm with user before updating.",
+      parameters: {
+        type: "object",
+        properties: {
+          identifier: { type: "string", description: "Confirmation code or reservation ID" },
+          updates: {
+            type: "object",
+            properties: {
+              check_in: { type: "string", description: "New check-in date (YYYY-MM-DD)" },
+              check_out: { type: "string", description: "New check-out date (YYYY-MM-DD)" },
+              adults: { type: "number", description: "Number of adults" },
+              children: { type: "number", description: "Number of children" },
+              guest_first_name: { type: "string" },
+              guest_last_name: { type: "string" },
+              guest_email: { type: "string" },
+              guest_phone: { type: "string" },
+              notes: { type: "string" },
+              payment_status: { type: "string", description: "paid, unpaid, or partial" }
+            }
+          }
+        },
+        required: ["identifier", "updates"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "cancel_reservation",
+      description: "Cancel a reservation. IMPORTANT: Always confirm with user before cancelling.",
+      parameters: {
+        type: "object",
+        properties: {
+          identifier: { type: "string", description: "Confirmation code or reservation ID" }
+        },
+        required: ["identifier"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "delete_reservation",
+      description: "Permanently delete a reservation. WARNING: Cannot be undone! IMPORTANT: Always confirm with user before deleting.",
+      parameters: {
+        type: "object",
+        properties: {
+          identifier: { type: "string", description: "Confirmation code or reservation ID" }
+        },
+        required: ["identifier"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
       name: "get_today_checkins",
       description: "Get all reservations checking in today",
       parameters: { type: "object", properties: {}, required: [] }
@@ -524,6 +604,39 @@ const tools = [
           end_date: { type: "string", description: "End date (YYYY-MM-DD). Optional, defaults to first day of next month." }
         },
         required: []
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_client_analytics",
+      description: "Get client/guest analytics including repeat guests, top spenders, and booking patterns",
+      parameters: {
+        type: "object",
+        properties: {
+          start_date: { type: "string", description: "Optional start date (YYYY-MM-DD)" },
+          end_date: { type: "string", description: "Optional end date (YYYY-MM-DD)" },
+          limit: { type: "number", description: "Number of top guests to return (default: 10)" }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "compare_periods",
+      description: "Compare occupancy and revenue metrics between two time periods",
+      parameters: {
+        type: "object",
+        properties: {
+          period1_start: { type: "string", description: "Period 1 start date (YYYY-MM-DD)" },
+          period1_end: { type: "string", description: "Period 1 end date (YYYY-MM-DD)" },
+          period2_start: { type: "string", description: "Period 2 start date (YYYY-MM-DD)" },
+          period2_end: { type: "string", description: "Period 2 end date (YYYY-MM-DD)" }
+        },
+        required: ["period1_start", "period1_end", "period2_start", "period2_end"]
       }
     }
   },

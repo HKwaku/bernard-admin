@@ -3955,3 +3955,38 @@ label {
     grid-template-columns: 1fr !important;
   }
 }
+/* ============================================
+   MOBILE ZOOM FIX - Add to your CSS file
+   ============================================ */
+
+/* Fix 1: Ensure input has 16px+ font size (prevents iOS zoom) */
+#user-input,
+input[type="text"],
+textarea {
+  font-size: 16px !important;
+  /* iOS Safari won't zoom if font-size is 16px or larger */
+}
+
+/* Fix 2: Specific fix for chat input */
+#user-input {
+  font-size: 16px !important;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Fix 3: Prevent zoom on all form inputs on mobile */
+@media screen and (max-width: 768px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+/* ============================================
+   ALSO ADD THIS TO YOUR HTML <head> section:
+   ============================================
+   
+   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+   
+   ============================================ */
