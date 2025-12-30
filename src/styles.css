@@ -531,6 +531,18 @@ label {
   word-break: break-word;
 }
 
+/* Chat: allow wide tables to scroll on mobile */
+.msg .bubble {
+  overflow-x: auto;
+}
+
+.msg .bubble table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+}
+
+
 .msg.user {
   text-align: right;
 }

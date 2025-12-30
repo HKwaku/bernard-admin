@@ -3,7 +3,6 @@
 
 import { $, addMessage, showTyping, hideTyping } from './utils/helpers.js';
 
-
 /* ---------------------------
    UI HELPERS
 ----------------------------*/
@@ -26,7 +25,7 @@ function appendStatusBubble(text = "Thinking.") {
   return bubble;
 }
 
-// Bernard conversation state for LangGraph agent
+// Bernard conversation state for the agent
 let bernardHistory = [];
 
 /* ---------------------------
@@ -53,10 +52,8 @@ async function sendMessage() {
     // Push user message into Bernard history
     bernardHistory.push({ role: "user", content: text });
 
-    const API_BASE =
-    (window.BERNARD_API_BASE_URL || "").replace(/\/$/, ""); // optional override
-    const resp = await fetch(`${API_BASE}/api/chat`, {
-
+    // SAME-ORIGIN in production (Vercel), and also works locally if you run the API
+    const resp = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ messages: bernardHistory }),
@@ -70,9 +67,6 @@ async function sendMessage() {
     }
 
     const reply = data?.reply;
-
-
-
 
     hideTyping();
     $("#status-indicator")?.remove();
@@ -99,7 +93,7 @@ function initChat() {
   const messagesDiv = $("#messages");
   if (messagesDiv) messagesDiv.innerHTML = "";
 
-  // Reset Bernard memory for the UI session (keeps things consistent & avoids stale context)
+  // Reset Bernard memory for the UI session
   bernardHistory = [];
 
   // Clear old listeners by cloning the button
@@ -119,11 +113,7 @@ function initChat() {
   }
 
   // Welcome message should pop immediately when user clicks Chat tab
-  const welcome = `Hello! My name is <strong>Bernard</strong>. What would you like to do today?`;
-  addMessage(welcome);
-
-  // Also add it into Bernard history so the agent stays consistent with the UI
-  bernardHistory.push({ role: "assistant", content: "Hello! My name is Bernard. What would you like to do today?" });
+  addMessage(`Hello! My name is <strong>Bernard</strong>. What would you like to do today?`);
 }
 
 export { initChat };
