@@ -67,58 +67,31 @@ const orchestratorTool = tool(
   async ({ user_request }) => {
     const q = (user_request || "").toLowerCase();
 
+    const has = (...words) => words.some((w) => q.includes(w));
+
     const plan = {
       domain: "general",
       suggested_tools: [],
       notes: "",
     };
 
-    const has = (...words) => words.some((w) => q.includes(w));
-
-    if (has("coupon", "coupons", "promo", "discount code", "voucher")) {
-      plan.domain = "coupons";
-      plan.suggested_tools = [
-        { tool: "list_coupons", when: "User wants to see coupons" },
-        { tool: "get_coupon_details", when: "User references a specific code" },
-        { tool: "validate_coupon", when: "User asks if code works / discount calc" },
-        { tool: "create_coupon", when: "User wants to add a coupon (ask confirmation)" },
-        { tool: "update_coupon", when: "User wants to edit a coupon (ask confirmation)" },
-        { tool: "delete_coupon", when: "User wants to delete a coupon (strong confirmation)" },
-      ];
-      plan.notes = "Always use a coupon tool first (don’t guess).";
-      return JSON.stringify(plan);
-    }
-
-    if (has("reservation", "booking", "check-in", "check in", "check-out", "check out", "availability")) {
-      plan.domain = "reservations";
-      plan.suggested_tools = [
-        { tool: "search_reservations", when: "Find bookings by name/email/code" },
-        { tool: "get_reservation_details", when: "Open one booking by code/id" },
-        { tool: "get_today_checkins", when: "Today's arrivals" },
-        { tool: "get_today_checkouts", when: "Today's departures" },
-        { tool: "check_availability", when: "Is a room available for dates" },
-      ];
-      plan.notes = "For availability, use check_availability first.";
-      return JSON.stringify(plan);
-    }
-
-    if (has("room", "cabin", "room type", "weekday", "weekend", "price")) {
+    if (has("room", "rooms", "room type", "room types", "cabin", "cabins")) {
       plan.domain = "rooms";
       plan.suggested_tools = [
-        { tool: "list_room_types", when: "User wants list of rooms" },
-        { tool: "get_room_type_details", when: "User references a specific room code/name" },
-        { tool: "create_room_type", when: "User wants to create (confirm first)" },
-        { tool: "update_room_type", when: "User wants to edit (confirm first)" },
-        { tool: "delete_room_type", when: "User wants to delete (strong confirm)" },
+        { tool: "list_rooms", when: "List / browse rooms" },
+        { tool: "get_room_details", when: "Need a specific room" },
+        { tool: "create_room_type", when: "Create (confirm first)" },
+        { tool: "update_room_type", when: "Edit (confirm first)" },
+        { tool: "delete_room_type", when: "Delete (strong confirm)" },
       ];
       return JSON.stringify(plan);
     }
 
-    if (has("extra", "extras", "add-on", "addon", "add on", "airport transfer")) {
+    if (has("extra", "extras", "add-on", "addon")) {
       plan.domain = "extras";
       plan.suggested_tools = [
-        { tool: "list_extras", when: "User wants extras list" },
-        { tool: "get_extra_details", when: "Specific extra" },
+        { tool: "list_extras", when: "List / browse extras" },
+        { tool: "get_extra_details", when: "Need a specific extra" },
         { tool: "create_extra", when: "Create (confirm first)" },
         { tool: "update_extra", when: "Edit (confirm first)" },
         { tool: "delete_extra", when: "Delete (strong confirm)" },
@@ -126,14 +99,39 @@ const orchestratorTool = tool(
       return JSON.stringify(plan);
     }
 
-    if (has("package", "packages", "featured package")) {
+    if (has("coupon", "coupons", "discount", "promo", "code")) {
+      plan.domain = "coupons";
+      plan.suggested_tools = [
+        { tool: "list_coupons", when: "List coupons" },
+        { tool: "get_coupon_details", when: "One coupon details" },
+        { tool: "validate_coupon", when: "Validate a code" },
+        { tool: "create_coupon", when: "Create (confirm first)" },
+        { tool: "update_coupon", when: "Edit (confirm first)" },
+        { tool: "delete_coupon", when: "Delete (strong confirm)" },
+      ];
+      return JSON.stringify(plan);
+    }
+
+    if (has("package", "packages", "experience", "experiences")) {
       plan.domain = "packages";
       plan.suggested_tools = [
         { tool: "list_packages", when: "List packages" },
-        { tool: "get_package_details", when: "Specific package" },
+        { tool: "get_package_details", when: "One package details" },
         { tool: "create_package", when: "Create (confirm first)" },
         { tool: "update_package", when: "Edit (confirm first)" },
         { tool: "delete_package", when: "Delete (strong confirm)" },
+      ];
+      return JSON.stringify(plan);
+    }
+
+    if (has("reservation", "reservations", "booking", "check-in", "check out", "check-in", "checkout", "availability")) {
+      plan.domain = "reservations";
+      plan.suggested_tools = [
+        { tool: "search_reservations", when: "Find bookings" },
+        { tool: "get_reservation_details", when: "One booking details" },
+        { tool: "get_today_check_ins", when: "Today's check-ins" },
+        { tool: "get_today_check_outs", when: "Today's check-outs" },
+        { tool: "check_availability", when: "Availability for dates" },
       ];
       return JSON.stringify(plan);
     }
@@ -144,21 +142,24 @@ const orchestratorTool = tool(
         { tool: "get_occupancy_stats", when: "Occupancy" },
         { tool: "get_revenue_stats", when: "Revenue" },
         { tool: "get_client_analytics", when: "Client rollups" },
+        { tool: "compare_periods_analytics", when: "Compare periods" },
       ];
       return JSON.stringify(plan);
     }
 
-    if (has("pricing model", "pricing", "multiplier", "tier", "simulate")) {
+    if (has("pricing model", "pricing", "multiplier", "tier", "simulate", "seasonal")) {
       plan.domain = "pricing";
       plan.suggested_tools = [
         { tool: "list_pricing_models", when: "List models" },
         { tool: "get_pricing_model_details", when: "Model config" },
         { tool: "simulate_dynamic_pricing", when: "Simulate pricing" },
+        { tool: "get_seasonal_pricing", when: "Seasonality" },
       ];
       return JSON.stringify(plan);
     }
 
-    plan.notes = "If unclear, ask a clarifying question OR use a list_* tool in the most likely domain.";
+    plan.notes =
+      "If unclear, ask a clarifying question OR use a list_* tool in the most likely domain.";
     return JSON.stringify(plan);
   },
   {
@@ -170,6 +171,7 @@ const orchestratorTool = tool(
     }),
   }
 );
+
 
 const tools = [
 
