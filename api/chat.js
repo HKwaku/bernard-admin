@@ -1,64 +1,90 @@
-// /api/diagnostic-chat.js (Vercel serverless function)
-// Diagnostic endpoint to test tool loading
+// This file should be saved as: api/chat.js
+// (create an 'api' folder at your project root if it doesn't exist)
 
 export default async function handler(req, res) {
+  // Enable CORS
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
+
+  // Handle preflight
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
+  // Log for debugging
+  console.log('📨 Received request:', {
+    method: req.method,
+    path: req.url,
+    hasBody: !!req.body
+  });
+
+  if (req.method !== 'POST') {
+    console.error('❌ Wrong method:', req.method);
+    return res.status(405).json({ 
+      error: `Method ${req.method} not allowed. Use POST.`,
+      hint: 'The chat endpoint only accepts POST requests with a JSON body containing messages array.'
+    });
+  }
+
   try {
-    if (req.method !== "GET") {
-      res.setHeader("Allow", "GET");
-      return res.status(405).json({ error: "Method not allowed" });
+    // Check API key
+    const apiKey = process.env.OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY;
+    if (!apiKey) {
+      console.error('❌ Missing OpenAI API key');
+      return res.status(500).json({
+        error: 'OpenAI API key not configured',
+        hint: 'Set OPENAI_API_KEY in Vercel environment variables'
+      });
     }
 
-    const diagnostics = {
-      timestamp: new Date().toISOString(),
-      environment: {
-        hasOpenAIKey: !!process.env.OPENAI_API_KEY,
-        hasSupabaseURL: !!process.env.SUPABASE_URL || !!process.env.VITE_SUPABASE_URL,
-        hasSupabaseKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY || !!process.env.SUPABASE_ANON_KEY || !!process.env.VITE_SUPABASE_ANON_KEY,
-        nodeVersion: process.version,
-      },
-      toolLoadingTest: null,
-      error: null,
-    };
-
-    try {
-      // Try to import bernardTools
-      const bernardTools = await import("../src/bernardTools.js");
-      
-      const tools = [
-        bernardTools.listRoomsTool,
-        bernardTools.listExtrasTool,
-        bernardTools.listPackagesTool,
-        bernardTools.listCouponsTool,
-        bernardTools.getTodayCheckInsTool,
-        bernardTools.getTodayCheckOutsTool,
-        bernardTools.listPricingModelsTool,
-      ];
-
-      const toolStatus = tools.map(tool => ({
-        name: tool?.name || 'UNKNOWN',
-        hasSchema: !!tool?.schema,
-        schemaType: tool?.schema ? typeof tool.schema : 'undefined',
-      }));
-
-      diagnostics.toolLoadingTest = {
-        success: true,
-        toolsChecked: toolStatus.length,
-        toolStatus,
-      };
-    } catch (importError) {
-      diagnostics.toolLoadingTest = {
-        success: false,
-        error: importError.message,
-        stack: importError.stack,
-      };
+    // Parse request body
+    let body;
+    if (typeof req.body === 'string') {
+      try {
+        body = JSON.parse(req.body);
+      } catch (e) {
+        console.error('❌ Failed to parse body as JSON:', e.message);
+        return res.status(400).json({ error: 'Invalid JSON in request body' });
+      }
+    } else {
+      body = req.body || {};
     }
 
-    return res.status(200).json(diagnostics);
-  } catch (e) {
-    console.error("Diagnostic error:", e);
+    console.log('📦 Parsed body:', { hasMessages: !!body.messages, messageCount: body.messages?.length });
+
+    const { messages, threadId } = body;
+
+    if (!Array.isArray(messages) || messages.length === 0) {
+      console.error('❌ Invalid messages:', messages);
+      return res.status(400).json({ 
+        error: 'Invalid request: messages array required',
+        received: typeof messages,
+        hint: 'Send POST request with body: { messages: [{role: "user", content: "..."}] }'
+      });
+    }
+
+    console.log('✅ Valid request, calling Bernard agent...');
+
+    // Import and run Bernard
+    const { runBernardAgent } = await import('../src/bernardAgent.js');
+    const reply = await runBernardAgent(
+      messages, 
+      threadId || `thread-${Date.now()}`
+    );
+
+    console.log('✅ Bernard replied successfully');
+
+    return res.status(200).json({ reply });
+
+  } catch (error) {
+    console.error('💥 Bernard agent error:', error);
     return res.status(500).json({ 
-      error: e?.message || "Server error",
-      stack: e?.stack 
+      error: error.message || 'Internal server error',
+      type: error.name,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 }
