@@ -92,6 +92,7 @@ export function formatTable(rows, options = {}) {
     margin:8px 0;
     border:1px solid #e5e7eb;
     border-radius:8px;
+    max-width:100%;
   ">
     <table style="width:100%;border-collapse:collapse;font-size:0.85rem;min-width:${options.minWidth || '480px'}">
       <thead style="background:#f8fafc;">
@@ -112,7 +113,7 @@ export function formatTable(rows, options = {}) {
             ${keys
               .map(
                 (k) =>
-                  `<td style="padding:8px 10px;border-bottom:1px solid #f1f5f9;">${r[k] ?? ''}</td>`
+                  `<td style="padding:8px 10px;border-bottom:1px solid #f1f5f9;white-space:nowrap">${r[k] ?? ''}</td>`
               )
               .join("")}
           </tr>`
@@ -150,7 +151,7 @@ export const listRoomsTool = tool({
         Active: r.is_active ? "✓" : "✗",
         Image: r.image_url ? "Yes" : "No"
       })),
-      { minWidth: "600px" }
+      { minWidth: "480px" }
     );
   },
 });
@@ -332,7 +333,7 @@ export const listExtrasTool = tool({
         "Unit Type": e.unit_type?.replace(/_/g, ' ') || 'per booking',
         Active: e.is_active ? "✓" : "✗",
       })),
-      { minWidth: "520px" }
+      { minWidth: "480px" }
     );
   },
 });
@@ -703,7 +704,7 @@ export const listCouponsTool = tool({
           Status: isValid ? "Valid ✓" : "Expired/Inactive",
         };
       }),
-      { minWidth: "600px" }
+      { minWidth: "480px" }
     );
   },
 });
@@ -925,9 +926,9 @@ export const validateCouponTool = tool({
 
 export const searchReservationsTool = tool({
   name: "search_reservations",
-  description: "Search for reservations by guest name, email, confirmation code, or status.",
+  description: "Search for reservations by guest name (first, last, or full name like 'John Smith'), email, confirmation code, or status. When user provides a full name, search using it.",
   schema: z.object({
-    query: z.string().optional().describe("Search term (name, email, or confirmation code)"),
+    query: z.string().optional().describe("Search term - can be first name, last name, full name (e.g., 'John Smith'), email, or confirmation code"),
     status: z.string().optional().describe("Filter by status (e.g., 'confirmed', 'cancelled')"),
     limit: z.number().default(10).describe("Maximum number of results"),
   }),
@@ -951,7 +952,17 @@ export const searchReservationsTool = tool({
       .limit(limit);
 
     if (query) {
-      dbQuery = dbQuery.or(`guest_first_name.ilike.%${query}%,guest_last_name.ilike.%${query}%,guest_email.ilike.%${query}%,confirmation_code.ilike.%${query}%`);
+      // Check if query looks like a full name (has a space)
+      if (query.includes(' ')) {
+        const parts = query.trim().split(/\s+/);
+        const firstName = parts[0];
+        const lastName = parts.slice(1).join(' ');
+        // Search for first AND last name match
+        dbQuery = dbQuery.or(`and(guest_first_name.ilike.%${firstName}%,guest_last_name.ilike.%${lastName}%),guest_email.ilike.%${query}%,confirmation_code.ilike.%${query}%`);
+      } else {
+        // Single word - search first name, last name, email, or code
+        dbQuery = dbQuery.or(`guest_first_name.ilike.%${query}%,guest_last_name.ilike.%${query}%,guest_email.ilike.%${query}%,confirmation_code.ilike.%${query}%`);
+      }
     }
 
     if (status) {
@@ -974,7 +985,7 @@ export const searchReservationsTool = tool({
         Status: r.status,
         Total: `${r.currency || 'GBP'} ${r.total || 0}`,
       })),
-      { minWidth: "700px" }
+      { minWidth: "480px" }
     );
   },
 });
@@ -1071,7 +1082,7 @@ export const getTodayCheckInsTool = tool({
         Room: r.room_types?.name || 'N/A',
         Adults: r.adults || 1,
       })),
-      { minWidth: "600px" }
+      { minWidth: "480px" }
     );
   },
 });
@@ -1385,7 +1396,7 @@ export const getClientAnalyticsTool = tool({
 
 **Top ${limit} Guests by Revenue:**
 
-${formatTable(guests, { minWidth: "700px" })}
+${formatTable(guests, { minWidth: "480px" })}
 `;
   },
 });
@@ -1415,7 +1426,7 @@ export const listPricingModelsTool = tool({
         "Effective Until": m.effective_until || "Open-ended",
         Active: m.is_active ? "✓" : "✗",
       })),
-      { minWidth: "600px" }
+      { minWidth: "480px" }
     );
   },
 });
@@ -1605,7 +1616,7 @@ export const getSeasonalPricingTool = tool({
         "End Date": sp.end_date,
         "Price per Night": `GBP ${sp.price_per_night}`,
       })),
-      { minWidth: "550px" }
+      { minWidth: "480px" }
     );
   },
 });

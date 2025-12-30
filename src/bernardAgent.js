@@ -458,11 +458,11 @@ const tools = [
   type: "function",
   function: {
     name: "search_reservations",
-    description: "Search for reservations by guest name, email, confirmation code, or status.",
+    description: "Search for reservations by guest name (first, last, or full name like 'John Smith'), email, confirmation code, or status. When user provides a full name with space, search using it.",
     parameters: {
       type: "object",
       properties: {
-        query: { type: "string", description: "Search term (name, email, or confirmation code)" },
+        query: { type: "string", description: "Search term - can be first name, last name, full name (e.g., 'John Smith'), email, or confirmation code" },
         status: { type: "string", description: "Optional: filter by status (confirmed, cancelled, etc.)" },
         limit: { type: "number", description: "Maximum number of results (default 10)" }
       },
