@@ -460,8 +460,11 @@ export const listPackagesTool = tool({
     return formatTable(
       data.map(p => ({
         Name: p.name,
-        "Min Nights": p.minimum_nights || 'N/A',
-        "Base Price": `${p.currency || 'GBP'} ${p.base_price || 'N/A'}`,
+        "Min Nights": p.nights || 'N/A',
+        "Package Price": `${p.currency || 'GHS'} ${p.package_price || 'N/A'}`,
+        "Valid From": p.valid_from || 'N/A',
+        "Valid Until": p.valid_until || 'N/A',
+        "Cabin": p.room_name || 'N/A',
         Active: p.is_active ? "✓" : "✗",
         Featured: p.is_featured ? "⭐" : "",
       })),

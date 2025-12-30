@@ -382,16 +382,16 @@ async function renderRevenueModel(container, roomTypes, activeModelId) {
   const periodsHTML = periods.length === 0 ? `
     <div style="text-align:center;padding:60px;color:#94a3b8">
       <div style="font-size:48px;margin-bottom:16px">📊</div>
-      <div style="font-size:16px;margin-bottom:8px;font-weight:600">No Revenue Targets Set</div>
+      <div style="font-size:16px;margin-bottom:8px;font-weight:600;color:#0c4a6e">No Revenue Targets Set</div>
       <div style="font-size:14px">Click "Add New Period" to create your first revenue target period</div>
     </div>
   ` : '<div id="periods-container">Loading periods...</div>';
   
   // Period selector for breakdown and analysis
   const periodSelectorHTML = periods.length > 0 ? `
-    <div style="margin-bottom:24px;padding:16px;background:#f0f9ff;border-radius:8px;border:2px solid #0369a1;max-width:100%;box-sizing:border-box">
-      <label style="display:block;margin-bottom:8px;font-weight:700;color:#0369a1;font-size:14px">📅 Select Revenue Target Period to Analyze</label>
-      <select id="analysis-period-selector" style="width:100%;padding:12px;border:2px solid #0369a1;border-radius:6px;font-weight:600;font-size:14px;background:white;max-width:100%;box-sizing:border-box">
+    <div style="margin-bottom:24px;padding:16px;background:#eff6ff;border-radius:8px;border:2px solid #60a5fa;max-width:100%;box-sizing:border-box">
+      <label style="display:block;margin-bottom:8px;font-weight:700;color:#1e40af;font-size:12px">📅 Select Revenue Target Period to Analyze</label>
+      <select id="analysis-period-selector" style="width:100%;padding:12px;border:2px solid #60a5fa;border-radius:6px;font-weight:400;font-size:10px;background:white;max-width:100%;box-sizing:border-box">
         ${periods.map((p, idx) => {
           const [start, end] = p.split('|');
           // Get period name from targets
@@ -435,7 +435,7 @@ async function renderRevenueModel(container, roomTypes, activeModelId) {
     <div class="analytics-section">
       <h2 class="analytics-section-title">💰 Revenue Breakdown by Rate Type</h2>
       <div class="chart-card">
-        <p style="color:#64748b;font-size:14px;margin-bottom:16px">
+        <p style="color:#475569;font-size:14px;margin-bottom:16px">
           Define how you expect to achieve your revenue targets through different rate types and discounting strategies.
         </p>
         <div id="rate-breakdown-container">
@@ -451,12 +451,12 @@ async function renderRevenueModel(container, roomTypes, activeModelId) {
     <div class="analytics-section" style="border-bottom:none">
       <h2 class="analytics-section-title">📈 Revenue Sensitivity Analysis</h2>
       <div class="chart-card">
-        <p style="color:#64748b;font-size:14px;margin-bottom:16px">
+        <p style="color:#475569;font-size:14px;margin-bottom:16px">
           Compare required vs. current pricing across different occupancy scenarios.
         </p>
-        <div style="margin-bottom:16px;padding:12px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0">
-          <label style="display:block;margin-bottom:8px;font-weight:600;color:#334155;font-size:13px">Select Room Type</label>
-          <select id="sensitivity-room-selector" style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:6px;font-weight:600;font-size:14px;background:white">
+        <div style="margin-bottom:16px;padding:12px;background:#eff6ff;border-radius:6px;border:1px solid #93c5fd">
+          <label style="display:block;margin-bottom:8px;font-weight:600;color:#1e40af;font-size:13px">Select Room Type</label>
+          <select id="sensitivity-room-selector" style="width:100%;padding:10px 9px;border:2px solid #93c5fd;border-radius:6px;font-weight:400;font-size:11px;background:white">
             <option value="all">All Rooms</option>
             ${roomTypes.map(room => `<option value="${room.id}">${room.code}</option>`).join('')}
           </select>
@@ -717,16 +717,16 @@ async function renderPeriodSection(periodKey, roomTypes, targetsByRoomAndPeriod,
   const blendedRequiredAvgPrice = totalTargetNights > 0 ? Math.round(weightedRequiredPrice / totalTargetNights) : 0;
   
   return `
-    <div style="border:1px solid #e2e8f0;border-radius:8px;padding:20px;margin-bottom:24px;background:#fafbfc">
+    <div style="border:1px solid #cbd5e1;border-radius:8px;padding:20px;margin-bottom:24px;background:#f8fafc">
       ${periodName ? `
-        <div style="font-size:16px;font-weight:700;color:#667eea;margin-bottom:12px;padding-bottom:12px;border-bottom:2px solid #e2e8f0">
+        <div style="font-size:16px;font-weight:700;color:#0284c7;margin-bottom:12px;padding-bottom:12px;border-bottom:2px solid #bae6fd">
           ${periodName}
         </div>
       ` : ''}
       
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:16px;border-bottom:2px solid #e2e8f0" class="mobile-stack">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:16px;border-bottom:2px solid #e0f2fe" class="mobile-stack">
         <div>
-          <h3 style="font-size:18px;font-weight:700;margin-bottom:4px">
+          <h3 style="font-size:18px;font-weight:700;margin-bottom:4px;color:#0c4a6e">
             ${formatDate(start)} - ${formatDate(end)}
           </h3>
           <div style="font-size:13px;color:#64748b">${daysInPeriod} days</div>
@@ -739,25 +739,25 @@ async function renderPeriodSection(periodKey, roomTypes, targetsByRoomAndPeriod,
       
       <!-- Summary Metrics -->
       <div class="revenue-summary-tiles" style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:24px">
-        <div style="text-align:center;padding:18px 12px;background:#f0fdf4;border-radius:8px;border:1px solid #86efac;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
-          <div style="font-size:11px;font-weight:600;color:#15803d;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">Total Target Revenue</div>
-          <div style="font-size:22px;font-weight:700;color:#166534">GHS ${totalTargetRevenue.toLocaleString()}</div>
+        <div style="text-align:center;padding:18px 12px;background:#dbeafe;border-radius:8px;border:1px solid #60a5fa;box-shadow:0 1px 3px rgba(0,0,0,0.06)">
+          <div style="font-size:11px;font-weight:600;color:#1e40af;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">Total Target Revenue</div>
+          <div style="font-size:22px;font-weight:700;color:#0c4a6e">GHS ${totalTargetRevenue.toLocaleString()}</div>
         </div>
-        <div style="text-align:center;padding:18px 12px;background:#eff6ff;border-radius:8px;border:1px solid #60a5fa;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
-          <div style="font-size:11px;font-weight:600;color:#1d4ed8;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">Avg Target Occ</div>
-          <div style="font-size:22px;font-weight:700;color:#1e40af">${avgTargetOcc.toFixed(1)}%</div>
+        <div style="text-align:center;padding:18px 12px;background:#dbeafe;border-radius:8px;border:1px solid #60a5fa;box-shadow:0 1px 3px rgba(0,0,0,0.06)">
+          <div style="font-size:11px;font-weight:600;color:#1e40af;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">Avg Target Occ</div>
+          <div style="font-size:22px;font-weight:700;color:#0c4a6e">${avgTargetOcc.toFixed(1)}%</div>
         </div>
-        <div style="text-align:center;padding:18px 12px;background:#fefce8;border-radius:8px;border:1px solid #facc15;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
-          <div style="font-size:11px;font-weight:600;color:#a16207;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">Current Avg Price</div>
-          <div style="font-size:22px;font-weight:700;color:#92400e">GHS ${blendedCurrentAvgPrice.toLocaleString()}</div>
+        <div style="text-align:center;padding:18px 12px;background:#dbeafe;border-radius:8px;border:1px solid #60a5fa;box-shadow:0 1px 3px rgba(0,0,0,0.06)">
+          <div style="font-size:11px;font-weight:600;color:#1e40af;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">Current Avg Price</div>
+          <div style="font-size:22px;font-weight:700;color:#0c4a6e">GHS ${blendedCurrentAvgPrice.toLocaleString()}</div>
         </div>
-        <div style="text-align:center;padding:18px 12px;background:#fdf2f8;border-radius:8px;border:1px solid #f472b6;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
-          <div style="font-size:11px;font-weight:600;color:#be123c;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">Required Avg Price</div>
-          <div style="font-size:22px;font-weight:700;color:#9f1239">GHS ${blendedRequiredAvgPrice.toLocaleString()}</div>
+        <div style="text-align:center;padding:18px 12px;background:#dbeafe;border-radius:8px;border:1px solid #60a5fa;box-shadow:0 1px 3px rgba(0,0,0,0.06)">
+          <div style="font-size:11px;font-weight:600;color:#1e40af;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">Required Avg Price</div>
+          <div style="font-size:22px;font-weight:700;color:#0c4a6e">GHS ${blendedRequiredAvgPrice.toLocaleString()}</div>
         </div>
-        <div style="text-align:center;padding:18px 12px;background:#f8fafc;border-radius:8px;border:1px solid #cbd5e1;box-shadow:0 1px 3px rgba(0,0,0,0.1);grid-column:1/-1">
-          <div style="font-size:11px;font-weight:600;color:#475569;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">Total Nights</div>
-          <div style="font-size:22px;font-weight:700;color:#0f172a">${totalAvailableNights}</div>
+        <div style="text-align:center;padding:18px 12px;background:#dbeafe;border-radius:8px;border:1px solid #60a5fa;box-shadow:0 1px 3px rgba(0,0,0,0.06);grid-column:1/-1">
+          <div style="font-size:11px;font-weight:600;color:#1e40af;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">Total Nights</div>
+          <div style="font-size:22px;font-weight:700;color:#0c4a6e">${totalAvailableNights}</div>
         </div>
       </div>
       
@@ -775,26 +775,26 @@ async function renderPeriodSection(periodKey, roomTypes, targetsByRoomAndPeriod,
       <div class="revenue-table-wrapper" style="overflow-x:auto" data-table="${periodKey}">
         <table style="width:100%;border-collapse:collapse;background:white;border-radius:6px;overflow:hidden">
           <thead>
-            <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0">
-              <th style="padding:10px 12px;text-align:left;font-size:12px">Room</th>
-              <th style="padding:10px 12px;text-align:right;font-size:12px">Available Nights</th>
-              <th style="padding:10px 12px;text-align:right;font-size:12px">Target Occ %</th>
-              <th style="padding:10px 12px;text-align:right;font-size:12px">Target Nights</th>
-              <th style="padding:10px 12px;text-align:right;font-size:12px">Target Revenue</th>
-              <th style="padding:10px 12px;text-align:right;font-size:12px">Required Avg Price</th>
-              <th style="padding:10px 12px;text-align:right;font-size:12px">Current Avg Price</th>
+            <tr style="background:#dbeafe;border-bottom:2px solid #93c5fd">
+              <th style="padding:10px 12px;text-align:left;font-size:12px;color:#1e40af">Room</th>
+              <th style="padding:10px 12px;text-align:right;font-size:12px;color:#1e40af">Available Nights</th>
+              <th style="padding:10px 12px;text-align:right;font-size:12px;color:#1e40af">Target Occ %</th>
+              <th style="padding:10px 12px;text-align:right;font-size:12px;color:#1e40af">Target Nights</th>
+              <th style="padding:10px 12px;text-align:right;font-size:12px;color:#1e40af">Target Revenue</th>
+              <th style="padding:10px 12px;text-align:right;font-size:12px;color:#1e40af">Required Avg Price</th>
+              <th style="padding:10px 12px;text-align:right;font-size:12px;color:#1e40af">Current Avg Price</th>
             </tr>
           </thead>
           <tbody>
             ${roomData.map((rd, idx) => `
-              <tr style="border-bottom:1px solid #f1f5f9;${idx % 2 === 0 ? 'background:#fafbfc' : ''}">
-                <td style="padding:10px 12px;font-weight:600">${rd.room.code}</td>
-                <td style="padding:10px 12px;text-align:right">${rd.availableNights}</td>
-                <td style="padding:10px 12px;text-align:right;font-weight:600">${rd.target?.target_occupancy || '—'}</td>
-                <td style="padding:10px 12px;text-align:right">${rd.targetNights || '—'}</td>
-                <td style="padding:10px 12px;text-align:right;font-weight:600;color:#059669">GHS ${rd.target?.target_revenue?.toLocaleString() || '—'}</td>
+              <tr style="border-bottom:1px solid #e0f2fe;${idx % 2 === 0 ? 'background:#f0f9ff' : ''}">
+                <td style="padding:10px 12px;font-weight:600;color:#0c4a6e">${rd.room.code}</td>
+                <td style="padding:10px 12px;text-align:right;color:#475569">${rd.availableNights}</td>
+                <td style="padding:10px 12px;text-align:right;font-weight:600;color:#0c4a6e">${rd.target?.target_occupancy || '—'}</td>
+                <td style="padding:10px 12px;text-align:right;color:#475569">${rd.targetNights || '—'}</td>
+                <td style="padding:10px 12px;text-align:right;font-weight:600;color:#0284c7">GHS ${rd.target?.target_revenue?.toLocaleString() || '—'}</td>
                 <td style="padding:10px 12px;text-align:right;font-weight:600;color:#1e40af">GHS ${rd.requiredAvgPrice || '—'}</td>
-                <td style="padding:10px 12px;text-align:right;color:#92400e">GHS ${rd.target ? rd.currentAvgPrice : '—'}</td>
+                <td style="padding:10px 12px;text-align:right;color:#0c4a6e">GHS ${rd.target ? rd.currentAvgPrice : '—'}</td>
               </tr>
             `).join('')}
           </tbody>
@@ -868,15 +868,15 @@ async function renderRateBreakdownForPeriod(periodKey, roomTypes, targetsByRoomA
   
   // Default to "All Rooms" view - will be populated dynamically
   return `
-    <div style="margin-bottom:16px;padding:16px;background:#f0f9ff;border-radius:8px;border:1px solid #bae6fd">
+    <div style="margin-bottom:16px;padding:16px;background:#eff6ff;border-radius:8px;border:1px solid #93c5fd">
       <div class="mobile-stack" style="display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;max-width:100%">
         <div>
-          <div style="font-size:12px;color:#0369a1;margin-bottom:4px">Period: ${formatDate(start)} - ${formatDate(end)}</div>
-          <div style="font-size:14px;font-weight:700;color:#0369a1">Total Target Revenue: GHS ${totalTargetRevenue.toLocaleString()}</div>
+          <div style="font-size:12px;color:#1e40af;margin-bottom:4px">Period: ${formatDate(start)} - ${formatDate(end)}</div>
+          <div style="font-size:14px;font-weight:700;color:#0c4a6e">Total Target Revenue: GHS ${totalTargetRevenue.toLocaleString()}</div>
         </div>
         <div style="width:100%;max-width:320px;min-width:0">
-          <label style="display:block;margin-bottom:6px;font-weight:600;color:#0369a1;font-size:12px">Room Type</label>
-          <select id="room-selector-${periodKey}" data-period="${periodKey}" style="width:100%;padding:10px;border:2px solid #0369a1;border-radius:6px;font-weight:600;background:white">
+          <label style="display:block;margin-bottom:6px;font-weight:600;color:#1e40af;font-size:13px">Select Room Type</label>
+          <select id="room-selector-${periodKey}" data-period="${periodKey}" style="width:100%;padding:10px;border:2px solid #60a5fa;border-radius:6px;font-weight:400;font-size:11px; background:white">
             <option value="all">All Rooms (Aggregated)</option>
             ${roomTypes.map(room => `<option value="${room.id}">${room.code}</option>`).join('')}
           </select>
@@ -1156,12 +1156,12 @@ async function renderBreakdownTable(roomSelection, periodKey, roomTypes, targets
         </thead>
         <tbody id="rate-breakdown-body-${targetId}">
           ${calculations.map((calc, idx) => `
-            <tr data-rate-id="${calc.id}" data-is-rate-card="${calc.isRateCard}" style="border-bottom:1px solid #f1f5f9;${idx % 2 === 0 ? 'background:#fafbfc' : 'background:white'}">
+            <tr data-rate-id="${calc.id}" data-is-rate-card="${calc.isRateCard}" style="border-bottom:1px solid #e0f2fe;${idx % 2 === 0 ? 'background:#f0f9ff' : 'background:white'}">
               <td style="padding:12px">
                 ${calc.isRateCard ? `
-                  <div class="rate-pct-display" style="padding:8px;font-weight:700;color:#1e40af;background:#dbeafe;border-radius:6px;text-align:center;border:2px solid #93c5fd">${calc.pct}%</div>
+                  <div class="rate-pct-display" style="padding:8px;font-weight:700;color:#1e40af;background:#dbeafe;border-radius:6px;text-align:center;border:2px solid #60a5fa">${calc.pct}%</div>
                 ` : roomSelection === 'all' ? `
-                  <div style="padding:8px;font-weight:600;color:#334155;background:#f1f5f9;border-radius:6px;text-align:center">${calc.pct}%</div>
+                  <div style="padding:8px;font-weight:600;color:#0c4a6e;background:#f1f5f9;border-radius:6px;text-align:center">${calc.pct}%</div>
                 ` : `
                   <input type="number" 
                     class="rate-pct-input" 
@@ -1169,9 +1169,9 @@ async function renderBreakdownTable(roomSelection, periodKey, roomTypes, targets
                     value="${calc.pct}" 
                     min="0" 
                     max="100" 
-                    style="width:80px;padding:8px;border:2px solid #e2e8f0;border-radius:6px;font-weight:600;transition:all 0.2s" 
-                    onfocus="this.style.borderColor='#667eea'" 
-                    onblur="this.style.borderColor='#e2e8f0'" />
+                    style="width:80px;padding:8px;border:2px solid #93c5fd;border-radius:6px;font-weight:600;transition:all 0.2s" 
+                    onfocus="this.style.borderColor='#3b82f6'" 
+                    onblur="this.style.borderColor='#93c5fd'" />
                 `}
               </td>
               <td style="padding:12px;text-align:right;font-weight:600;color:#64748b" class="rate-days">${calc.days}</td>
@@ -1217,25 +1217,25 @@ async function renderBreakdownTable(roomSelection, periodKey, roomTypes, targets
           `).join('')}
         </tbody>
         <tfoot>
-          <tr style="background:#dcfce7;border-top:2px solid #bbf7d0;font-weight:700">
-            <td style="padding:14px;color:#166534" id="total-pct-${targetId}">100% ✓</td>
-            <td style="padding:14px;text-align:right;color:#166534" id="total-days-${targetId}">${totalDays}</td>
+          <tr style="background:#dbeafe;border-top:2px solid #60a5fa;font-weight:700">
+            <td style="padding:14px;color:#0c4a6e" id="total-pct-${targetId}">100% ✓</td>
+            <td style="padding:14px;text-align:right;color:#0c4a6e" id="total-days-${targetId}">${totalDays}</td>
             <td style="padding:14px"></td>
-            <td style="padding:14px;color:#166534">TOTAL</td>
+            <td style="padding:14px;color:#0c4a6e">TOTAL</td>
             <td style="padding:14px"></td>
             <td style="padding:14px"></td>
-            <td style="padding:14px;text-align:right;font-size:16px;color:#059669" id="total-revenue-${targetId}">GHS ${totalRevenue.toLocaleString()}</td>
+            <td style="padding:14px;text-align:right;font-size:16px;color:#0284c7" id="total-revenue-${targetId}">GHS ${totalRevenue.toLocaleString()}</td>
             <td style="padding:14px"></td>
           </tr>
         </tfoot>
       </table>
     </div>
     
-    <div id="breakdown-success-${targetId}" style="display:none;margin-top:12px;padding:12px;background:#dcfce7;border-radius:8px;border:1px solid #bbf7d0;color:#166534;font-size:13px">
+    <div id="breakdown-success-${targetId}" style="display:none;margin-top:12px;padding:12px;background:#d1fae5;border-radius:8px;border:1px solid #86efac;color:#166534;font-size:13px">
       ✓ Rate breakdown saved successfully
     </div>
     
-    <div style="margin-top:16px;padding:12px;background:#fffbeb;border-radius:8px;border:1px solid #fde68a">
+    <div style="margin-top:16px;padding:12px;background:#eff6ff;border-radius:8px;border:1px solid #93c5fd">
       <div style="font-size:12px;color:#92400e;margin-bottom:4px;font-weight:600">💡 How it works</div>
       <div style="font-size:13px;color:#78716c;line-height:1.6">
         • <strong>Rate card</strong> automatically adjusts to <strong>100% - (sum of other rates)</strong><br>
@@ -1695,11 +1695,11 @@ async function renderSensitivityAnalysis(periodKey, roomTypes, targetsByRoomAndP
     const varianceTableHTML = await renderRateBreakdownVarianceTable(periodKey, roomTypes, 'all');
     
     return `
-      <div style="margin-bottom:16px;padding:16px;background:#f0f9ff;border-radius:8px;border:2px solid #0369a1">
-        <div style="font-size:12px;color:#0369a1;margin-bottom:4px">
+      <div style="margin-bottom:16px;padding:16px;background:#eff6ff;border-radius:8px;border:2px solid #60a5fa">
+        <div style="font-size:12px;color:#1e40af;margin-bottom:4px">
           Showing analysis for <strong>All Rooms (${roomTypes.length} rooms)</strong>
         </div>
-        <div style="font-size:13px;color:#0369a1">
+        <div style="font-size:13px;color:#0c4a6e">
           Period: ${formatDate(start)} - ${formatDate(end)} | Required Avg Price: <strong>GHS ${requiredAvgPrice}</strong> | Current Avg Price: <strong>GHS ${currentAvgPrice}</strong>
         </div>
       </div>
@@ -1764,11 +1764,11 @@ async function renderSensitivityAnalysis(periodKey, roomTypes, targetsByRoomAndP
   const varianceTableHTML = await renderRateBreakdownVarianceTable(periodKey, roomTypes, selectedRoom.id);
   
   return `
-    <div style="margin-bottom:16px;padding:16px;background:#f0f9ff;border-radius:8px;border:2px solid #0369a1">
-      <div style="font-size:12px;color:#0369a1;margin-bottom:4px">
+    <div style="margin-bottom:16px;padding:16px;background:#eff6ff;border-radius:8px;border:2px solid #60a5fa">
+      <div style="font-size:12px;color:#1e40af;margin-bottom:4px">
         Showing analysis for <strong>${selectedRoom.code}</strong>
       </div>
-      <div style="font-size:13px;color:#0369a1">
+      <div style="font-size:13px;color:#0c4a6e">
         Period: ${formatDate(start)} - ${formatDate(end)} | Required Avg Price: <strong>GHS ${requiredAvgPrice}</strong> | Current Avg Price: <strong>GHS ${currentAvgPrice}</strong>
       </div>
     </div>
@@ -1837,16 +1837,16 @@ function renderSensitivityTable(occLevels, requiredAvgPrice, currentAvgPrice) {
             
             return `
               <tr style="background:${bgColor};border-bottom:1px solid #e5e7eb;transition:all 0.2s;${targetStyle}" onmouseover="this.style.transform='scale(1.01)';this.style.boxShadow='0 4px 12px rgba(0,0,0,0.15)'" onmouseout="this.style.transform='scale(1)';this.style.boxShadow='${level.isTarget ? '0 0 0 3px ' + bgColor : 'none'}'">
-                <td style="padding:14px 16px;font-weight:700;font-size:15px;color:#1e293b">
+                <td style="padding:14px 16px;font-weight:700;font-size:15px;color:#0c4a6e">
                   ${level.occ}%${targetMarker}
                 </td>
                 <td style="padding:14px 16px;text-align:right;font-weight:600;color:#475569;font-size:14px">
                   ${level.nights.toLocaleString()}
                 </td>
-                <td style="padding:14px 16px;text-align:right;font-weight:700;color:#64748b;font-size:14px">
+                <td style="padding:14px 16px;text-align:right;font-weight:700;color:#0c4a6e;font-size:14px">
                   GHS ${level.revenueRequired.toLocaleString()}
                 </td>
-                <td style="padding:14px 16px;text-align:right;font-weight:700;color:#3b82f6;font-size:14px">
+                <td style="padding:14px 16px;text-align:right;font-weight:700;color:#0284c7;font-size:14px">
                   GHS ${level.revenueCurrent.toLocaleString()}
                 </td>
                 <td style="padding:14px 16px;text-align:right">
@@ -1863,21 +1863,21 @@ function renderSensitivityTable(occLevels, requiredAvgPrice, currentAvgPrice) {
     </div>
     
     <div class="sensitivity-legend" style="margin-top:16px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
-      <div style="padding:12px;background:#dcfce7;border-radius:6px;border:2px solid #10b981">
+      <div style="padding:12px;background:#d1fae5;border-radius:6px;border:2px solid #86efac">
         <div style="font-size:11px;color:#065f46;font-weight:600">Strong Positive</div>
-        <div style="font-size:10px;color:#166534">Variance > +10%</div>
+        <div style="font-size:10px;color:#166534;opacity:0.8">Variance > +10%</div>
       </div>
-      <div style="padding:12px;background:#f0fdf4;border-radius:6px;border:2px solid #22c55e">
-        <div style="font-size:11px;color:#166534;font-weight:600">Slight Positive</div>
-        <div style="font-size:10px;color:#16a34a">Variance 0% to +10%</div>
+      <div style="padding:12px;background:#fef3c7;border-radius:6px;border:2px solid #fbbf24">
+        <div style="font-size:11px;color:#92400e;font-weight:600">Slight Positive</div>
+        <div style="font-size:10px;color:#78350f;opacity:0.8">Variance 0% to +10%</div>
       </div>
-      <div style="padding:12px;background:#fef3c7;border-radius:6px;border:2px solid #f59e0b">
-        <div style="font-size:11px;color:#92400e;font-weight:600">Slight Negative</div>
-        <div style="font-size:10px;color:#b45309">Variance 0% to -10%</div>
+      <div style="padding:12px;background:#fed7aa;border-radius:6px;border:2px solid #fb923c">
+        <div style="font-size:11px;color:#9a3412;font-weight:600">Slight Negative</div>
+        <div style="font-size:10px;color:#7c2d12;opacity:0.8">Variance 0% to -10%</div>
       </div>
-      <div style="padding:12px;background:#fee2e2;border-radius:6px;border:2px solid #ef4444">
+      <div style="padding:12px;background:#fecaca;border-radius:6px;border:2px solid #f87171">
         <div style="font-size:11px;color:#991b1b;font-weight:600">Strong Negative</div>
-        <div style="font-size:10px;color:#dc2626">Variance < -10%</div>
+        <div style="font-size:10px;color:#dc2626;opacity:0.8">Variance < -10%</div>
       </div>
     </div>
   `;
@@ -2130,34 +2130,34 @@ function openPeriodModal(roomTypes, activeModelId) {
       </div>
       
       <div class="bd" style="padding:24px;overflow-y:auto;flex:1;">
-        <div style="margin-bottom:28px;padding:20px;background:#f0f9ff;border-radius:12px;border:2px solid #0369a1;">
+        <div style="margin-bottom:28px;padding:20px;background:#dbeafe;border-radius:12px;border:2px solid #3b82f6;">
           <div class="form-group">
-            <label style="display:block;margin-bottom:6px;font-weight:700;color:#0369a1;font-size:14px;">Period Name *</label>
-            <input type="text" id="period-name" placeholder="e.g., FY25 Management Targets" required style="width:100%;padding:12px 14px;border:2px solid #0ea5e9;border-radius:8px;font-size:14px;font-weight:600;transition:all 0.2s;" onfocus="this.style.borderColor='#0369a1';this.style.boxShadow='0 0 0 3px rgba(3,105,161,0.1)'" onblur="this.style.borderColor='#0ea5e9';this.style.boxShadow='none'" />
-            <p style="margin:6px 0 0 0;font-size:12px;color:#0369a1;">Give this revenue target period a descriptive name</p>
+            <label style="display:block;margin-bottom:6px;font-weight:700;color:#1e40af;font-size:14px;">Period Name *</label>
+            <input type="text" id="period-name" placeholder="e.g., FY25 Management Targets" required style="width:100%;padding:12px 14px;border:2px solid #3b82f6;border-radius:8px;font-size:14px;font-weight:600;transition:all 0.2s;" onfocus="this.style.borderColor='#2563eb';this.style.boxShadow='0 0 0 3px rgba(59,130,246,0.1)'" onblur="this.style.borderColor='#3b82f6';this.style.boxShadow='none'" />
+            <p style="margin:6px 0 0 0;font-size:12px;color:#1e40af;">Give this revenue target period a descriptive name</p>
           </div>
         </div>
         
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:28px;padding:20px;background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:28px;padding:20px;background:#f8fafc;border-radius:12px;border:1px solid #cbd5e1;">
           <div class="form-group">
-            <label style="display:block;margin-bottom:6px;font-weight:600;color:#334155;font-size:13px;">Period Start *</label>
-            <input type="date" id="period-start" value="${defaultStart}" required style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;transition:all 0.2s;" onfocus="this.style.borderColor='#667eea'" onblur="this.style.borderColor='#e2e8f0'" />
+            <label style="display:block;margin-bottom:6px;font-weight:600;color:#0c4a6e;font-size:13px;">Period Start *</label>
+            <input type="date" id="period-start" value="${defaultStart}" required style="width:100%;padding:10px 12px;border:2px solid #cbd5e1;border-radius:8px;font-size:14px;transition:all 0.2s;" onfocus="this.style.borderColor='#60a5fa'" onblur="this.style.borderColor='#cbd5e1'" />
           </div>
           <div class="form-group">
-            <label style="display:block;margin-bottom:6px;font-weight:600;color:#334155;font-size:13px;">Period End *</label>
-            <input type="date" id="period-end" value="${defaultEnd}" required style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;transition:all 0.2s;" onfocus="this.style.borderColor='#667eea'" onblur="this.style.borderColor='#e2e8f0'" />
+            <label style="display:block;margin-bottom:6px;font-weight:600;color:#0c4a6e;font-size:13px;">Period End *</label>
+            <input type="date" id="period-end" value="${defaultEnd}" required style="width:100%;padding:10px 12px;border:2px solid #cbd5e1;border-radius:8px;font-size:14px;transition:all 0.2s;" onfocus="this.style.borderColor='#60a5fa'" onblur="this.style.borderColor='#cbd5e1'" />
           </div>
         </div>
         
-        <h4 style="margin:0 0 16px 0;padding-bottom:12px;border-bottom:2px solid #e2e8f0;font-size:16px;font-weight:700;color:#1e293b;">Targets by Room Type</h4>
+        <h4 style="margin:0 0 16px 0;padding-bottom:12px;border-bottom:2px solid #bae6fd;font-size:16px;font-weight:700;color:#0c4a6e;">Targets by Room Type</h4>
         
         <div style="display:grid;gap:20px;">
           ${roomTypes.map((room, idx) => `
-            <div style="padding:20px;background:${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};border-radius:12px;border:2px solid #e2e8f0;transition:all 0.2s;" onmouseover="this.style.borderColor='#667eea';this.style.boxShadow='0 4px 12px rgba(102,126,234,0.15)'" onmouseout="this.style.borderColor='#e2e8f0';this.style.boxShadow='none'">
-              <h5 style="margin:0 0 16px 0;font-weight:700;font-size:15px;color:#1e293b;padding-bottom:8px;border-bottom:1px solid #e2e8f0;">${room.code}</h5>
+            <div style="padding:20px;background:${idx % 2 === 0 ? '#ffffff' : '#f0f9ff'};border-radius:12px;border:2px solid #bae6fd;transition:all 0.2s;" onmouseover="this.style.borderColor='#3b82f6';this.style.boxShadow='0 4px 12px rgba(59,130,246,0.15)'" onmouseout="this.style.borderColor='#bae6fd';this.style.boxShadow='none'">
+              <h5 style="margin:0 0 16px 0;font-weight:700;font-size:15px;color:#0c4a6e;padding-bottom:8px;border-bottom:1px solid #bae6fd;">${room.code}</h5>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
                 <div class="form-group">
-                  <label style="display:block;margin-bottom:6px;font-weight:600;color:#64748b;font-size:12px;">Target Occupancy % *</label>
+                  <label style="display:block;margin-bottom:6px;font-weight:600;color:#475569;font-size:12px">Target Occupancy % *</label>
                   <input type="number" 
                     class="room-target-occ" 
                     data-room-id="${room.id}" 
@@ -2165,12 +2165,12 @@ function openPeriodModal(roomTypes, activeModelId) {
                     max="100" 
                     value="70" 
                     required 
-                    style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;font-weight:600;transition:all 0.2s;" 
-                    onfocus="this.style.borderColor='#667eea';this.style.background='#f0f4ff'" 
-                    onblur="this.style.borderColor='#e2e8f0';this.style.background='white'" />
+                    style="width:100%;padding:10px 12px;border:2px solid #bae6fd;border-radius:8px;font-size:14px;font-weight:600;transition:all 0.2s;" 
+                    onfocus="this.style.borderColor='#3b82f6';this.style.background='#eff6ff'" 
+                    onblur="this.style.borderColor='#bae6fd';this.style.background='white'" />
                 </div>
                 <div class="form-group">
-                  <label style="display:block;margin-bottom:6px;font-weight:600;color:#64748b;font-size:12px;">Target Revenue (GHS) *</label>
+                  <label style="display:block;margin-bottom:6px;font-weight:600;color:#475569;font-size:12px">Target Revenue (GHS) *</label>
                   <input type="number" 
                     class="room-target-revenue" 
                     data-room-id="${room.id}" 
@@ -2178,9 +2178,9 @@ function openPeriodModal(roomTypes, activeModelId) {
                     step="1000" 
                     value="35000" 
                     required 
-                    style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;font-weight:600;transition:all 0.2s;" 
-                    onfocus="this.style.borderColor='#667eea';this.style.background='#f0f4ff'" 
-                    onblur="this.style.borderColor='#e2e8f0';this.style.background='white'" />
+                    style="width:100%;padding:10px 12px;border:2px solid #bae6fd;border-radius:8px;font-size:14px;font-weight:600;transition:all 0.2s;" 
+                    onfocus="this.style.borderColor='#3b82f6';this.style.background='#eff6ff'" 
+                    onblur="this.style.borderColor='#bae6fd';this.style.background='white'" />
                 </div>
               </div>
             </div>
@@ -2190,9 +2190,9 @@ function openPeriodModal(roomTypes, activeModelId) {
         <div id="period-error" class="error" style="display:none;margin-top:16px;padding:12px;background:#fef2f2;border:2px solid #fecaca;border-radius:8px;color:#991b1b;font-size:13px;"></div>
       </div>
       
-      <div class="ft" style="padding:20px 24px;border-top:2px solid #e2e8f0;background:#f8fafc;display:flex;justify-content:flex-end;gap:12px;">
-        <button class="btn" onclick="document.getElementById('${modalId}').remove()" style="padding:12px 24px;border:2px solid #e2e8f0;background:white;border-radius:8px;font-weight:600;color:#64748b;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.background='#f1f5f9';this.style.borderColor='#cbd5e1'" onmouseout="this.style.background='white';this.style.borderColor='#e2e8f0'">Cancel</button>
-        <button class="btn btn-primary" id="period-save" style="padding:12px 32px;background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(102,126,234,0.4);transition:all 0.2s;" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 20px rgba(102,126,234,0.5)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 12px rgba(102,126,234,0.4)'">💾 Save Targets</button>
+      <div class="ft" style="padding:20px 24px;border-top:2px solid #bae6fd;background:#f8fafc;display:flex;justify-content:flex-end;gap:12px;">
+        <button class="btn" onclick="document.getElementById('${modalId}').remove()" style="padding:12px 24px;border:2px solid #cbd5e1;background:white;border-radius:8px;font-weight:600;color:#475569;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.background='#f1f5f9';this.style.borderColor='#94a3b8'" onmouseout="this.style.background='white';this.style.borderColor='#cbd5e1'">Cancel</button>
+        <button class="btn btn-primary" id="period-save" style="padding:12px 32px;background:linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(59,130,246,0.4);transition:all 0.2s;" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 20px rgba(59,130,246,0.5)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 12px rgba(59,130,246,0.4)'">💾 Save Targets</button>
       </div>
     </div>
   `;
@@ -2293,11 +2293,11 @@ async function openEditPeriodModal(start, end, roomTypes, targetsByRoomAndPeriod
             const target = targetsByRoomAndPeriod[key];
             
             return `
-              <div style="padding:20px;background:${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};border-radius:12px;border:2px solid #e2e8f0;transition:all 0.2s;" onmouseover="this.style.borderColor='#f59e0b';this.style.boxShadow='0 4px 12px rgba(245,158,11,0.15)'" onmouseout="this.style.borderColor='#e2e8f0';this.style.boxShadow='none'">
-                <h5 style="margin:0 0 16px 0;font-weight:700;font-size:15px;color:#1e293b;padding-bottom:8px;border-bottom:1px solid #e2e8f0;">${room.code}</h5>
+              <div style="padding:20px;background:${idx % 2 === 0 ? '#ffffff' : '#f0f9ff'};border-radius:12px;border:2px solid #bae6fd;transition:all 0.2s;" onmouseover="this.style.borderColor='#3b82f6';this.style.boxShadow='0 4px 12px rgba(59,130,246,0.15)'" onmouseout="this.style.borderColor='#bae6fd';this.style.boxShadow='none'">
+                <h5 style="margin:0 0 16px 0;font-weight:700;font-size:15px;color:#0c4a6e;padding-bottom:8px;border-bottom:1px solid #bae6fd;">${room.code}</h5>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
                   <div class="form-group">
-                    <label style="display:block;margin-bottom:6px;font-weight:600;color:#64748b;font-size:12px;">Target Occupancy % *</label>
+                    <label style="display:block;margin-bottom:6px;font-weight:600;color:#475569;font-size:12px">Target Occupancy % *</label>
                     <input type="number" 
                       class="room-target-occ" 
                       data-room-id="${room.id}" 
@@ -2305,12 +2305,12 @@ async function openEditPeriodModal(start, end, roomTypes, targetsByRoomAndPeriod
                       max="100" 
                       value="${target?.target_occupancy || 70}" 
                       required 
-                      style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;font-weight:600;transition:all 0.2s;" 
-                      onfocus="this.style.borderColor='#f59e0b';this.style.background='#fffbeb'" 
-                      onblur="this.style.borderColor='#e2e8f0';this.style.background='white'" />
+                      style="width:100%;padding:10px 12px;border:2px solid #bae6fd;border-radius:8px;font-size:14px;font-weight:600;transition:all 0.2s;" 
+                      onfocus="this.style.borderColor='#3b82f6';this.style.background='#eff6ff'" 
+                      onblur="this.style.borderColor='#bae6fd';this.style.background='white'" />
                   </div>
                   <div class="form-group">
-                    <label style="display:block;margin-bottom:6px;font-weight:600;color:#64748b;font-size:12px;">Target Revenue (GHS) *</label>
+                    <label style="display:block;margin-bottom:6px;font-weight:600;color:#475569;font-size:12px">Target Revenue (GHS) *</label>
                     <input type="number" 
                       class="room-target-revenue" 
                       data-room-id="${room.id}" 
@@ -2318,9 +2318,9 @@ async function openEditPeriodModal(start, end, roomTypes, targetsByRoomAndPeriod
                       step="1000" 
                       value="${target?.target_revenue || 35000}" 
                       required 
-                      style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;font-weight:600;transition:all 0.2s;" 
-                      onfocus="this.style.borderColor='#f59e0b';this.style.background='#fffbeb'" 
-                      onblur="this.style.borderColor='#e2e8f0';this.style.background='white'" />
+                      style="width:100%;padding:10px 12px;border:2px solid #bae6fd;border-radius:8px;font-size:14px;font-weight:600;transition:all 0.2s;" 
+                      onfocus="this.style.borderColor='#3b82f6';this.style.background='#eff6ff'" 
+                      onblur="this.style.borderColor='#bae6fd';this.style.background='white'" />
                   </div>
                 </div>
               </div>
@@ -2331,9 +2331,9 @@ async function openEditPeriodModal(start, end, roomTypes, targetsByRoomAndPeriod
         <div id="edit-period-error" class="error" style="display:none;margin-top:16px;padding:12px;background:#fef2f2;border:2px solid #fecaca;border-radius:8px;color:#991b1b;font-size:13px;"></div>
       </div>
       
-      <div class="ft" style="padding:20px 24px;border-top:2px solid #e2e8f0;background:#f8fafc;display:flex;justify-content:flex-end;gap:12px;">
-        <button class="btn" onclick="document.getElementById('${modalId}').remove()" style="padding:12px 24px;border:2px solid #e2e8f0;background:white;border-radius:8px;font-weight:600;color:#64748b;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.background='#f1f5f9';this.style.borderColor='#cbd5e1'" onmouseout="this.style.background='white';this.style.borderColor='#e2e8f0'">Cancel</button>
-        <button class="btn btn-primary" id="edit-period-save" style="padding:12px 32px;background:linear-gradient(135deg, #f59e0b 0%, #d97706 100%);color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(245,158,11,0.4);transition:all 0.2s;" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 20px rgba(245,158,11,0.5)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 12px rgba(245,158,11,0.4)'">✏️ Update Targets</button>
+      <div class="ft" style="padding:20px 24px;border-top:2px solid #bae6fd;background:#f8fafc;display:flex;justify-content:flex-end;gap:12px;">
+        <button class="btn" onclick="document.getElementById('${modalId}').remove()" style="padding:12px 24px;border:2px solid #cbd5e1;background:white;border-radius:8px;font-weight:600;color:#475569;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.background='#f1f5f9';this.style.borderColor='#94a3b8'" onmouseout="this.style.background='white';this.style.borderColor='#cbd5e1'">Cancel</button>
+        <button class="btn btn-primary" id="edit-period-save" style="padding:12px 32px;background:linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(59,130,246,0.4);transition:all 0.2s;" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 20px rgba(59,130,246,0.5)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 12px rgba(59,130,246,0.4)'">✏️ Update Targets</button>
       </div>
     </div>
   `;

@@ -70,7 +70,7 @@ async function renderSimulator(modelId, pricingModels, roomTypes) {
       
       <div class="simulator-inputs" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:20px">
         <div>
-          <label style="display:block;margin-bottom:8px;color:#64748b;font-size:13px">Room Type</label>
+          <label style="display:block;margin-bottom:8px;color:#64748b;font-size:9px">Select Room Type</label>
           <select id="pm-sim-room" class="input" style="width:100%;padding:10px;border:1px solid #e2e8f0;border-radius:8px">${roomOpts}</select>
         </div>
         <div>
@@ -595,15 +595,15 @@ window.showCalculationDetails = function(meta, date, baseRate, finalRate) {
     const sensitivity = targetMult > 1 ? 'sensitivity_up' : 'sensitivity_down';
     
     targetCalcHtml = `
-      <div style="background:#fffbeb;padding:16px;border-radius:8px;border:2px solid #f59e0b;margin-bottom:20px">
+      <div style="background:#f0fdf4;padding:16px;border-radius:8px;border:2px solid #10b981;margin-bottom:20px">
         <h4 style="margin:0 0 12px 0;font-size:15px;font-weight:700;color:#0f172a">📊 Monthly Target Multiplier Calculation</h4>
-        <div style="font-size:13px;color:#92400e;line-height:1.8">
+        <div style="font-size:13px;color:#15803d;line-height:1.8">
           <div style="margin-bottom:8px;padding:10px;background:white;border-radius:6px">
             ${hasOccTarget ? `<b>MTD Occupancy:</b> ${pct(meta.mtd_occ)}<br>` : ''}
             ${hasRevTarget ? `<b>MTD RevPAN:</b> ${money(meta.mtd_revpan)}<br>` : ''}
             ${calcSteps}
           </div>
-          <div style="padding:10px;background:#fef3c7;border-radius:6px;font-family:monospace;font-size:12px">
+          <div style="padding:10px;background:#dcfce7;border-radius:6px;font-family:monospace;font-size:12px">
             <b>Formula:</b><br>
             combined_gap = occ_gap + rev_gap<br>
             combined_gap = ${combinedGap.toFixed(4)}<br><br>
