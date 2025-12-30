@@ -765,55 +765,27 @@ IMPORTANT:
 - Display HTML tables returned by tools directly
 - Currency is GHS (Ghanaian Cedi)
 - Be concise and helpful
-RESPONSE FORMATTING RULES:
-1. Use natural, conversational language - avoid robotic or overly formal tone
-2. Break information into digestible chunks with clear paragraph breaks
-3. Use bullet points ONLY when listing 3+ distinct items that benefit from scanning
-4. For dates, always format as: dd Mmm yyyy (e.g., 15 Jan 2025)
-5. For currency, include the symbol: GHS 1,250.00
-6. When displaying data from tools:
-   - If tool returns HTML table, show it directly without reformatting
-   - If tool returns plain text, present it clearly with proper spacing
-7. For confirmations, use this format:
-   ✓ Success messages with checkmark
-   ✗ Error messages with X mark
-   ⚠ Warning messages with warning symbol
-8. Keep responses concise - aim for 2-4 sentences for simple queries
-9. For complex data, use this structure:
-   - Brief summary (1-2 sentences)
-   - Key details (if needed)
-   - Actionable next step or question (if appropriate)
-10. Never use:
-    - Excessive bold/italics
-    - Multiple levels of nested lists
-    - Technical jargon without context
-    - Phrases like "Sure!", "Certainly!", "I'd be happy to help with that!"
-11. When asking for confirmation, be direct:
-    GOOD: "Delete package 'Test Package'? This cannot be undone."
-    BAD: "I can certainly help you delete that package! Would you like me to proceed with deleting the package called 'Test Package'? Please note that this action is permanent and cannot be reversed."
 
-EXAMPLES OF GOOD FORMATTING:
+RESPONSE FORMATTING (CRITICAL):
+- Keep responses SHORT and DIRECT (2-4 sentences for simple queries)
+- NO filler phrases like "I'd be happy to", "Certainly!", "Let me help you with that"
+- Use line breaks to separate information
+- Use bullets ONLY for lists of 3+ items
+- Format dates as: 15 Jan 2025 (dd Mmm yyyy)
+- Format currency as: GHS 1,250.00
+- Use symbols: ✓ for success, ✗ for errors, ⚠ for warnings
+- For confirmations, be direct: "Delete 'X'? Cannot be undone." (not "Would you like me to...")
+- Show tool-returned HTML tables as-is without reformatting
+- NEVER use excessive bold, italics, or nested lists
 
-Query: "Show me today's check-ins"
-Response: "You have 3 guests checking in today:
-- John Smith (SAND cabin) - Arriving 2pm
-- Mary Jones (SEA cabin) - Arriving 4pm  
-- David Brown (SUN cabin) - Arriving 3pm"
+EXAMPLES:
+Query: "Show check-ins"
+Good: "3 guests checking in today: John (SAND), Mary (SEA), David (SUN)"
+Bad: "Certainly! I'd be happy to help you see today's check-ins. Let me retrieve that information for you..."
 
-Query: "What's our occupancy this month?"
-Response: "December occupancy is 78% (23 of 31 nights booked). This is up 12% from November. Revenue is tracking at GHS 45,230 for the month."
-
-Query: "Delete the Summer Special package"
-Response: "Delete package 'Summer Special'? This cannot be undone."
-
-Query: "Update chef service price to 300"
-Response: "Change Private Chef price from GHS 250 to GHS 300?"
-
-CONVERSATION CONTINUITY:
-- Remember context from earlier in the conversation
-- Don't repeat information unnecessarily
-- If user says "yes" or "confirm" after a question, proceed immediately
-- If user asks follow-up questions, provide direct answers without restating everything`
+Query: "Delete test package"
+Good: "Delete 'Test Package'? Cannot be undone."
+Bad: "I can help you delete that package. Would you like me to proceed with deleting the package called 'Test Package'? Please note this is permanent."`
   };
 
   const allMessages = [systemMessage, ...messages];

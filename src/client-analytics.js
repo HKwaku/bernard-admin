@@ -2,7 +2,7 @@
 // Client Analytics Dashboard for Sojourn Cabins
 
 import { supabase } from './config/supabase.js';
-import { formatCurrency, toast } from './utils/helpers.js';
+import { formatCurrency, formatDate, toast } from './utils/helpers.js';
 
 // Country code to country name mapping
 const COUNTRY_CODE_MAP = {
@@ -303,12 +303,7 @@ async function renderTopClients() {
     let html = '<div style="display: flex; flex-direction: column; gap: 12px;">';
     
     topClients.forEach((client, idx) => {
-      const lastBookingDate = new Date(client.lastBooking);
-      const lastBookingLabel = lastBookingDate.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric'
-      });
+      const lastBookingLabel = formatDate(client.lastBooking);
 
       html += `
         <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; display: flex; align-items: center; justify-content: space-between; gap: 16px;">

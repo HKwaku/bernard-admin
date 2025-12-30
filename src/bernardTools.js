@@ -56,6 +56,25 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { persistSession: false },
 });
 
+// Date formatter - Centralized format: dd-Mmm-yyyy (e.g., 15 Jan 2025)
+export function formatDate(dateInput) {
+  if (!dateInput) return '';
+  
+  try {
+    const date = new Date(dateInput);
+    if (isNaN(date.getTime())) return dateInput;
+    
+    const day = date.getDate().toString().padStart(2, '0');
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = months[date.getMonth()];
+    const year = date.getFullYear();
+    
+    return `${day} ${month} ${year}`;
+  } catch (error) {
+    return dateInput;
+  }
+}
+
 
 // =====================
 // UNIVERSAL TABLE FORMATTER
@@ -950,8 +969,8 @@ export const searchReservationsTool = tool({
         Guest: `${r.guest_first_name || ''} ${r.guest_last_name || ''}`.trim(),
         Email: r.guest_email,
         Room: r.room_types?.name || 'N/A',
-        "Check-in": r.check_in,
-        "Check-out": r.check_out,
+        "Check-in": formatDate(r.check_in),
+        "Check-out": formatDate(r.check_out),
         Status: r.status,
         Total: `${r.currency || 'GBP'} ${r.total || 0}`,
       })),
@@ -999,8 +1018,8 @@ export const getReservationDetailsTool = tool({
 **Booking Details:**
 - Room: ${r.room_types?.name || 'N/A'} (${r.room_types?.code || ''})
 - Package: ${r.packages?.name || 'Custom booking'}
-- Check-in: ${r.check_in}
-- Check-out: ${r.check_out}
+- Check-in: ${formatDate(r.check_in)}
+- Check-out: ${formatDate(r.check_out)}
 - Status: ${r.status}
 
 **Pricing:**
@@ -1012,7 +1031,7 @@ export const getReservationDetailsTool = tool({
 **Other:**
 - Special Requests: ${r.notes || 'None'}
 - Is Influencer: ${r.is_influencer ? 'Yes' : 'No'}
-- Created: ${new Date(r.created_at).toLocaleString()}
+- Created: ${formatDate(r.created_at)}
 - Reservation ID: ${r.id}
 `;
   },
@@ -1121,13 +1140,13 @@ export const checkAvailabilityTool = tool({
     if (error) return `Error checking availability: ${error.message}`;
 
     if (!conflicts?.length) {
-      return `✓ Room '${room.name}' (${room_code}) is AVAILABLE for ${check_in} to ${check_out}`;
+      return `✓ Room '${room.name}' (${room_code}) is AVAILABLE for ${formatDate(check_in)} to ${formatDate(check_out)}`;
     }
 
-    return `✗ Room '${room.name}' (${room_code}) is NOT available for ${check_in} to ${check_out}
+    return `✗ Room '${room.name}' (${room_code}) is NOT available for ${formatDate(check_in)} to ${formatDate(check_out)}
 
 **Conflicting Reservations:**
-${conflicts.map(c => `- ${c.confirmation_code}: ${c.check_in} to ${c.check_out} (${c.status})`).join('\n')}`;
+${conflicts.map(c => `- ${c.confirmation_code}: ${formatDate(c.check_in)} to ${formatDate(c.check_out)} (${c.status})`).join('\n')}`;
   },
 });
 

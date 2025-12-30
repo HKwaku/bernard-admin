@@ -2,7 +2,7 @@
 // Reservations Management Module (modularised original behaviour)
 
 import { supabase } from './config/supabase.js';
-import { $, $$, formatCurrency, toast } from './utils/helpers.js';
+import { $, $$, formatCurrency, formatDate, toast } from './utils/helpers.js';
 import { openBookPackageModal } from './package_booking.js';
 import { openNewCustomBookingModal } from './custom_booking.js';
 import { openBlockDatesModal } from './blocked_bookings.js';
@@ -446,7 +446,7 @@ function renderListView(reservations) {
               <div class="title" style="color:#6b7280;">
                 ${r.room_name || r.room_type_code || 'Cabin'}
               </div>
-              <div class="meta">Blocked: ${r.check_in || ''}</div>
+              <div class="meta">Blocked: ${formatDate(r.check_in) || ''}</div>
               ${
                 r.notes
                   ? `<div class="meta">Reason: ${r.notes}</div>`
@@ -487,7 +487,7 @@ function renderListView(reservations) {
                 ? `<div class="meta">Package: <strong>${r.package_name || r.package_name}</strong></div>`
                 : ''
             }
-            <div class="meta">Check-in: ${r.check_in || ''} • Check-out: ${r.check_out || ''}</div>
+            <div class="meta">Check-in: ${formatDate(r.check_in) || ''} • Check-out: ${formatDate(r.check_out) || ''}</div>
             <div class="meta">Guests: ${r.adults || 1} • Nights: ${r.nights || 1}</div>
           </div>
 
@@ -553,7 +553,7 @@ function renderListView(reservations) {
                 ${primaryRes.guest_first_name || ''} ${primaryRes.guest_last_name || ''}
               </div>
               <div class="meta">${primaryRes.guest_email || ''}</div>
-              <div class="meta"><strong>${totalRooms} Cabins</strong> • ${primaryRes.check_in || ''} to ${primaryRes.check_out || ''}</div>
+              <div class="meta"><strong>${totalRooms} Cabins</strong> • ${formatDate(primaryRes.check_in) || ''} to ${formatDate(primaryRes.check_out) || ''}</div>
               <div class="meta">Total Guests: ${primaryRes.adults || 1} • Nights: ${primaryRes.nights || 1}</div>
             </div>
 

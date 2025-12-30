@@ -2,7 +2,7 @@
 // Package management (list, add/edit, view, activate/deactivate, delete)
 
 import { supabase } from './config/supabase.js';
-import { $, formatCurrency, toast } from './utils/helpers.js';
+import { $, formatCurrency, formatDate, toast } from './utils/helpers.js';
 
 // ---- Shared helper: upload package image to Supabase Storage ----
 async function uploadPackageImage(file, code) {
@@ -57,8 +57,8 @@ async function initPackages() {
 
       const validity =
         p.valid_from || p.valid_until
-          ? `<span>Valid: <strong>${p.valid_from || '—'}</strong> → <strong>${
-              p.valid_until || '—'
+          ? `<span>Valid: <strong>${formatDate(p.valid_from) || '—'}</strong> → <strong>${
+              formatDate(p.valid_until) || '—'
             }</strong></span>`
           : '';
 

@@ -2,6 +2,7 @@
 // Coupon management (list, add, edit, toggle, delete)
 
 import { supabase } from './config/supabase.js';
+import { formatDate } from './utils/helpers.js';
 
 // --- tiny DOM helpers local to this module ---
 function $$sel(selector, root = document) {
@@ -157,11 +158,11 @@ async function coupons_renderList() {
                     c.valid_from || c.valid_until
                       ? `<span>${
                           c.valid_from
-                            ? new Date(c.valid_from).toLocaleDateString()
+                            ? formatDate(c.valid_from)
                             : '∞'
                         } → ${
                           c.valid_until
-                            ? new Date(c.valid_until).toLocaleDateString()
+                            ? formatDate(c.valid_until)
                             : '∞'
                         }</span>`
                       : ''
