@@ -86,14 +86,7 @@ export function formatTable(rows, options = {}) {
   const keys = Object.keys(rows[0]);
 
   return `
-  <div style="
-    overflow-x:auto;
-    -webkit-overflow-scrolling:touch;
-    margin:8px 0;
-    border:1px solid #e5e7eb;
-    border-radius:8px;
-    max-width:100%;
-  ">
+  <div class="chat-table-scroll">
     <table style="width:100%;border-collapse:collapse;font-size:0.85rem;min-width:${options.minWidth || '480px'}">
       <thead style="background:#f8fafc;">
         <tr>

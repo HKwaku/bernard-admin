@@ -526,6 +526,9 @@ label {
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
   display: block;
+  margin: 8px 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
 }
 
 .msg .bubble .chat-table-scroll table {
