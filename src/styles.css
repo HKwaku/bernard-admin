@@ -563,7 +563,7 @@ label {
 
 /* CRITICAL: Allow table containers to break out of bubble constraints */
 .msg.bot .bubble {
-  max-width: 90vw;
+  max-width: calc(100vw - 100px);
   width: auto;
 }
 
