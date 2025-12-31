@@ -566,12 +566,6 @@ label {
   max-width: 100% !important;
 }
 
-.msg .bubble table {
-  border-collapse: collapse;
-  display: table;
-}
-
-
 .msg.user {
   text-align: right;
 }
@@ -979,12 +973,6 @@ label {
   }
 
   /* Mobile: Ensure tables scroll properly */
-  .msg .bubble table {
-    display: table;
-    width: auto;
-    min-width: 100%;
-  }
-
   .msg .bubble table th,
   .msg .bubble table td {
     white-space: nowrap;
@@ -4080,3 +4068,24 @@ textarea {
 #view-chat #messages .chat-table-scroll td{
   white-space: nowrap !important;
 }
+/* ===== Chat tables: force wrapper scrolling (authoritative) ===== */
+#view-chat #messages .chat-table-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+#view-chat #messages .chat-table-scroll > table {
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+  border-collapse: collapse;
+}
+
+#view-chat #messages .chat-table-scroll th,
+#view-chat #messages .chat-table-scroll td {
+  white-space: nowrap;
+}
+
