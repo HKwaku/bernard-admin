@@ -4044,12 +4044,6 @@ textarea {
    
    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
    
-   ============================================ */
-/* =========================================================
-   HARD FIX: Chat tables must never overflow or truncate
-   (Overrides earlier conflicting table rules)
-   ========================================================= */
-
 /* =========================================================
    CHAT TABLES: STOP CLIP + RESTORE HORIZONTAL SCROLL
    (Final authoritative override)
