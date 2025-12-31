@@ -520,22 +520,23 @@ label {
 }
 /* ===== Chat tables: use wrapper for scrolling ===== */
 .msg .bubble .chat-table-scroll {
-  width: 100%;
-  max-width: 100%;
-  overflow-x: auto;
-  overflow-y: hidden;
+  width: 100% !important;
+  max-width: 85vw !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
   -webkit-overflow-scrolling: touch;
-  display: block;
+  display: block !important;
   margin: 8px 0;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
+  box-sizing: border-box;
 }
 
 .msg .bubble .chat-table-scroll table {
-  width: max-content;
-  min-width: 100%;
+  width: max-content !important;
+  min-width: 100% !important;
   border-collapse: collapse;
-  display: table;
+  display: table !important;
 }
 
 .msg .bubble .chat-table-scroll th,
@@ -545,7 +546,7 @@ label {
   border: 1px solid var(--ring);
   text-align: left;
   vertical-align: top;
-  white-space: nowrap;
+  white-space: nowrap !important;
 }
 
 /* Allow horizontal scroll only when needed */
