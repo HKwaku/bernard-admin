@@ -479,7 +479,7 @@ label {
   background: #fafafa;
   padding: var(--space-lg);
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: visible;
   min-height: 400px;
   max-height: 600px;
   width: 100%;
@@ -518,23 +518,25 @@ label {
   word-wrap: break-word;
   word-break: break-word;
 }
-/* ===== Chat tables: prevent overflow ===== */
-.msg .bubble table {
+/* ===== Chat tables: use wrapper for scrolling ===== */
+.msg .bubble .chat-table-scroll {
   width: 100%;
   max-width: 100%;
-  border-collapse: collapse;
-  display: block;
   overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  display: block;
 }
 
-.msg .bubble thead,
-.msg .bubble tbody,
-.msg .bubble tr {
-  width: 100%;
+.msg .bubble .chat-table-scroll table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  display: table;
 }
 
-.msg .bubble th,
-.msg .bubble td {
+.msg .bubble .chat-table-scroll th,
+.msg .bubble .chat-table-scroll td {
   padding: 6px 8px;
   font-size: 0.8rem;
   border: 1px solid var(--ring);
@@ -544,11 +546,11 @@ label {
 }
 
 /* Allow horizontal scroll only when needed */
-.msg .bubble table::-webkit-scrollbar {
+.msg .bubble .chat-table-scroll::-webkit-scrollbar {
   height: 6px;
 }
 
-.msg .bubble table::-webkit-scrollbar-thumb {
+.msg .bubble .chat-table-scroll::-webkit-scrollbar-thumb {
   background: #cbd5e1;
   border-radius: 6px;
 }
@@ -557,13 +559,6 @@ label {
 .msg.bot .bubble {
   max-width: 90vw;
   width: auto;
-}
-
-/* Chat: Tables inside bubbles - must be scrollable */
-.msg .bubble > div[style*="overflow-x"] {
-  overflow-x: auto !important;
-  -webkit-overflow-scrolling: touch;
-  max-width: 100% !important;
 }
 
 .msg.user {
@@ -4045,47 +4040,3 @@ textarea {
 }
 
 /* The wrapper your chat.js adds around <table> */
-#view-chat #messages .chat-table-scroll{
-  display: block !important;
-  width: 100% !important;
-  max-width: 100% !important;
-  overflow-x: auto !important;
-  overflow-y: hidden !important;
-  -webkit-overflow-scrolling: touch;
-}
-
-/* Make the TABLE wider than the wrapper when needed so the wrapper scrolls */
-#view-chat #messages .chat-table-scroll > table{
-  display: table !important;
-  width: max-content !important;
-  min-width: 100% !important;
-  max-width: none !important;
-  table-layout: auto !important;
-}
-
-/* Prevent long values from forcing weird wrapping */
-#view-chat #messages .chat-table-scroll th,
-#view-chat #messages .chat-table-scroll td{
-  white-space: nowrap !important;
-}
-/* ===== Chat tables: force wrapper scrolling (authoritative) ===== */
-#view-chat #messages .chat-table-scroll {
-  width: 100%;
-  max-width: 100%;
-  overflow-x: auto;
-  overflow-y: hidden;
-  -webkit-overflow-scrolling: touch;
-}
-
-#view-chat #messages .chat-table-scroll > table {
-  width: max-content;
-  min-width: 100%;
-  max-width: none;
-  border-collapse: collapse;
-}
-
-#view-chat #messages .chat-table-scroll th,
-#view-chat #messages .chat-table-scroll td {
-  white-space: nowrap;
-}
-
