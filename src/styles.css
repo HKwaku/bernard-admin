@@ -4039,3 +4039,178 @@ textarea {
    ========================================================= */
 
 /* Removed - was causing page overflow */
+/* ============================
+   Reservations Edit Modal Fix
+   Targets: #edit-reservation-modal (reservations.js)
+   ============================ */
+
+#edit-reservation-modal.modal.show{
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(3px);
+}
+
+#edit-reservation-modal > div{
+  width: 100%;
+  max-width: 750px;
+}
+
+/* Scroll body nicely */
+#edit-reservation-modal .form-grid,
+#edit-reservation-modal .form-group{
+  min-width: 0;
+}
+
+#edit-reservation-modal label{
+  display: block;
+  font-weight: 600;
+  font-size: 13px;
+  color: #0f172a;
+  margin: 0 0 6px 0;
+}
+
+/* Inputs/selects/textarea — unify styling */
+#edit-reservation-modal input[type="text"],
+#edit-reservation-modal input[type="email"],
+#edit-reservation-modal input[type="number"],
+#edit-reservation-modal input[type="date"],
+#edit-reservation-modal select,
+#edit-reservation-modal textarea{
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  font-size: 14px;
+  color: #0f172a;
+  background: #fff;
+  outline: none;
+}
+
+#edit-reservation-modal textarea{
+  resize: vertical;
+  min-height: 92px;
+}
+
+/* Focus states */
+#edit-reservation-modal input:focus,
+#edit-reservation-modal select:focus,
+#edit-reservation-modal textarea:focus{
+  border-color: #f97316;
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.18);
+}
+
+/* Form layout */
+#edit-reservation-modal .form-grid{
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0 0 14px 0;
+}
+
+#edit-reservation-modal .form-group{
+  margin: 0 0 14px 0;
+}
+
+/* Make 2-col grids where appropriate */
+@media (max-width: 900px){
+  #edit-reservation-modal .form-grid{
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px){
+  #edit-reservation-modal.modal.show{
+    padding: 10px;
+    align-items: flex-end;
+  }
+  #edit-reservation-modal > div{
+    max-width: 100%;
+  }
+  #edit-reservation-modal .form-grid{
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Country dropdown box inside phone row */
+#edit-reservation-modal .country-select-box input,
+#edit-reservation-modal .country-select-box select{
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #d1d5db;
+  font-size: 14px;
+}
+
+/* Checkbox rows (send email / influencer) */
+#edit-reservation-modal input[type="checkbox"]{
+  accent-color: #f97316;
+}
+
+#edit-reservation-modal .form-group > label[style*="display:flex"]{
+  gap: 10px !important;
+  align-items: center !important;
+  margin-bottom: 10px !important;
+}
+
+/* Extras rows inside the modal (matches the “card” feel) */
+#edit-reservation-modal .extra-row{
+  background: #fff;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 12px !important;
+  padding: 10px 12px !important;
+}
+
+#edit-reservation-modal .extra-row .btn.btn-sm{
+  min-width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+}
+
+/* Coupon row - ensure button height matches input */
+#edit-reservation-modal #apply-coupon-btn{
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  font-weight: 700;
+}
+
+/* Modal buttons baseline (in case global .btn styles don’t apply here) */
+#edit-reservation-modal .btn{
+  appearance: none;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  color: #0f172a;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#edit-reservation-modal .btn:hover{
+  background: #f8fafc;
+}
+
+#edit-reservation-modal .btn.btn-primary{
+  border-color: transparent;
+  background: #f97316;
+  color: #fff;
+}
+
+#edit-reservation-modal .btn.btn-primary:hover{
+  filter: brightness(0.98);
+}
+
+/* Date picker dropdown should always sit on top */
+#edit-reservation-modal .date-picker-dropdown{
+  z-index: 100000 !important;
+}

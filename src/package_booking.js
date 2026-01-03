@@ -149,8 +149,9 @@ export async function openBookPackageModal() {
 
   // 1) Load active packages
   const { data: packages, error: pkgErr } = await supabase
-    .from('packages')
-    .select('id, code, name, package_price, currency, nights, is_active')
+   .from('packages')
+   .select('id, code, name, package_price, currency, nights, valid_from, valid_until, is_active')
+
     .eq('is_active', true)
     .order('name', { ascending: true });
 
@@ -273,13 +274,35 @@ export async function openBookPackageModal() {
         <div class="form-grid">
           <div class="form-group">
             <label>Check-in</label>
-            <input id="pb-in" type="date" value="${today}" />
+
+            <!-- ISO value used by logic -->
+            <input id="pb-in" type="hidden" value="${today}" />
+
+            <!-- Custom picker trigger -->
+            <button type="button" id="pb-in-display" class="pb-date-display">
+              ${today}
+            </button>
+
+            <!-- Calendar popup -->
+            <div id="pb-in-picker" class="pb-date-picker" style="display:none;"></div>
           </div>
+
           <div class="form-group">
             <label>Check-out</label>
-            <input id="pb-out" type="date" value="${today}" />
+
+            <!-- ISO value used by logic -->
+            <input id="pb-out" type="hidden" value="${today}" />
+
+            <!-- Custom picker trigger -->
+            <button type="button" id="pb-out-display" class="pb-date-display">
+              ${today}
+            </button>
+
+            <!-- Calendar popup -->
+            <div id="pb-out-picker" class="pb-date-picker" style="display:none;"></div>
           </div>
         </div>
+
 
         <div class="form-grid">
           <div class="form-group">
@@ -361,23 +384,469 @@ export async function openBookPackageModal() {
   const totalDisplay = wrap.querySelector('#pb-total-val');
   const extraLines = wrap.querySelector('#pb-extra-lines');
 
-  function getSelectedPackage() {
-    const id = pkgSel.value;
-    return pkgMap.get(id) || null;
+    // ===== Custom date picker (PackagesModal-style) =====
+
+  const inDisplay = wrap.querySelector('#pb-in-display');
+  const outDisplay = wrap.querySelector('#pb-out-display');
+  const inPicker = wrap.querySelector('#pb-in-picker');
+  const outPicker = wrap.querySelector('#pb-out-picker');
+
+  // Minimal styling (scoped-ish via class names)
+  const dpStyle = document.createElement('style');
+  dpStyle.textContent = `
+    .pb-date-display{
+      width:100%;
+      text-align:left;
+      padding:10px 12px;
+      border:1px solid rgba(148,163,184,.6);
+      border-radius:10px;
+      background:#fff;
+      cursor:pointer;
+      font-size:14px;
+      line-height:1.2;
+    }
+    .pb-date-picker{
+      position:relative;
+      margin-top:8px;
+      border:1px solid rgba(148,163,184,.6);
+      border-radius:12px;
+      background:#fff;
+      padding:10px;
+      box-shadow:0 10px 30px rgba(2,6,23,.15);
+      z-index:50;
+    }
+    .pb-cal-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      margin-bottom:10px;
+      gap:10px;
+    }
+    .pb-cal-nav{
+      border:1px solid rgba(148,163,184,.6);
+      background:#fff;
+      border-radius:10px;
+      padding:6px 10px;
+      cursor:pointer;
+    }
+    .pb-cal-title{
+      font-weight:600;
+      font-size:14px;
+      color:#0f172a;
+      flex:1;
+      text-align:center;
+    }
+    .pb-cal-grid{
+      display:grid;
+      grid-template-columns:repeat(7, 1fr);
+      gap:6px;
+    }
+    .pb-cal-dow{
+      font-size:11px;
+      color:#64748b;
+      text-align:center;
+      padding:4px 0;
+      user-select:none;
+    }
+    .pb-cal-day{
+      aspect-ratio:1/1;
+      border-radius:10px;
+      border:0;
+      cursor:pointer;
+      font-size:13px;
+      padding:0;
+    }
+    .pb-cal-day:hover{ background:rgba(251,146,60,.18); }
+    .pb-cal-day.pb-selected{
+      background:#f97316;
+      color:#fff;
+      font-weight:700;
+    }
+    .pb-cal-day.pb-disabled{
+      background:#f1f5f9;
+      color:#94a3b8;
+      cursor:not-allowed;
+      text-decoration:line-through;
+    }
+  `;
+  wrap.appendChild(dpStyle);
+
+  function monthLabel(d) {
+    return d.toLocaleString(undefined, { month: 'long', year: 'numeric' });
   }
 
-  function hydrateRoomsForPackage() {
+  function pad2(n) { return String(n).padStart(2, '0'); }
+
+  // ISO (yyyy-mm-dd) from day/month/year
+  function isoFromDMY(day, monthIndex0, year) {
+    return `${year}-${pad2(monthIndex0 + 1)}-${pad2(day)}`;
+  }
+
+  // Display format (dd-mmm-yyyy) – matches your email/date style direction
+  function displayFromISO(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    const dd = pad2(d.getDate());
+    const mmm = d.toLocaleString(undefined, { month: 'short' });
+    const yyyy = d.getFullYear();
+    return `${dd}-${mmm}-${yyyy}`;
+  }
+
+  // Generate calendar day slots for a month (nulls for leading blanks)
+  function generateCalendarDays(year, monthIndex0) {
+    const first = new Date(year, monthIndex0, 1);
+    const last = new Date(year, monthIndex0 + 1, 0);
+    const startDow = first.getDay(); // 0 Sun..6 Sat
+    const daysInMonth = last.getDate();
+    const out = [];
+    for (let i = 0; i < startDow; i++) out.push(null);
+    for (let d = 1; d <= daysInMonth; d++) out.push(d);
+    return out;
+  }
+
+  // Track picker state per input
+  const pickerState = {
+    ci: { open: false, month: new Date(inEl.value) },
+    co: { open: false, month: new Date(outEl.value) },
+  };
+
+  function closePickers() {
+    pickerState.ci.open = false;
+    pickerState.co.open = false;
+    inPicker.style.display = 'none';
+    outPicker.style.display = 'none';
+  }
+
+  function openPicker(id) {
+    closePickers();
+    pickerState[id].open = true;
+    (id === 'ci' ? inPicker : outPicker).style.display = 'block';
+    renderCalendar(id);
+  }
+
+  function syncDisplays() {
+    inDisplay.textContent = displayFromISO(inEl.value);
+    outDisplay.textContent = displayFromISO(outEl.value);
+  }
+
+  // ---- PackagesModal-style "disabled date" decision
+  // We compute disabled based on:
+  // - past dates
+  // - package validity (valid_from / valid_until)
+  // - min nights rule (checkout must be >= checkin + nights)
+  // - availability: there must be at least one cabin available for the implied stay range
+  async function getAvailableRoomsForRange(pkg, ci, co) {
+    const rooms = roomsByPackage.get(pkg.id) || [];
+    if (!rooms.length) return [];
+
+    // validity already checked before call usually, but keep safe
+    if (pkg.valid_from && ci < pkg.valid_from) return [];
+    if (pkg.valid_until && (ci > pkg.valid_until || co > pkg.valid_until)) return [];
+
+    const roomIds = rooms.map((r) => r.id).filter(Boolean);
+
+    const { data: reservations, error: rErr } = await supabase
+      .from('reservations')
+      .select('room_type_id, room_type_code, check_in, check_out, status')
+      .lt('check_in', co)
+      .gt('check_out', ci)
+      .not('status', 'in', '("cancelled","no_show")');
+
+    if (rErr) {
+      console.error('availability reservations error:', rErr);
+      return [];
+    }
+
+    let blocked = [];
+    if (roomIds.length) {
+      const { data: bData, error: bErr } = await supabase
+        .from('blocked_dates')
+        .select('room_type_id, blocked_date')
+        .in('room_type_id', roomIds)
+        .gte('blocked_date', ci)
+        .lt('blocked_date', co);
+
+      if (bErr) {
+        console.error('availability blocked_dates error:', bErr);
+        return [];
+      }
+      blocked = bData || [];
+    }
+
+    return rooms.filter((room) => {
+      const roomId = String(room.id);
+      const roomCode = room.code || null;
+
+      const hasReservation = (reservations || []).some((r) => {
+        const sameRoom =
+          (r.room_type_id && String(r.room_type_id) === roomId) ||
+          (roomCode && r.room_type_code && r.room_type_code === roomCode);
+        return !!sameRoom;
+      });
+      if (hasReservation) return false;
+
+      const hasBlock = (blocked || []).some(
+        (b) => b.room_type_id && String(b.room_type_id) === roomId
+      );
+      if (hasBlock) return false;
+
+      return true;
+    });
+  }
+
+  async function isDateDisabled(pkg, dateISO, pickerId) {
+    // 1) past
+    const todayD = new Date();
+    todayD.setHours(0, 0, 0, 0);
+    const dateObj = new Date(dateISO);
+    if (dateObj < todayD) return true;
+
+    // 2) validity
+    if (pkg.valid_from && dateISO < pkg.valid_from) return true;
+    if (pkg.valid_until && dateISO > pkg.valid_until) return true;
+
+    // 3) checkout min nights rule
+    const nights = Number(pkg.nights || 1);
+    if (pickerId === 'co' && inEl.value) {
+      const minCo = addDaysISO(inEl.value, nights);
+      if (dateISO < minCo) return true;
+    }
+
+    // 4) availability requirement
+    if (pickerId === 'ci') {
+      // For check-in, implied checkout = ci + nights
+      const impliedCo = addDaysISO(dateISO, nights);
+      if (pkg.valid_until && impliedCo > pkg.valid_until) return true;
+
+      const available = await getAvailableRoomsForRange(pkg, dateISO, impliedCo);
+      return available.length === 0;
+    }
+
+    if (pickerId === 'co') {
+      // For checkout, require that there is availability for [checkin, checkout)
+      if (!inEl.value) return true;
+      const available = await getAvailableRoomsForRange(pkg, inEl.value, dateISO);
+      return available.length === 0;
+    }
+
+    return false;
+  }
+
+  function changeMonth(pickerId, dir) {
+    const st = pickerState[pickerId];
+    const d = new Date(st.month);
+    d.setMonth(d.getMonth() + dir);
+    st.month = d;
+    renderCalendar(pickerId);
+  }
+
+  async function renderCalendar(pickerId) {
     const pkg = getSelectedPackage();
     if (!pkg) return;
-    const rooms = roomsByPackage.get(pkg.id) || [];
 
-    if (!rooms.length) {
-      roomSel.innerHTML =
-        '<option value="">No room types linked to this package</option>';
+    const st = pickerState[pickerId];
+    const monthDate = st.month instanceof Date && !isNaN(st.month.getTime())
+      ? st.month
+      : new Date();
+
+    const year = monthDate.getFullYear();
+    const month = monthDate.getMonth();
+    const days = generateCalendarDays(year, month);
+
+    const target = pickerId === 'ci' ? inPicker : outPicker;
+    const selectedISO = pickerId === 'ci' ? inEl.value : outEl.value;
+
+    const dows = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+
+    // Precompute disabled days for visible month (so UI is instant)
+    const dayIsDisabled = new Map();
+    await Promise.all(days.map(async (day) => {
+      if (!day) return;
+      const iso = isoFromDMY(day, month, year);
+      const dis = await isDateDisabled(pkg, iso, pickerId);
+      dayIsDisabled.set(day, dis);
+    }));
+
+    target.innerHTML = `
+      <div class="pb-cal-head">
+        <button type="button" class="pb-cal-nav" data-nav="-1">&lt;</button>
+        <div class="pb-cal-title">${monthLabel(new Date(year, month, 1))}</div>
+        <button type="button" class="pb-cal-nav" data-nav="1">&gt;</button>
+      </div>
+
+      <div class="pb-cal-grid">
+        ${dows.map((d)=>`<div class="pb-cal-dow">${d}</div>`).join('')}
+        ${days.map((day) => {
+          if (!day) return `<div></div>`;
+          const iso = isoFromDMY(day, month, year);
+          const disabled = !!dayIsDisabled.get(day);
+          const selected = iso === selectedISO;
+          const cls = [
+            'pb-cal-day',
+            disabled ? 'pb-disabled' : '',
+            selected ? 'pb-selected' : ''
+          ].join(' ').trim();
+          return `
+            <button
+              type="button"
+              class="${cls}"
+              data-day="${day}"
+              ${disabled ? 'disabled' : ''}
+            >${day}</button>
+          `;
+        }).join('')}
+      </div>
+    `;
+
+    // nav
+    target.querySelector('[data-nav="-1"]').addEventListener('click', () => changeMonth(pickerId, -1));
+    target.querySelector('[data-nav="1"]').addEventListener('click', () => changeMonth(pickerId, 1));
+
+    // day click
+    target.querySelectorAll('[data-day]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const day = Number(btn.getAttribute('data-day'));
+        const iso = isoFromDMY(day, month, year);
+
+        if (pickerId === 'ci') {
+          inEl.value = iso;
+
+          // auto set checkout = checkin + pkg.nights (PackagesModal behavior)
+          const nights = Number(pkg.nights || 1);
+          outEl.value = addDaysISO(iso, nights);
+        } else {
+          outEl.value = iso;
+        }
+
+        syncDisplays();
+
+        // keep the rest of your logic consistent
+        const nights = diffNights(inEl.value, outEl.value);
+        nightsEl.value = nights > 0 ? String(nights) : '';
+
+        closePickers();
+
+        // update room dropdown to only show available cabins for selected dates
+        hydrateRoomsForPackage();
+      });
+    });
+  }
+
+  // wire up triggers
+  inDisplay.addEventListener('click', () => openPicker('ci'));
+  outDisplay.addEventListener('click', () => openPicker('co'));
+
+  // close on outside click
+  document.addEventListener('click', (e) => {
+    if (!wrap.contains(e.target)) return;
+    const t = e.target;
+    const clickedIn =
+      t === inDisplay || t === outDisplay ||
+      inPicker.contains(t) || outPicker.contains(t);
+
+    if (!clickedIn) closePickers();
+  });
+
+  // initialize display text
+  syncDisplays();
+
+
+    async function refreshAvailableRoomsForSelectedPackage() {
+    const pkg = getSelectedPackage();
+    if (!pkg) return [];
+
+    const rooms = roomsByPackage.get(pkg.id) || [];
+    if (!rooms.length) return [];
+
+    const ci = inEl.value;
+    const co = outEl.value;
+
+    // basic date sanity
+    if (!ci || !co) return [];
+    const ciD = new Date(ci);
+    const coD = new Date(co);
+    if (Number.isNaN(ciD.getTime()) || Number.isNaN(coD.getTime()) || coD <= ciD) return [];
+
+    // Enforce package validity window (same idea as PackagesModal)
+    if (pkg.valid_from && ci < pkg.valid_from) return [];
+    if (pkg.valid_until) {
+      // PackagesModal blocks dates > valid_until for both CI and CO
+      if (ci > pkg.valid_until) return [];
+      if (co > pkg.valid_until) return [];
+    }
+
+    const roomIds = rooms.map((r) => r.id).filter(Boolean);
+
+    // 1) Fetch overlapping reservations in the range (like PackagesModal)
+    const { data: reservations, error: rErr } = await supabase
+      .from('reservations')
+      .select('room_type_id, room_type_code, check_in, check_out, status')
+      .lt('check_in', co)
+      .gt('check_out', ci)
+      .not('status', 'in', '("cancelled","no_show")');
+
+    if (rErr) {
+      console.error('refreshAvailableRooms reservations error:', rErr);
+      return [];
+    }
+
+    // 2) Fetch blocked dates in [ci, co) for these room ids (like PackagesModal)
+    let blocked = [];
+    if (roomIds.length) {
+      const { data: bData, error: bErr } = await supabase
+        .from('blocked_dates')
+        .select('room_type_id, blocked_date')
+        .in('room_type_id', roomIds)
+        .gte('blocked_date', ci)
+        .lt('blocked_date', co);
+
+      if (bErr) {
+        console.error('refreshAvailableRooms blocked_dates error:', bErr);
+        return [];
+      }
+      blocked = bData || [];
+    }
+
+    // 3) Filter rooms: exclude any with a reservation overlap OR any blocked date
+    const available = rooms.filter((room) => {
+      const roomId = String(room.id);
+      const roomCode = room.code || null;
+
+      const hasReservation = (reservations || []).some((r) => {
+        const sameRoom =
+          (r.room_type_id && String(r.room_type_id) === roomId) ||
+          (roomCode && r.room_type_code && r.room_type_code === roomCode);
+
+        return !!sameRoom; // already overlap-filtered by query
+      });
+      if (hasReservation) return false;
+
+      const hasBlock = (blocked || []).some(
+        (b) => b.room_type_id && String(b.room_type_id) === roomId
+      );
+      if (hasBlock) return false;
+
+      return true;
+    });
+
+    return available;
+  }
+
+  async function hydrateRoomsForPackageAndDates() {
+    const pkg = getSelectedPackage();
+    if (!pkg) return;
+
+    const available = await refreshAvailableRoomsForSelectedPackage();
+
+    if (!available.length) {
+      roomSel.innerHTML = '<option value="">No cabins available for selected dates</option>';
       return;
     }
 
-    roomSel.innerHTML = rooms
+    const prev = roomSel.value;
+
+    roomSel.innerHTML = available
       .map(
         (r) =>
           `<option value="${r.id}" data-code="${r.code || ''}" data-name="${r.name || ''}">
@@ -385,7 +854,24 @@ export async function openBookPackageModal() {
           </option>`
       )
       .join('');
+
+    // keep previous selection if it’s still available
+    if (prev && [...roomSel.options].some((o) => o.value === prev)) {
+      roomSel.value = prev;
+    }
   }
+
+
+  function getSelectedPackage() {
+    const id = pkgSel.value;
+    return pkgMap.get(id) || null;
+  }
+
+    function hydrateRoomsForPackage() {
+    // now date-aware, like PackagesModal
+    hydrateRoomsForPackageAndDates();
+  }
+
 
   function updateDatesAndNightsFromPackage() {
     const pkg = getSelectedPackage();
@@ -449,12 +935,18 @@ export async function openBookPackageModal() {
     outEl.value = addDaysISO(inEl.value, baseNights);
     const nights = diffNights(inEl.value, outEl.value);
     nightsEl.value = nights > 0 ? String(nights) : '';
+
+    hydrateRoomsForPackage(); // NEW: refresh available cabins for these dates
   });
+
 
   outEl.addEventListener('change', () => {
     const nights = diffNights(inEl.value, outEl.value);
     nightsEl.value = nights > 0 ? String(nights) : '';
+
+    hydrateRoomsForPackage(); // NEW: refresh available cabins for these dates
   });
+
 
   // Save booking
   wrap.querySelector('#pb-save').addEventListener('click', async () => {
@@ -501,16 +993,30 @@ export async function openBookPackageModal() {
         return;
       }
 
-      // Availability
-      const isFree = await isRoomAvailable(
-        roomTypeId,
-        roomTypeCode,
-        inEl.value,
-        outEl.value
-      );
+            // PackagesModal-style validity window enforcement (CI + CO)
+      if (pkg.valid_from && inEl.value < pkg.valid_from) {
+        alert(`Check-in must be on or after ${pkg.valid_from}.`);
+        return;
+      }
+      if (pkg.valid_until) {
+        if (inEl.value > pkg.valid_until) {
+          alert(`Check-in must be on or before ${pkg.valid_until}.`);
+          return;
+        }
+        if (outEl.value > pkg.valid_until) {
+          alert(`Check-out must be on or before ${pkg.valid_until}.`);
+          return;
+        }
+      }
 
-      if (!isFree) {
+      // PackagesModal-style availability: only allow rooms that are actually available
+      const availableRooms = await refreshAvailableRoomsForSelectedPackage();
+      const stillAvailable = availableRooms.some((r) => String(r.id) === String(roomTypeId));
+
+      if (!stillAvailable) {
         alert('This cabin is NOT available for the selected dates.');
+        // keep UI consistent too
+        hydrateRoomsForPackage();
         return;
       }
 
@@ -557,6 +1063,8 @@ export async function openBookPackageModal() {
         room_type_code: roomTypeCode,
         room_name: roomName,
         package_id: pkg.id,
+        package_code: pkg.code || null,
+        package_name: pkg.name || null,
         room_subtotal: roomSubtotal,
         extras_total: extrasTotal,
         discount_amount: 0, // implicit discount is baked into room_subtotal

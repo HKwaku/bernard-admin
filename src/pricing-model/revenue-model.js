@@ -6,6 +6,29 @@ import { openSharedModal, closeModal } from './pricing_model';
 
 const el = (id) => document.getElementById(id);
 
+// Toggle expand/collapse for Rate Type groups (used by Rate Type Performance table)
+function toggleRateTypeGroup(groupId) {
+  const rows = document.querySelectorAll(`.rate-type-group-row[data-parent="${groupId}"]`);
+  const icon = document.getElementById(`${groupId}-icon`);
+  if (!rows || rows.length === 0) return;
+
+  // Robust check (works even if the initial hiding came from CSS, not inline style)
+  const isCollapsed = window.getComputedStyle(rows[0]).display === 'none';
+
+  rows.forEach(r => {
+    r.style.display = isCollapsed ? 'table-row' : 'none';
+  });
+
+  if (icon) icon.textContent = isCollapsed ? '▼' : '▶';
+}
+
+// IMPORTANT: make it callable from inline onclick handlers
+if (typeof window !== 'undefined') {
+  window.toggleRateTypeGroup = toggleRateTypeGroup;
+}
+
+
+
 // Add mobile-responsive styles
 const mobileStyles = `
 <style>
@@ -809,6 +832,21 @@ async function renderRateBreakdownForPeriod(periodKey, roomTypes, targetsByRoomA
   const startDate = new Date(start);
   const endDate = new Date(end);
   const daysInPeriod = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+    // Load blocked dates for this period (to match Revenue Targets section)
+  const { data: blockedDates } = await supabase
+    .from('blocked_dates')
+    .select('room_type_id, blocked_date')
+    .gte('blocked_date', start)
+    .lte('blocked_date', end);
+
+  const blockedByRoom = {};
+  if (blockedDates) {
+    blockedDates.forEach(bd => {
+      if (!blockedByRoom[bd.room_type_id]) blockedByRoom[bd.room_type_id] = 0;
+      blockedByRoom[bd.room_type_id]++;
+    });
+  }
+
   
   // Calculate current prices
   const currentPrices = await calculateCurrentAvgPrices(roomTypes, start, end, activeModelId);
@@ -821,7 +859,9 @@ async function renderRateBreakdownForPeriod(periodKey, roomTypes, targetsByRoomA
   const roomTargets = roomTypes.map(room => {
     const key = `${room.id}_${start}_${end}`;
     const target = targetsByRoomAndPeriod[key];
-    const availableNights = daysInPeriod;
+    const blockedNights = blockedByRoom[room.id] || 0;
+    const availableNights = daysInPeriod - blockedNights;
+
     const targetNights = target ? Math.round(availableNights * (target.target_occupancy / 100)) : 0;
     const requiredAvgPrice = target && targetNights > 0 ? 
       Math.round(target.target_revenue / targetNights) : 0;
@@ -987,7 +1027,6 @@ async function renderBreakdownTable(roomSelection, periodKey, roomTypes, targets
     benchmarkPrice = roomTarget.requiredAvgPrice; // Use room's required price for individual room
   }
   
-  const requiredAvgPrice = Math.round(selectedRevenue / selectedNights);
   
   // Load existing rate breakdowns from database
   let savedBreakdowns = [];
@@ -1100,20 +1139,32 @@ async function renderBreakdownTable(roomSelection, periodKey, roomTypes, targets
     ...otherRates
   ];
   
+  const requiredAvgPrice = selectedNights > 0 ? (selectedRevenue / selectedNights) : 0;
+
+  // Goal-seek: solve for the "Rate card" benchmark price P so that blended avg hits requiredAvgPrice
+  const effectiveMultiplier = rateBreakdown.reduce((sum, r) => {
+    const pctW = (r.pct || 0) / 100;
+    const discW = r.isRateCard ? 0 : ((r.discount || 0) / 100);
+    return sum + (pctW * (1 - discW));
+  }, 0);
+
+  const rateCardBenchmarkPrice = (requiredAvgPrice > 0 && effectiveMultiplier > 0)
+    ? (requiredAvgPrice / effectiveMultiplier)
+    : 0;
+
   const calculations = rateBreakdown.map(rate => {
-    const revenue = Math.round(selectedRevenue * (rate.pct / 100)); // Revenue = % of Total
-    const days = Math.round(selectedNights * (rate.pct / 100));
-    const price = days > 0 ? Math.round(revenue / days) : 0; // Work backwards: Price = Revenue / Days
-    
-    // Calculate implied discount from benchmark price
-    const impliedDiscount = benchmarkPrice > 0 ? 
-      Math.round(((benchmarkPrice - price) / benchmarkPrice) * 100) : 0;
-    
-    // For rate card, discount is 0. For others, use saved discount or calculated implied discount
-    const discount = rate.isRateCard ? 0 : (rate.discount !== undefined ? rate.discount : impliedDiscount);
-    
+    const days = Math.round(selectedNights * (rate.pct / 100)); // display nights allocated
+    const discount = rate.isRateCard ? 0 : (rate.discount || 0);
+
+    const price = rateCardBenchmarkPrice > 0
+      ? Math.round(rateCardBenchmarkPrice * (1 - (discount / 100)))
+      : 0;
+
+    const revenue = Math.round(price * days);
+
     return { ...rate, days, price, revenue, discount };
   });
+
   
   const totalPct = 100; // Always 100 by design
   const totalDays = calculations.reduce((sum, r) => sum + r.days, 0);
@@ -1223,7 +1274,12 @@ async function renderBreakdownTable(roomSelection, periodKey, roomTypes, targets
             <td style="padding:14px"></td>
             <td style="padding:14px;color:#0c4a6e">TOTAL</td>
             <td style="padding:14px"></td>
-            <td style="padding:14px"></td>
+            <td style="padding:14px;text-align:right;color:#0c4a6e">
+              <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:2px">Avg Price</div>
+              <div style="font-size:15px;font-weight:800;color:#1e40af" id="total-avg-price-${targetId}">
+                GHS ${Math.round((selectedNights > 0 ? (selectedRevenue / selectedNights) : 0)).toLocaleString()}
+              </div>
+            </td>
             <td style="padding:14px;text-align:right;font-size:16px;color:#0284c7" id="total-revenue-${targetId}">GHS ${totalRevenue.toLocaleString()}</td>
             <td style="padding:14px"></td>
           </tr>
@@ -1289,62 +1345,82 @@ function attachBreakdownTableListeners(targetId, periodKey, roomSelection, selec
     
     // Calculate rate card percentage
     const rateCardPct = Math.max(0, 100 - otherPct);
+
+        // Read discounts from the UI (rate card discount is always 0)
+    const rowInputs = [];
+    rows.forEach(row => {
+      const isRateCard = row.dataset.isRateCard === 'true';
+      const pctInput = row.querySelector('.rate-pct-input');
+      const discountDisplay = row.querySelector('.rate-discount-display');
+
+      const pct = isRateCard ? rateCardPct : (parseFloat(pctInput?.value) || 0);
+
+      let discount = 0;
+      if (!isRateCard) {
+        const txt = (discountDisplay?.textContent || '0%').replace('%', '');
+        discount = parseFloat(txt) || 0;
+      }
+
+      rowInputs.push({ row, isRateCard, pct, discount });
+    });
+
+    const requiredAvgPrice = selectedNights > 0 ? (selectedRevenue / selectedNights) : 0;
+
+    const effectiveMultiplier = rowInputs.reduce((sum, r) => {
+      const pctW = (r.pct || 0) / 100;
+      const discW = r.isRateCard ? 0 : ((r.discount || 0) / 100);
+      return sum + (pctW * (1 - discW));
+    }, 0);
+
+    const rateCardBenchmarkPrice = (requiredAvgPrice > 0 && effectiveMultiplier > 0)
+      ? (requiredAvgPrice / effectiveMultiplier)
+      : 0;
+
     
     // Calculate rate card price (benchmark for discount)
     const rateCardRevenue = selectedRevenue * (rateCardPct / 100);
     const rateCardDays = Math.round(selectedNights * (rateCardPct / 100));
     const rateCardPrice = rateCardDays > 0 ? Math.round(rateCardRevenue / rateCardDays) : 0;
     
-    // Second pass: update all calculations
-    // Work backwards: Price = Revenue / Days, then calculate implied discount
-    rows.forEach(row => {
-      const isRateCard = row.dataset.isRateCard === 'true';
+        // Update all rows using goal-seek benchmark
+    totalDays = 0;
+
+    rowInputs.forEach(({ row, isRateCard, pct, discount }) => {
       const pctDisplay = row.querySelector('.rate-pct-display');
-      const pctInput = row.querySelector('.rate-pct-input');
-      const discountInput = row.querySelector('.rate-discount-input');
-      
-      let pct, days, price, revenue, discount;
-      
-      if (isRateCard) {
-        pct = rateCardPct;
-        revenue = Math.round(selectedRevenue * (pct / 100));
-        days = Math.round(selectedNights * (pct / 100));
-        price = days > 0 ? Math.round(revenue / days) : 0;
-        discount = 0;
-        if (pctDisplay) pctDisplay.textContent = `${pct}%`;
-      } else {
-        pct = parseFloat(pctInput?.value) || 0;
-        revenue = Math.round(selectedRevenue * (pct / 100)); // Revenue = % × Total
-        days = Math.round(selectedNights * (pct / 100));
-        price = days > 0 ? Math.round(revenue / days) : 0; // Work backwards: Price = Revenue / Days
-        
-        // Calculate implied discount from benchmark price
-        discount = benchmarkPrice > 0 ? 
-          Math.round(((benchmarkPrice - price) / benchmarkPrice) * 100) : 0;
-        
-        // Update discount display
-        const discountDisplay = row.querySelector('.rate-discount-display');
-        if (discountDisplay) {
-          discountDisplay.textContent = `${discount}%`;
-        }
-      }
-      
+
+      if (isRateCard && pctDisplay) pctDisplay.textContent = `${pct}%`;
+
+      const days = Math.round(selectedNights * (pct / 100));
+      const price = rateCardBenchmarkPrice > 0
+        ? Math.round(rateCardBenchmarkPrice * (1 - (discount / 100)))
+        : 0;
+
+      const revenue = Math.round(price * days);
+
       row.querySelector('.rate-days').textContent = days;
       row.querySelector('.rate-price').textContent = `GHS ${price.toLocaleString()}`;
       row.querySelector('.rate-revenue').textContent = `GHS ${revenue.toLocaleString()}`;
-      
+
       totalDays += days;
     });
+
     
     // Update footer totals (always 100%)
     const totalPctEl = document.getElementById(`total-pct-${targetId}`);
     const totalDaysEl = document.getElementById(`total-days-${targetId}`);
     const totalRevenueEl = document.getElementById(`total-revenue-${targetId}`);
+    const totalAvgPriceEl = document.getElementById(`total-avg-price-${targetId}`);
+
     
     if (totalPctEl) totalPctEl.textContent = '100% ✓';
     if (totalDaysEl) totalDaysEl.textContent = totalDays;
     // Use the target revenue from Revenue Targets section, not the sum
     if (totalRevenueEl) totalRevenueEl.textContent = `GHS ${selectedRevenue.toLocaleString()}`;
+    if (totalAvgPriceEl) {
+      const avg = selectedNights > 0 ? Math.round(selectedRevenue / selectedNights) : 0;
+      totalAvgPriceEl.textContent = `GHS ${avg.toLocaleString()}`;
+  }
+
   };
   
   // Populate Type Detail cells after table is rendered (skip for aggregated view)
@@ -1928,13 +2004,15 @@ async function renderRateBreakdownVarianceTable(periodKey, roomTypes, selectedRo
       periodTargetRevenue = breakdowns[0]?.revenue_targets?.target_revenue || 0;
       
       breakdowns.forEach(b => {
-        const key = b.rate_type;
+        const detail = b.type_detail || '';
+        const key = `${b.rate_type}|${detail}`;
         targetBreakdowns[key] = {
           pct: b.pct_business,
           type: b.rate_type,
-          detail: b.type_detail
+          detail
         };
       });
+
     }
   } else {
     // Aggregate across all rooms - weight by target revenue
@@ -1962,85 +2040,117 @@ async function renderRateBreakdownVarianceTable(periodKey, roomTypes, selectedRo
       // Group by rate type and weight by revenue
       const typeMap = {};
       breakdowns.forEach(b => {
-        const key = b.rate_type;
+        const detail = b.type_detail || '';
+        const key = `${b.rate_type}|${detail}`;
         const roomTargetRevenue = b.revenue_targets?.target_revenue || 0;
         const weightedPct = b.pct_business * roomTargetRevenue;
-        
+
         if (!typeMap[key]) {
-          typeMap[key] = { 
-            totalWeightedPct: 0, 
+          typeMap[key] = {
+            totalWeightedPct: 0,
             totalRevenue: 0,
-            type: b.rate_type 
+            type: b.rate_type,
+            detail
           };
         }
         typeMap[key].totalWeightedPct += weightedPct;
         typeMap[key].totalRevenue += roomTargetRevenue;
       });
+
       
       // Calculate weighted average percentage for each rate type
       Object.keys(typeMap).forEach(key => {
-        const avgPct = typeMap[key].totalRevenue > 0 
+        const avgPct = typeMap[key].totalRevenue > 0
           ? typeMap[key].totalWeightedPct / typeMap[key].totalRevenue
           : 0;
-        
+
         targetBreakdowns[key] = {
           pct: Math.round(avgPct),
-          type: typeMap[key].type
+          type: typeMap[key].type,
+          detail: typeMap[key].detail || ''
         };
       });
+
     }
   }
   
   // Calculate actuals from reservations
   const totalRevenue = filteredReservations.reduce((sum, r) => sum + (r.total || 0), 0);
   const actualsByType = {};
-  
+
   filteredReservations.forEach(res => {
-    let rateType = 'Rate card'; // default
-    
+    let rateType = 'Rate card';
+    let typeDetail = '';
+
     if (res.package_code || res.package_name) {
       rateType = 'Packages';
+      typeDetail = res.package_code || res.package_name || '';
     } else if (res.coupon_code) {
       rateType = 'Coupon Promotions';
+      typeDetail = res.coupon_code || '';
     } else if (res.group_reservation_code) {
       rateType = 'Group Bookings';
+      typeDetail = res.group_reservation_code || '';
     }
-    
-    if (!actualsByType[rateType]) {
-      actualsByType[rateType] = { revenue: 0, count: 0 };
+
+    const key = `${rateType}|${typeDetail}`;
+
+    if (!actualsByType[key]) {
+      actualsByType[key] = { revenue: 0, count: 0, type: rateType, detail: typeDetail };
     }
-    actualsByType[rateType].revenue += res.total || 0;
-    actualsByType[rateType].count++;
+    actualsByType[key].revenue += res.total || 0;
+    actualsByType[key].count++;
   });
+
   
   // Combine targets and actuals
-  const allTypes = new Set([...Object.keys(targetBreakdowns), ...Object.keys(actualsByType)]);
+  const allKeys = new Set([...Object.keys(targetBreakdowns), ...Object.keys(actualsByType)]);
   const varianceData = [];
-  
-  allTypes.forEach(type => {
-    const target = targetBreakdowns[type];
-    const actual = actualsByType[type];
-    
+
+  allKeys.forEach(key => {
+    const target = targetBreakdowns[key];
+    const actual = actualsByType[key];
+
+    const type = target?.type || actual?.type || key.split('|')[0];
+    const detail = target?.detail || actual?.detail || key.split('|')[1] || '';
+
     const targetPct = target ? target.pct : 0;
-    // Use period's TARGET revenue, not actual revenue from reservations
     const targetRevenue = Math.round((targetPct / 100) * periodTargetRevenue);
+
     const actualRevenue = actual ? actual.revenue : 0;
+    const actualCount = actual ? actual.count : 0;
+
     const actualPct = totalRevenue > 0 ? Math.round((actualRevenue / totalRevenue) * 100) : 0;
+
     const variance = actualRevenue - targetRevenue;
     const variancePct = targetRevenue > 0 ? ((variance / targetRevenue) * 100) : 0;
-    
+
+    // percentage point variance (Actual% - Target%)
+    const pctVariance = actualPct - targetPct;
+
     varianceData.push({
       type,
+      detail,
       targetPct,
-      targetRevenue,
       actualPct,
+      pctVariance,
+      targetRevenue,
       actualRevenue,
-      actualCount: actual ? actual.count : 0,
+      actualCount,
       variance,
       variancePct
     });
   });
-  
+
+  // === GROUP BY RATE TYPE ===
+  const groupedByType = {};
+  varianceData.forEach(row => {
+    if (!groupedByType[row.type]) groupedByType[row.type] = [];
+    groupedByType[row.type].push(row);
+  });
+
+  const tableInstanceId = `rtperf-${String(periodKey).replace(/\W/g, '-')}-${String(selectedRoomId || 'all').replace(/\W/g, '-')}`;
+
   // Sort by target percentage
   varianceData.sort((a, b) => b.targetPct - a.targetPct);
   
@@ -2048,58 +2158,140 @@ async function renderRateBreakdownVarianceTable(periodKey, roomTypes, selectedRo
     <div style="margin-top:24px">
       <h3 style="font-size:16px;font-weight:700;color:#334155;margin-bottom:12px">📊 Rate Type Performance: Target vs Actual</h3>
       <div class="revenue-table-wrapper">
-        <table style="width:100%;border-collapse:separate;border-spacing:0;background:white;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);min-width:800px">
+        <table style="width:100%;border-collapse:separate;border-spacing:0;background:white;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);min-width:950px">
         <thead>
-          <tr style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%)">
-            <th style="padding:14px 16px;text-align:left;color:white;font-weight:700;font-size:13px">Rate Type</th>
-            <th style="padding:14px 16px;text-align:right;color:white;font-weight:700;font-size:13px">Target %</th>
-            <th style="padding:14px 16px;text-align:right;color:white;font-weight:700;font-size:13px">Actual %</th>
-            <th style="padding:14px 16px;text-align:right;color:white;font-weight:700;font-size:13px">% Variance</th>
-            <th style="padding:14px 16px;text-align:right;color:white;font-weight:700;font-size:13px">Target Revenue</th>
-            <th style="padding:14px 16px;text-align:right;color:white;font-weight:700;font-size:13px">Actual Revenue</th>
-            <th style="padding:14px 16px;text-align:right;color:white;font-weight:700;font-size:13px">Revenue Variance</th>
-            <th style="padding:14px 16px;text-align:right;color:white;font-weight:700;font-size:13px">Bookings</th>
-          </tr>
-        </thead>
+            <tr style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%)">
+              <th style="padding:14px 16px;text-align:left;color:white;font-weight:700;font-size:13px">Rate Type</th>
+              <th style="padding:14px 16px;text-align:left;color:white;font-weight:700;font-size:13px">Type Detail</th>
+
+              <th style="padding:14px 16px;text-align:right;color:white;font-weight:700;font-size:13px">Target %</th>
+              <th style="padding:14px 16px;text-align:right;color:white;font-weight:700;font-size:13px">Actual %</th>
+              <th style="padding:14px 16px;text-align:right;color:white;font-weight:700;font-size:13px">% Variance</th>
+
+              <th style="padding:14px 16px;text-align:right;color:white;font-weight:700;font-size:13px">Target Revenue</th>
+              <th style="padding:14px 16px;text-align:right;color:white;font-weight:700;font-size:13px">Actual Revenue</th>
+              <th style="padding:14px 16px;text-align:right;color:white;font-weight:700;font-size:13px">Revenue Variance</th>
+
+              <th style="padding:14px 16px;text-align:right;color:white;font-weight:700;font-size:13px">Bookings</th>
+            </tr>
+          </thead>
+
         <tbody>
-          ${varianceData.map((row, idx) => {
-            const varianceColor = row.variance >= 0 ? '#059669' : '#dc2626';
-            const varianceBg = row.variance >= 0 ? '#d1fae5' : '#fee2e2';
-            const varianceSign = row.variance >= 0 ? '+' : '';
-            
-            // Calculate percentage point variance (Actual % - Target %)
-            const pctVariance = row.actualPct - row.targetPct;
-            const pctVarianceSign = pctVariance >= 0 ? '+' : '';
-            const pctVarianceColor = pctVariance >= 0 ? '#059669' : '#dc2626';
-            const pctVarianceBg = pctVariance >= 0 ? '#d1fae5' : '#fee2e2';
-            
+          ${Object.keys(groupedByType).map((rateType, gIdx) => {
+            const groupRows = groupedByType[rateType];
+            const groupId = `${tableInstanceId}-group-${gIdx}`;
+
+            const groupTargetRevenue = groupRows.reduce((s, r) => s + (r.targetRevenue || 0), 0);
+            const groupActualRevenue = groupRows.reduce((s, r) => s + (r.actualRevenue || 0), 0);
+            const groupBookings = groupRows.reduce((s, r) => s + (r.actualCount || 0), 0);
+
+            const groupTargetPct = periodTargetRevenue > 0
+              ? Math.round((groupTargetRevenue / periodTargetRevenue) * 100)
+              : 0;
+
+            const groupActualPct = totalRevenue > 0
+              ? Math.round((groupActualRevenue / totalRevenue) * 100)
+              : 0;
+
+            const groupPctVariance = groupActualPct - groupTargetPct;
+            const groupRevenueVariance = groupActualRevenue - groupTargetRevenue;
+
+            const pctVarColor = groupPctVariance >= 0 ? '#166534' : '#991b1b';
+            const pctVarBg = groupPctVariance >= 0 ? '#dcfce7' : '#fee2e2';
+            const pctVarSign = groupPctVariance >= 0 ? '+' : '';
+
+            const revVarColor = groupRevenueVariance >= 0 ? '#166534' : '#991b1b';
+            const revVarBg = groupRevenueVariance >= 0 ? '#dcfce7' : '#fee2e2';
+            const revVarSign = groupRevenueVariance >= 0 ? '+' : '-';
+
             return `
-              <tr style="border-bottom:1px solid #e2e8f0;${idx % 2 === 0 ? 'background:#fafbfc' : 'background:white'}">
-                <td style="padding:12px 16px;font-weight:600;color:#334155">${row.type}</td>
-                <td style="padding:12px 16px;text-align:right;color:#64748b">${row.targetPct}%</td>
-                <td style="padding:12px 16px;text-align:right;font-weight:600;color:#64748b">GHS ${row.targetRevenue.toLocaleString()}</td>
-                <td style="padding:12px 16px;text-align:right;color:#3b82f6;font-weight:600">${row.actualPct}%</td>
-                <td style="padding:12px 16px;text-align:right">
-                  <div style="display:inline-block;padding:6px 10px;background:${pctVarianceBg};border-radius:6px;font-weight:700;color:${pctVarianceColor}">
-                    ${pctVarianceSign}${pctVariance}pp
-                  </div>
+              <!-- GROUP HEADER ROW (ALWAYS VISIBLE; SHOWS SUMMARY VALUES) -->
+              <tr
+                class="rate-type-group-header"
+                style="background:#0f172a;color:white;cursor:pointer"
+                onclick="toggleRateTypeGroup('${groupId}')"
+              >
+                <td style="padding:14px 16px;font-weight:800;white-space:nowrap">
+                  <span style="display:inline-block;width:18px" id="${groupId}-icon">▶</span>
+                  ${rateType}
                 </td>
-                <td style="padding:12px 16px;text-align:right;font-weight:700;color:#3b82f6">GHS ${row.actualRevenue.toLocaleString()}</td>
-                <td style="padding:12px 16px;text-align:right;color:#64748b">${row.actualCount}</td>
-                <td style="padding:12px 16px;text-align:right">
-                  <div style="display:inline-block;padding:6px 12px;background:${varianceBg};border-radius:6px;font-weight:700;color:${varianceColor}">
-                    ${varianceSign}GHS ${Math.abs(row.variance).toLocaleString()}
-                    <div style="font-size:11px;margin-top:2px">(${varianceSign}${row.variancePct.toFixed(1)}%)</div>
-                  </div>
+
+                <td style="padding:14px 16px;color:#cbd5f5;font-weight:600">
+                  (${groupRows.length} items)
                 </td>
+
+                <td style="padding:14px 16px;text-align:right;font-weight:700">${groupTargetPct}%</td>
+                <td style="padding:14px 16px;text-align:right;font-weight:700">${groupActualPct}%</td>
+
+                <td style="padding:14px 16px;text-align:right">
+                  <span style="background:${pctVarBg};color:${pctVarColor};padding:6px 10px;border-radius:6px;font-weight:800">
+                    ${pctVarSign}${groupPctVariance}pp
+                  </span>
+                </td>
+
+                <td style="padding:14px 16px;text-align:right;font-weight:800">GHS ${groupTargetRevenue.toLocaleString()}</td>
+                <td style="padding:14px 16px;text-align:right;font-weight:800">GHS ${groupActualRevenue.toLocaleString()}</td>
+
+                <td style="padding:14px 16px;text-align:right">
+                  <span style="background:${revVarBg};color:${revVarColor};padding:8px 12px;border-radius:8px;font-weight:800">
+                    ${revVarSign}GHS ${Math.abs(groupRevenueVariance).toLocaleString()}
+                  </span>
+                </td>
+
+                <td style="padding:14px 16px;text-align:right;font-weight:800">${groupBookings}</td>
               </tr>
+
+              <!-- DETAIL ROWS (COLLAPSED BY DEFAULT) -->
+              ${groupRows.map((row, idx) => {
+                const varianceColor = row.variance >= 0 ? '#166534' : '#991b1b';
+                const varianceBg = row.variance >= 0 ? '#dcfce7' : '#fee2e2';
+                const varianceSign = row.variance >= 0 ? '+' : '-';
+
+                const pctVarColor = row.pctVariance >= 0 ? '#166534' : '#991b1b';
+                const pctVarBg = row.pctVariance >= 0 ? '#dcfce7' : '#fee2e2';
+                const pctVarSign = row.pctVariance >= 0 ? '+' : '';
+
+                return `
+                  <tr
+                    class="rate-type-group-row"
+                    data-parent="${groupId}"
+                    style="display:none;border-bottom:1px solid #e2e8f0;${idx % 2 === 0 ? 'background:#fafbfc' : 'background:white'}"
+                  >
+                    <td style="padding:12px 16px;font-weight:700;color:#334155">${row.type}</td>
+                    <td style="padding:12px 16px;color:#475569">${row.detail || ''}</td>
+
+                    <td style="padding:12px 16px;text-align:right">${row.targetPct}%</td>
+                    <td style="padding:12px 16px;text-align:right">${row.actualPct}%</td>
+
+                    <td style="padding:12px 16px;text-align:right">
+                      <span style="background:${pctVarBg};color:${pctVarColor};padding:6px 10px;border-radius:6px;font-weight:700">
+                        ${pctVarSign}${row.pctVariance}pp
+                      </span>
+                    </td>
+
+                    <td style="padding:12px 16px;text-align:right;font-weight:700">GHS ${row.targetRevenue.toLocaleString()}</td>
+                    <td style="padding:12px 16px;text-align:right;font-weight:700">GHS ${row.actualRevenue.toLocaleString()}</td>
+
+                    <td style="padding:12px 16px;text-align:right">
+                      <span style="background:${varianceBg};color:${varianceColor};padding:6px 10px;border-radius:6px;font-weight:700">
+                        ${varianceSign}GHS ${Math.abs(row.variance).toLocaleString()}
+                      </span>
+                    </td>
+
+                    <td style="padding:12px 16px;text-align:right">${row.actualCount}</td>
+                  </tr>
+                `;
+              }).join('')}
             `;
           }).join('')}
         </tbody>
+
+
       </table>
       </div>
     </div>
   `;
+
 }
 
 function openPeriodModal(roomTypes, activeModelId) {

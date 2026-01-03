@@ -25,8 +25,8 @@ async function loadDisabledCheckinDatesForAllRooms() {
     // 1-year horizon like the widget
     horizonEnd.setFullYear(horizonEnd.getFullYear() + 1);
 
-    const horizonStartISO = today.toISOString().slice(0, 10);
-    const horizonEndISO = horizonEnd.toISOString().slice(0, 10);
+    const horizonStartISO = toDateInput(today);
+    const horizonEndISO = toDateInput(horizonEnd);
 
     // Load all active room types
     const { data: rooms, error: roomErr } = await supabase
@@ -73,7 +73,7 @@ async function loadDisabledCheckinDatesForAllRooms() {
         const end = new Date(r.check_out + 'T00:00:00');
 
         for (let d = new Date(start); d < end; d.setDate(d.getDate() + 1)) {
-          const dStr = d.toISOString().slice(0, 10);
+          const dStr = toDateInput(d);
           occupancy[key].add(dStr);
         }
       });
@@ -101,7 +101,7 @@ async function loadDisabledCheckinDatesForAllRooms() {
     const cursor = new Date(today);
 
     while (cursor <= horizonEnd) {
-      const ciStr = cursor.toISOString().slice(0, 10);
+      const ciStr = toDateInput(cursor);
 
       let hasAvailableRoom = false;
       for (const room of rooms) {
@@ -135,7 +135,11 @@ function toDateInput(v) {
   if (!v) return '';
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return '';
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  // Use local timezone instead of UTC to avoid date shifting
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 function addDaysISO(isoDate, nights) {
@@ -493,6 +497,128 @@ export async function openNewCustomBookingModal() {
   wrap.id = 'reservation-modal';
   wrap.className = 'modal show';
   document.body.appendChild(wrap);
+  
+  // Add calendar CSS if not already present
+  if (!document.getElementById('custom-calendar-styles')) {
+    const style = document.createElement('style');
+    style.id = 'custom-calendar-styles';
+    style.textContent = `
+      .date-picker-wrapper {
+        position: relative;
+        width: 100%;
+      }
+      .date-picker-input {
+        width: 100%;
+        padding: 12px 14px;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        font-size: 14px;
+        cursor: pointer;
+        background: white;
+      }
+      .date-picker-input:focus {
+        outline: none;
+        border-color: #f97316;
+        box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+      }
+      .date-picker-dropdown {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        margin-top: 4px;
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        z-index: 999999 !important;
+        display: none;
+        padding: 16px;
+      }
+      .date-picker-dropdown.active {
+        display: block;
+        z-index: 9999999 !important;
+      }
+      .date-picker-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+      }
+      .date-picker-nav {
+        background: none;
+        border: none;
+        font-size: 18px;
+        cursor: pointer;
+        padding: 4px 8px;
+        color: #374151;
+      }
+      .date-picker-nav:hover {
+        color: #f97316;
+      }
+      .date-picker-month {
+        font-weight: 600;
+        font-size: 14px;
+        color: #111827;
+      }
+      .date-picker-weekdays {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 4px;
+        margin-bottom: 8px;
+      }
+      .date-picker-weekday {
+        text-align: center;
+        font-size: 12px;
+        font-weight: 600;
+        color: #6b7280;
+        padding: 4px;
+      }
+      .date-picker-days {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 4px;
+      }
+      .date-picker-day {
+        aspect-ratio: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        border-radius: 8px;
+        cursor: pointer;
+        border: none;
+        background: white;
+        color: #111827;
+        position: relative;
+      }
+      .date-picker-day:hover:not(.disabled):not(.empty) {
+        background: #f3f4f6;
+      }
+      .date-picker-day.selected {
+        background: #f97316;
+        color: white;
+      }
+      .date-picker-day.in-range {
+        background: rgba(249, 115, 22, 0.1);
+      }
+      .date-picker-day.disabled {
+        color: #d1d5db;
+        cursor: not-allowed;
+        text-decoration: line-through;
+        opacity: 0.5;
+      }
+      .date-picker-day.empty {
+        cursor: default;
+        visibility: hidden;
+      }
+      .date-picker-day.today {
+        border: 2px solid #f97316;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+  
   // clicking the backdrop closes the modal
   wrap.addEventListener('click', (e) => {
     if (e.target === wrap) wrap.remove();
@@ -558,118 +684,111 @@ export async function openNewCustomBookingModal() {
       </div>
 
       <div style="padding:24px;overflow-y:auto;flex:1;">
-        <div class="form-grid">
-          <div class="form-group">
-            <label>First Name</label>
-            <input id="nb-first" type="text" />
-          </div>
-          <div class="form-group">
-            <label>Last Name</label>
-            <input id="nb-last" type="text" />
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label>Email</label>
-          <input id="nb-email" type="email" />
-        </div>
-
-        <div class="form-group">
-          <label>Phone</label>
-          <div style="display:flex;gap:8px;align-items:flex-start;width:100%">
-            ${buildCountrySelectHtml("nb-country-code", "+233")}
-            <input id="nb-phone" type="text" style="flex:1" />
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label style="display:flex;align-items:center;gap:4px;">
-            <span>Influencer?</span>
-            <input
-              type="checkbox"
-              id="nb-influencer"
-              style="width:auto;flex-shrink:0;margin-left:2px"
-            />
-          </label>
-        </div>
-
-        <div class="form-grid">
-          <div class="form-group" style="min-width:0">
-            <label>Cabins (select one or more)</label>
-            <div
-              id="nb-rooms-list"
-              style="
-                border:1px solid var(--ring);
-                border-radius:var(--radius-md);
-                padding:10px;
-                max-height:200px;
-                overflow-y:auto;
-                display:flex;
-                flex-direction:column;
-                gap:6px;
-              "
-            >
-              ${
-                (rooms || []).length
-                  ? (rooms || [])
-                      .map(
-                        (r) => `
-                          <label class="nb-room-row" style="display:flex;align-items:center;gap:8px;margin:4px 0;cursor:pointer">
-                            <input 
-                              type="checkbox" 
-                              class="nb-room-checkbox" 
-                              value="${r.id}" 
-                              data-code="${r.code || ''}" 
-                              data-name="${r.name || ''}"
-                              style="width:auto"
-                            />
-                            <span>${(r.code || '').toUpperCase()} – ${r.name || ''}</span>
-                          </label>
-
-                        `
-                      )
-                      .join('')
-                  : '<div class="muted">No room types available</div>'
-              }
-            </div>
-          </div>
-          <div class="form-group">
-            <label>Currency</label>
-            <input id="nb-currency" type="text" value="GHS" />
-          </div>
-        </div>
-
-        <div class="form-grid">
-          <div class="form-group">
-            <label>Check-in</label>
-            <input id="nb-in" type="date" value="${today}" />
-          </div>
-          <div class="form-group">
-            <label>Check-out</label>
-            <input id="nb-out" type="date" value="${addDaysISO(today,1)}" />
-          </div>
-        </div>
-
-        <div class="form-grid">
-          <div class="form-group">
-            <label>Nights (auto-calculated)</label>
-            <input id="nb-nights" type="number" min="1" step="1" value="1" readonly style="background:#f5f5f5" />
-          </div>
-          <!-- keep subtotal only as a hidden input so save logic still works -->
-          <div class="form-group" style="display:none">
-            <input id="nb-room-subtotal" type="hidden" value="" />
-          </div>
+        <!-- STEP 1: Search Criteria (like BookingWidget) -->
+        <div style="background:linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);border-left:4px solid #f59e0b;padding:12px 16px;border-radius:8px;margin:0 0 20px 0;display:flex;align-items:center;gap:12px;">
+          <svg style="width:20px;height:20px;color:#f59e0b;flex-shrink:0;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+          <span style="color:#92400e;font-size:14px;font-weight:500;">Select guests and dates to see available cabins.</span>
         </div>
 
         <div class="form-grid">
           <div class="form-group">
             <label>Adults</label>
-            <input id="nb-adults" type="number" min="1" step="1" value="1" />
+            <select id="nb-adults">
+              <option value="1">1</option>
+              <option value="2" selected>2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+            </select>
           </div>
+          <div class="form-group">
+            <label>Check-in</label>
+            <div class="date-picker-wrapper">
+              <input id="nb-in" type="text" readonly class="date-picker-input" placeholder="Select date" value="${formatDisplayDateCustom(today)}" />
+              <div id="nb-in-picker" class="date-picker-dropdown"></div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Check-out</label>
+            <div class="date-picker-wrapper">
+              <input id="nb-out" type="text" readonly class="date-picker-input" placeholder="Select date" value="${formatDisplayDateCustom(addDaysISO(today,1))}" />
+              <div id="nb-out-picker" class="date-picker-dropdown"></div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <span style="background:#f3f4f6;padding:6px 12px;border-radius:8px;font-size:13px">
+              Nights: <strong id="nb-nights-display">1</strong>
+            </span>
+          </div>
+          <button id="search-availability-btn" class="btn" style="background:#667eea;color:white">
+            Search Available Cabins
+          </button>
+        </div>
+
+        <!-- Available Cabins Section (hidden until search) -->
+        <div id="available-cabins-section" style="display:none;margin-bottom:20px">
+          <h4 style="margin:0 0 12px 0;color:#1e293b;font-size:16px">Available Cabins</h4>
+          <div id="nb-rooms-list" style="border:1px solid var(--ring);border-radius:var(--radius-md);padding:10px;max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:6px">
+            <!-- Will be populated dynamically -->
+          </div>
+          <div id="nb-no-rooms-message" style="display:none;padding:16px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;color:#b91c1c;margin-top:12px">
+            No cabins available for the selected dates and number of guests.
+          </div>
+        </div>
+
+        <!-- STEP 2: Guest Information (only show after rooms selected) -->
+        <div id="guest-info-section" style="display:none">
+          <h4 style="margin:20px 0 12px 0;color:#1e293b;font-size:16px;border-top:2px solid #e2e8f0;padding-top:20px">Guest Information</h4>
+          
+          <div class="form-grid">
+            <div class="form-group">
+              <label>First Name</label>
+              <input id="nb-first" type="text" />
+            </div>
+            <div class="form-group">
+              <label>Last Name</label>
+              <input id="nb-last" type="text" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Email</label>
+            <input id="nb-email" type="email" />
+          </div>
+
+          <div class="form-group">
+            <label>Phone</label>
+            <div style="display:flex;gap:8px;align-items:flex-start;width:100%">
+              ${buildCountrySelectHtml("nb-country-code", "+233")}
+              <input id="nb-phone" type="text" style="flex:1" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label style="display:flex;align-items:center;gap:4px;">
+              <span>Influencer?</span>
+              <input type="checkbox" id="nb-influencer" style="width:auto;flex-shrink:0;margin-left:2px" />
+            </label>
+          </div>
+
           <div class="form-group">
             <label>Children</label>
             <input id="nb-children" type="number" min="0" step="1" value="0" />
           </div>
+        </div>
+
+        <!-- Hidden fields -->
+        <input id="nb-nights" type="hidden" value="1" />
+        <input id="nb-room-subtotal" type="hidden" value="" />
+        <div class="form-group" style="display:none">
+          <label>Currency</label>
+          <input id="nb-currency" type="text" value="GHS" />
         </div>
 
         <div class="form-group">
@@ -782,10 +901,407 @@ export async function openNewCustomBookingModal() {
   // enable search on the country code selector
   attachCountrySearch('nb-country-code');
 
+  // ===== CALENDAR FUNCTIONS (from BookingWidget) =====
+  
+  // Helper function to format display date
+  function formatDisplayDateCustom(isoDate) {
+    if (!isoDate) return '';
+    const d = new Date(isoDate + 'T00:00:00');
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mmm = months[d.getMonth()];
+    const yyyy = d.getFullYear();
+    return dd + '-' + mmm + '-' + yyyy;
+  }
+  
+  // Helper function to parse display date back to ISO
+  function parseDisplayDateToISO(displayDate) {
+    if (!displayDate) return '';
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const parts = displayDate.split('-');
+    if (parts.length !== 3) return '';
+    const day = parts[0];
+    const monthIndex = months.indexOf(parts[1]);
+    const year = parts[2];
+    if (monthIndex === -1) return '';
+    return `${year}-${String(monthIndex + 1).padStart(2, '0')}-${day}`;
+  }
+  
+  // Calendar state
+  let activePickerId = null;
+  let selectedDatesCalendar = { 'nb-in': null, 'nb-out': null };
+  let currentPickerMonth = { 'nb-in': new Date(), 'nb-out': new Date() };
+  let calendarDisabledDates = [];
+  
+  // Load disabled dates (reuse the existing function)
+  let currentAdultsForCalendar = 2; // Track current adults selection
+  
+  async function loadCalendarDisabledDates(adults) {
+    // Store for later use
+    currentAdultsForCalendar = adults || currentAdultsForCalendar;
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayISO = toDateInput(today);
+    
+    const disabledSet = new Set();
+    
+    // 1) Always disable past dates
+    for (let i = -365; i < 0; i++) {
+      disabledSet.add(addDaysISO(todayISO, i));
+    }
+    
+    // 2) For next 90 days (not 365!), disable dates where combined capacity < adults
+    // Reduced from 365 to 90 for performance - most bookings are within 90 days
+    const MAX_LOOKAHEAD = 365;
+    const BATCH_SIZE = 30; // Smaller batches for faster response
+    
+    for (let batchStart = 0; batchStart <= MAX_LOOKAHEAD; batchStart += BATCH_SIZE) {
+      const promises = [];
+      const dates = [];
+      
+      for (let i = 0; i < BATCH_SIZE && (batchStart + i) <= MAX_LOOKAHEAD; i++) {
+        const offset = batchStart + i;
+        const ciISO = addDaysISO(todayISO, offset);
+        const coISO = addDaysISO(ciISO, 1);
+        
+        dates.push(ciISO);
+        
+        // Call get_available_rooms with p_adults: 1 to get ALL available rooms
+        // Then we calculate combined capacity client-side
+        promises.push(
+          supabase.rpc('get_available_rooms', {
+            p_check_in: ciISO,
+            p_check_out: coISO,
+            p_adults: 1 // Get ALL available rooms regardless of capacity
+          })
+          .then(({ data }) => data || [])
+          .catch(() => [])
+        );
+      }
+      
+      try {
+        const results = await Promise.all(promises);
+        
+        for (let i = 0; i < results.length; i++) {
+          const rooms = results[i];
+          const ciISO = dates[i];
+          
+          if (!rooms || rooms.length === 0) {
+            disabledSet.add(ciISO);
+          } else {
+            // Calculate COMBINED CAPACITY like BookingWidget
+            let totalCapacity = 0;
+            rooms.forEach(room => {
+              const cap = parseInt(room.max_adults, 10) || 0;
+              totalCapacity += cap;
+            });
+            
+            // Disable if combined capacity < adults
+            if (totalCapacity < currentAdultsForCalendar) {
+              disabledSet.add(ciISO);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error loading disabled dates batch:', err);
+      }
+    }
+    
+    calendarDisabledDates = Array.from(disabledSet);
+    
+    // Refresh calendar if open
+    if (activePickerId) {
+      renderCalendar(activePickerId);
+    }
+  }
+  
+  function openDatePicker(pickerId) {
+    closeDatePicker();
+    activePickerId = pickerId;
+    const picker = document.querySelector('#' + pickerId + '-picker');
+    if (!picker) return;
+    picker.classList.add('active');
+    
+    const baseDate = selectedDatesCalendar[pickerId] ? new Date(selectedDatesCalendar[pickerId] + 'T00:00:00') : new Date();
+    currentPickerMonth[pickerId] = new Date(baseDate.getFullYear(), baseDate.getMonth(), 1);
+    
+    renderCalendar(pickerId);
+  }
+  
+  function closeDatePicker() {
+    if (activePickerId) {
+      const picker = document.querySelector('#' + activePickerId + '-picker');
+      if (picker) picker.classList.remove('active');
+      activePickerId = null;
+    }
+  }
+  
+  function renderCalendar(pickerId) {
+    const picker = document.querySelector('#' + pickerId + '-picker');
+    if (!picker) return;
+    
+    const month = currentPickerMonth[pickerId];
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                        'July', 'August', 'September', 'October', 'November', 'December'];
+    
+    let html = '<div class="date-picker-header">' +
+               '<button type="button" class="date-picker-nav" data-action="prev">‹</button>' +
+               '<div class="date-picker-month">' + monthNames[month.getMonth()] + ' ' + month.getFullYear() + '</div>' +
+               '<button type="button" class="date-picker-nav" data-action="next">›</button>' +
+               '</div>';
+    
+    html += '<div class="date-picker-weekdays">';
+    ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].forEach(day => {
+      html += '<div class="date-picker-weekday">' + day + '</div>';
+    });
+    html += '</div>';
+    
+    html += '<div class="date-picker-days">';
+    
+    const firstDay = new Date(month.getFullYear(), month.getMonth(), 1).getDay();
+    const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+    
+    // Empty cells before first day
+    for (let i = 0; i < firstDay; i++) {
+      html += '<button class="date-picker-day empty"></button>';
+    }
+    
+    const today = toDateInput(new Date());
+    
+    // Days of the month
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateObj = new Date(month.getFullYear(), month.getMonth(), day);
+      const dateStr = toDateInput(dateObj);
+      let isDisabled = false;
+      
+      // Different blocking logic for check-in vs check-out
+      if (pickerId === 'nb-in') {
+        // For check-in: block if that specific date has no availability
+        isDisabled = calendarDisabledDates.indexOf(dateStr) !== -1 || dateStr < today;
+      } else if (pickerId === 'nb-out') {
+        // For check-out: block if date is before/equal to check-in, or if there's any blocked date in the interval
+        if (!selectedDatesCalendar['nb-in'] || dateStr <= selectedDatesCalendar['nb-in']) {
+          isDisabled = true;
+        } else {
+          // Check if any date in the interval [check-in, check-out) is blocked
+          const checkInDate = selectedDatesCalendar['nb-in'];
+          let hasBlockedDateInInterval = false;
+          let currentDate = checkInDate;
+          
+          while (currentDate < dateStr) {
+            if (calendarDisabledDates.indexOf(currentDate) !== -1) {
+              hasBlockedDateInInterval = true;
+              break;
+            }
+            currentDate = addDaysISO(currentDate, 1);
+          }
+          
+          isDisabled = hasBlockedDateInInterval;
+        }
+      }
+      
+      const isSelected = dateStr === selectedDatesCalendar[pickerId];
+      const isToday = dateStr === today;
+      let isInRange = false;
+      
+      if (selectedDatesCalendar['nb-in'] && selectedDatesCalendar['nb-out']) {
+        isInRange = dateStr > selectedDatesCalendar['nb-in'] && dateStr < selectedDatesCalendar['nb-out'];
+      }
+      
+      let classes = 'date-picker-day';
+      if (isDisabled) classes += ' disabled';
+      if (isSelected) classes += ' selected';
+      if (isToday) classes += ' today';
+      if (isInRange) classes += ' in-range';
+      
+      html += '<button class="' + classes + '" data-date="' + dateStr + '"' +
+              (isDisabled ? ' disabled' : '') + '>' + day + '</button>';
+    }
+    
+    html += '</div>';
+    picker.innerHTML = html;
+    
+    // Add event listeners
+    picker.querySelectorAll('[data-action="prev"]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        currentPickerMonth[pickerId] = new Date(month.getFullYear(), month.getMonth() - 1, 1);
+        renderCalendar(pickerId);
+      });
+    });
+    
+    picker.querySelectorAll('[data-action="next"]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        currentPickerMonth[pickerId] = new Date(month.getFullYear(), month.getMonth() + 1, 1);
+        renderCalendar(pickerId);
+      });
+    });
+    
+    picker.querySelectorAll('.date-picker-day:not(.disabled):not(.empty)').forEach(dayBtn => {
+      dayBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const dateStr = dayBtn.getAttribute('data-date');
+        if (dateStr) selectDateCalendar(pickerId, dateStr);
+      });
+    });
+  }
+  
+  function selectDateCalendar(pickerId, dateStr) {
+    selectedDatesCalendar[pickerId] = dateStr;
+    const inputEl = document.querySelector('#' + pickerId);
+    if (inputEl) inputEl.value = formatDisplayDateCustom(dateStr);
+    
+    if (pickerId === 'nb-in') {
+      // Find the nearest available checkout date
+      if (!selectedDatesCalendar['nb-out'] || selectedDatesCalendar['nb-out'] <= dateStr) {
+        let checkoutDate = addDaysISO(dateStr, 1);
+        const maxLookahead = 365;
+        let found = false;
+        
+        // Check each potential checkout date
+        for (let i = 1; i <= maxLookahead; i++) {
+          checkoutDate = addDaysISO(dateStr, i);
+          let hasBlockedDate = false;
+          
+          // Check if any date in the interval [check-in, checkout) is blocked
+          let currentDate = dateStr;
+          while (currentDate < checkoutDate) {
+            if (calendarDisabledDates.indexOf(currentDate) !== -1) {
+              hasBlockedDate = true;
+              break;
+            }
+            currentDate = addDaysISO(currentDate, 1);
+          }
+          
+          // If no blocked dates in the interval, this is a valid checkout date
+          if (!hasBlockedDate) {
+            found = true;
+            break;
+          }
+        }
+        
+        // Set the checkout date
+        selectedDatesCalendar['nb-out'] = checkoutDate;
+        const outInputEl = document.querySelector('#nb-out');
+        if (outInputEl) outInputEl.value = formatDisplayDateCustom(checkoutDate);
+      }
+      // If check-out picker is open, refresh it to show updated blocking
+      if (activePickerId === 'nb-out') {
+        renderCalendar('nb-out');
+      }
+    }
+    
+    closeDatePicker();
+    calculateNights();
+    computeRoomSubtotal();
+  }
+  
+  // Initialize calendar disabled dates with default adults (2)
+  loadCalendarDisabledDates(2);
+  
+  // ===== END CALENDAR FUNCTIONS =====
+
   const inEl = wrap.querySelector('#nb-in');
   const outEl = wrap.querySelector('#nb-out');
   const nightsEl = wrap.querySelector('#nb-nights');
+  const nightsDisplayEl = wrap.querySelector('#nb-nights-display');
   const roomSubtotalEl = wrap.querySelector('#nb-room-subtotal');
+  const availableCabinsSection = wrap.querySelector('#available-cabins-section');
+  const roomsListEl = wrap.querySelector('#nb-rooms-list');
+  const noRoomsMessage = wrap.querySelector('#nb-no-rooms-message');
+  const guestInfoSection = wrap.querySelector('#guest-info-section');
+  const searchBtn = wrap.querySelector('#search-availability-btn');
+
+  // Search availability handler (matching BookingWidget flow)
+  async function searchAvailability() {
+    const adults = parseInt(wrap.querySelector('#nb-adults').value, 10) || 2;
+    const checkInISO = parseDisplayDateToISO(inEl.value);
+    const checkOutISO = parseDisplayDateToISO(outEl.value);
+
+    if (!checkInISO || !checkOutISO) {
+      alert('Please select check-in and check-out dates');
+      return;
+    }
+
+    searchBtn.disabled = true;
+    searchBtn.textContent = 'Searching...';
+
+    try {
+      // Use p_adults: 1 to get ALL available rooms (same as calendar)
+      const { data: availableRooms, error } = await supabase.rpc('get_available_rooms', {
+        p_check_in: checkInISO,
+        p_check_out: checkOutISO,
+        p_adults: 1 // Get ALL available rooms to calculate combined capacity
+      });
+
+      if (error) throw error;
+
+      // Calculate COMBINED CAPACITY like BookingWidget and calendar
+      let totalCapacity = 0;
+      (availableRooms || []).forEach(room => {
+        const cap = parseInt(room.max_adults, 10) || 0;
+        totalCapacity += cap;
+      });
+
+      // Show available cabins section
+      availableCabinsSection.style.display = 'block';
+
+      // Check if combined capacity can handle total adults
+      if (!availableRooms || availableRooms.length === 0 || totalCapacity < adults) {
+        roomsListEl.innerHTML = '';
+        noRoomsMessage.style.display = 'block';
+        guestInfoSection.style.display = 'none';
+      } else {
+        noRoomsMessage.style.display = 'none';
+        
+        // Render ALL available rooms (user can select multiple to meet capacity)
+        roomsListEl.innerHTML = availableRooms.map(r => `
+          <label class="nb-room-row" style="display:flex;align-items:center;gap:8px;margin:4px 0;cursor:pointer">
+            <input 
+              type="checkbox" 
+              class="nb-room-checkbox" 
+              value="${r.id}" 
+              data-code="${r.code || ''}" 
+              data-name="${r.name || ''}"
+              data-max-adults="${r.max_adults || 0}"
+              style="width:auto"
+            />
+            <span style="flex:1">${(r.code || '').toUpperCase()} – ${r.name || ''} (max ${r.max_adults} adults)</span>
+            <span style="font-size:12px;color:#64748b">GHS ${parseFloat(r.total_price || 0).toFixed(2)}</span>
+          </label>
+        `).join('');
+
+        // Show guest info section
+        guestInfoSection.style.display = 'block';
+      }
+
+    } catch (err) {
+      console.error('Search availability error:', err);
+      alert('Error searching availability: ' + err.message);
+    } finally {
+      searchBtn.disabled = false;
+      searchBtn.textContent = 'Search Available Cabins';
+    }
+  }
+
+  searchBtn.addEventListener('click', searchAvailability);
+
+  // Re-search when adults or dates change
+  wrap.querySelector('#nb-adults').addEventListener('change', async () => {
+    const adults = parseInt(wrap.querySelector('#nb-adults').value, 10) || 2;
+    
+    // Reload calendar blocked dates with new adults count (like BookingWidget)
+    await loadCalendarDisabledDates(adults);
+    
+    // Hide results to force re-search
+    availableCabinsSection.style.display = 'none';
+    guestInfoSection.style.display = 'none';
+  });
 
   // --- Room pricing helpers (weekday/weekend split, multiple cabins) ---
   const roomMap = Object.fromEntries((rooms || []).map((r) => [String(r.id), r]));
@@ -798,8 +1314,13 @@ export async function openNewCustomBookingModal() {
 
   async function computeRoomSubtotal() {
     const selectedRoomIds = getSelectedRoomIds();
-    const ci = new Date(inEl.value);
-    const co = new Date(outEl.value);
+    
+    // Parse display dates to ISO
+    const checkInISO = parseDisplayDateToISO(inEl.value);
+    const checkOutISO = parseDisplayDateToISO(outEl.value);
+    
+    const ci = new Date(checkInISO);
+    const co = new Date(checkOutISO);
 
     if (
       !selectedRoomIds.length ||
@@ -832,13 +1353,13 @@ export async function openNewCustomBookingModal() {
       if (!info) continue;
 
       try {
-        console.log('Calling calculate_dynamic_price for room:', roomId, 'dates:', inEl.value, 'to', outEl.value);
+        console.log('Calling calculate_dynamic_price for room:', roomId, 'dates:', checkInISO, 'to', checkOutISO);
         
         // Call dynamic pricing function - Supabase returns {data, error}
         const { data: pricingData, error: pricingError } = await supabase.rpc('calculate_dynamic_price', {
           p_room_type_id: roomId,
-          p_check_in: inEl.value,
-          p_check_out: outEl.value,
+          p_check_in: checkInISO,
+          p_check_out: checkOutISO,
           p_pricing_model_id: null // Uses active model
         });
 
@@ -875,19 +1396,30 @@ export async function openNewCustomBookingModal() {
 
   // Auto-calculate nights when dates change
   function calculateNights() {
-    const checkIn = new Date(inEl.value);
-    const checkOut = new Date(outEl.value);
+    // Parse display dates back to ISO
+    const checkInISO = parseDisplayDateToISO(inEl.value);
+    const checkOutISO = parseDisplayDateToISO(outEl.value);
+    
+    const checkIn = new Date(checkInISO);
+    const checkOut = new Date(checkOutISO);
 
     if (checkIn && checkOut && checkOut > checkIn) {
-      nightsEl.value = Math.ceil(
+      const nights = Math.ceil(
         (checkOut - checkIn) / (1000 * 60 * 60 * 24)
       );
+      nightsEl.value = nights;
+      if (nightsDisplayEl) nightsDisplayEl.textContent = nights;
     } else {
       nightsEl.value = 1;
+      if (nightsDisplayEl) nightsDisplayEl.textContent = 1;
     }
 
     // Recompute pricing after nights change
     computeRoomSubtotal();
+    
+    // Hide available cabins when dates change
+    if (availableCabinsSection) availableCabinsSection.style.display = 'none';
+    if (guestInfoSection) guestInfoSection.style.display = 'none';
   }
 
   // Calculate price breakdown
@@ -1006,7 +1538,7 @@ export async function openNewCustomBookingModal() {
         return { valid: false, error: 'This coupon is no longer active' };
       }
 
-      const today = new Date().toISOString().split('T')[0];
+      const today = toDateInput(new Date());
       if (coupon.valid_until && coupon.valid_until < today) {
         return { valid: false, error: 'This coupon has expired' };
       }
@@ -1052,11 +1584,17 @@ export async function openNewCustomBookingModal() {
   }
 
   // Event listeners
+  // Open calendar on click
+  inEl.addEventListener('click', () => {
+    openDatePicker('nb-in');
+  });
+  
+  outEl.addEventListener('click', () => {
+    openDatePicker('nb-out');
+  });
+  
+  // Also handle change events for when dates are programmatically set
   inEl.addEventListener('change', () => {
-    // Auto-set checkout to check-in + 1 day
-    if (inEl.value) {
-      outEl.value = addDaysISO(inEl.value, 1);
-    }
     calculateNights();
     computeRoomSubtotal();
   });
@@ -1197,8 +1735,11 @@ export async function openNewCustomBookingModal() {
         return;
       }
 
-      const checkInDate = new Date(inEl.value);
-      const checkOutDate = new Date(outEl.value);
+      const checkInISO = parseDisplayDateToISO(inEl.value);
+      const checkOutISO = parseDisplayDateToISO(outEl.value);
+      
+      const checkInDate = new Date(checkInISO);
+      const checkOutDate = new Date(checkOutISO);
 
       if (
         Number.isNaN(checkInDate.getTime()) ||
@@ -1213,6 +1754,25 @@ export async function openNewCustomBookingModal() {
         return;
       }
 
+      // ---- CAPACITY VALIDATION (like BookingWidget) ----
+      const totalAdults = parseInt(wrap.querySelector('#nb-adults').value, 10) || 2;
+      let combinedCapacity = 0;
+      
+      selectedRoomIds.forEach(roomId => {
+        const info = roomMap[String(roomId)] || {};
+        const cap = parseInt(info.max_adults, 10) || 0;
+        combinedCapacity += cap;
+      });
+      
+      if (combinedCapacity < totalAdults) {
+        alert(
+          `Selected cabins cannot accommodate ${totalAdults} adults. ` +
+          `Combined capacity: ${combinedCapacity}. ` +
+          `Please select additional cabins or reduce the number of adults.`
+        );
+        return;
+      }
+
       // ---- AVAILABILITY CHECK FOR EACH CABIN ----
       // Use the same RPC as BookingWidget for consistency
       for (const roomId of selectedRoomIds) {
@@ -1222,14 +1782,14 @@ export async function openNewCustomBookingModal() {
         console.log('Checking availability for:', {
           roomId,
           roomTypeCode,
-          checkIn: inEl.value,
-          checkOut: outEl.value
+          checkIn: checkInISO,
+          checkOut: checkOutISO
         });
         
         // Call the same RPC that BookingWidget uses
         const { data: availableRooms, error: availError } = await supabase.rpc('get_available_rooms', {
-          p_check_in: inEl.value,
-          p_check_out: outEl.value,
+          p_check_in: checkInISO,
+          p_check_out: checkOutISO,
           p_adults: 1 // Just checking availability, not capacity
         });
         
@@ -1257,8 +1817,8 @@ export async function openNewCustomBookingModal() {
       }
 
       // ---- PRICING (recompute per-cabin subtotals using dynamic pricing) ----
-      const ci = new Date(inEl.value);
-      const co = new Date(outEl.value);
+      const ci = new Date(checkInISO);
+      const co = new Date(checkOutISO);
 
       let weekdayN = 0;
       let weekendN = 0;
@@ -1276,8 +1836,8 @@ export async function openNewCustomBookingModal() {
           // Call dynamic pricing function - Supabase returns {data, error}
           const { data: pricingData, error: pricingError } = await supabase.rpc('calculate_dynamic_price', {
             p_room_type_id: roomId,
-            p_check_in: inEl.value,
-            p_check_out: outEl.value,
+            p_check_in: checkInISO,
+            p_check_out: checkOutISO,
             p_pricing_model_id: null // Uses active model
           });
 
@@ -1307,11 +1867,7 @@ export async function openNewCustomBookingModal() {
       roomSubtotalEl.value = String(roomSubtotal.toFixed(2));
 
       // ----- DISTRIBUTE ADULTS ACROSS ROOMS -----
-      const totalAdults =
-        parseInt(
-          wrap.querySelector('#nb-adults').value || '0',
-          10
-        ) || 0;
+      // (totalAdults already declared above in capacity validation section)
 
       const roomCapacities = selectedRoomIds.map((roomId) => {
         const info = roomMap[String(roomId)] || {};
@@ -1330,51 +1886,115 @@ export async function openNewCustomBookingModal() {
       }
       // ------------------------------------------
 
+      // ---- EXTRAS: Rebuild selectedExtras from current quantities (like updatePriceBreakdown) ----
+      selectedExtras = Object.entries(extraQuantities)
+        .filter(([_, qty]) => qty > 0)
+        .map(([id, qty]) => {
+          const ex = (extras || []).find((e) => String(e.id) === String(id)) || {};
+          return {
+            extra_id: id,
+            extra_code: ex.code || '',
+            extra_name: ex.name || '',
+            price: Number(ex.price || 0),
+            quantity: qty,
+          };
+        });
+
       const extrasTotal = selectedExtras.reduce(
         (sum, e) => sum + e.price * e.quantity,
         0
       );
 
-      // ---- DISCOUNT (unchanged, based on overall totals) ----
+      // ---- DISCOUNT with breakdown (matching BookingWidget) ----
       let discount = 0;
+      let roomDiscount = 0;
+      let extrasDiscount = 0;
+      let extrasWithDiscounts = [];
+      
       if (appliedCoupon) {
         const subtotal = roomSubtotal + extrasTotal;
 
-        if (appliedCoupon.applies_to === 'both') {
-          let base;
-          if (
-            Array.isArray(appliedCoupon.extra_ids) &&
-            appliedCoupon.extra_ids.length
-          ) {
-            const idSet = new Set(appliedCoupon.extra_ids.map(String));
-            const targetedExtrasTotal = selectedExtras
-              .filter((e) => idSet.has(String(e.extra_id)))
-              .reduce(
-                (sum, e) => sum + e.price * e.quantity,
-                0
-              );
+        // Calculate total only for extras that this coupon targets (if defined)
+        let extrasTargetTotal = extrasTotal;
+        let targetedExtras = selectedExtras; // All extras by default
+        
+        if (
+          Array.isArray(appliedCoupon.extra_ids) &&
+          appliedCoupon.extra_ids.length
+        ) {
+          const idSet = new Set(appliedCoupon.extra_ids.map(String));
+          targetedExtras = selectedExtras.filter((e) => idSet.has(String(e.extra_id)));
+          extrasTargetTotal = targetedExtras.reduce(
+            (sum, e) => sum + e.price * e.quantity,
+            0
+          );
+        }
 
-            base = roomSubtotal + targetedExtrasTotal;
-          } else {
-            base = roomSubtotal + extrasTotal;
-          }
-          discount =
+        if (appliedCoupon.applies_to === 'both') {
+          // Apply discount to both room and targeted extras
+          const base = roomSubtotal + extrasTargetTotal;
+          const totalDiscount =
             appliedCoupon.discount_type === 'percentage'
               ? (base * appliedCoupon.discount_value) / 100
               : appliedCoupon.discount_value;
+          
+          // Proportionally split discount between room and extras
+          if (base > 0) {
+            const roomPortion = roomSubtotal / base;
+            const extrasPortion = extrasTargetTotal / base;
+            
+            roomDiscount = totalDiscount * roomPortion;
+            extrasDiscount = totalDiscount * extrasPortion;
+          }
         } else if (appliedCoupon.applies_to === 'rooms') {
-          discount =
+          // Apply discount only to rooms
+          roomDiscount =
             appliedCoupon.discount_type === 'percentage'
               ? (roomSubtotal * appliedCoupon.discount_value) / 100
               : appliedCoupon.discount_value;
+          extrasDiscount = 0;
         } else if (appliedCoupon.applies_to === 'extras') {
-          discount =
+          // Apply discount only to targeted extras
+          roomDiscount = 0;
+          extrasDiscount =
             appliedCoupon.discount_type === 'percentage'
-              ? (extrasTotal * appliedCoupon.discount_value) / 100
+              ? (extrasTargetTotal * appliedCoupon.discount_value) / 100
               : appliedCoupon.discount_value;
         }
 
-        discount = Math.min(discount, roomSubtotal + extrasTotal);
+        // Calculate per-extra discounts for extras that are targeted
+        extrasWithDiscounts = selectedExtras.map((extra) => {
+          let extraDiscount = 0;
+          
+          if (extrasDiscount > 0 && extrasTargetTotal > 0) {
+            // Check if this extra is targeted
+            let isTargeted = true;
+            if (appliedCoupon.extra_ids && appliedCoupon.extra_ids.length) {
+              const idSet = new Set(appliedCoupon.extra_ids.map(String));
+              isTargeted = idSet.has(String(extra.extra_id));
+            }
+            
+            if (isTargeted && extra.quantity > 0) {
+              const extraSubtotal = extra.price * extra.quantity;
+              extraDiscount = (extraSubtotal / extrasTargetTotal) * extrasDiscount;
+            }
+          }
+          
+          return {
+            ...extra,
+            discount: extraDiscount
+          };
+        });
+
+        // Total discount
+        discount = roomDiscount + extrasDiscount;
+        discount = Math.min(discount, subtotal);
+      } else {
+        // No coupon: populate extrasWithDiscounts with zero discounts
+        extrasWithDiscounts = selectedExtras.map((extra) => ({
+          ...extra,
+          discount: 0
+        }));
       }
 
       const finalTotal = Math.max(0, roomSubtotal + extrasTotal - discount);
@@ -1392,8 +2012,8 @@ export async function openNewCustomBookingModal() {
           wrap.querySelector('#nb-country-code')?.value || null,
         guest_phone:
           wrap.querySelector('#nb-phone').value.trim() || null,
-        check_in: wrap.querySelector('#nb-in').value || null,
-        check_out: wrap.querySelector('#nb-out').value || null,
+        check_in: parseDisplayDateToISO(wrap.querySelector('#nb-in').value) || null,
+        check_out: parseDisplayDateToISO(wrap.querySelector('#nb-out').value) || null,
         nights:
           parseInt(
             wrap.querySelector('#nb-nights').value || '0',
@@ -1420,18 +2040,46 @@ export async function openNewCustomBookingModal() {
       let primaryReservation = null;
       const createdReservations = [];
 
-            // Insert one reservation per selected cabin
+      // Determine if this is a group booking (more than one cabin)
+      const isGroupBooking = selectedRoomIds.length > 1;
+      const genGroupReservationCode = () => `GRP-${Math.floor(100000 + Math.random() * 900000)}`;
+
+      // Generate ONCE so it's available even before primaryReservation exists
+      const groupCode = isGroupBooking ? genGroupReservationCode() : null;
+
+
+
+      // Calculate total room price for proportional discount distribution (like BookingWidget)
+      const totalRoomPrice = perRoomSubtotals.reduce((sum, price) => sum + price, 0);
+
+      // Insert one reservation per selected cabin
       for (let index = 0; index < selectedRoomIds.length; index++) {
         const roomId = selectedRoomIds[index];
         const info = roomMap[String(roomId)] || {};
         const perRoomSubtotal = perRoomSubtotals[index] || 0;
         const isPrimary = index === 0;
 
+        // ⭐ Calculate proportional room discount for THIS room (like BookingWidget)
+        let roomOnlyDiscount = 0;
+        let extrasOnlyDiscount = 0;
+        
+        if (isPrimary) {
+          // Primary room carries extras discount
+          extrasOnlyDiscount = extrasDiscount;
+        }
+        
+        // Distribute room discount proportionally across all rooms
+        if (roomDiscount > 0 && totalRoomPrice > 0) {
+          const roomProportion = perRoomSubtotal / totalRoomPrice;
+          roomOnlyDiscount = roomDiscount * roomProportion;
+        }
+        
+        const totalRoomDiscount = roomOnlyDiscount + extrasOnlyDiscount;
+
         const extrasForThis = isPrimary ? extrasTotal : 0;
-        const discountForThis = isPrimary ? discount : 0;
         const totalForThis = Math.max(
           0,
-          perRoomSubtotal + extrasForThis - discountForThis
+          perRoomSubtotal + extrasForThis - totalRoomDiscount
         );
 
         const adultsForThis = adultsPerRoom[index] || 0;
@@ -1440,12 +2088,16 @@ export async function openNewCustomBookingModal() {
           ...commonPayload,
           adults: adultsForThis, // override with per-room adults
           confirmation_code: genConfCode(),
+          group_reservation_code: groupCode,
+          group_reservation_id: isGroupBooking && !isPrimary && primaryReservation ? primaryReservation.id : null,
           room_name: info.name || null,
           room_type_id: roomId,
           room_type_code: info.code || null,
           room_subtotal: perRoomSubtotal,
           extras_total: extrasForThis,
-          discount_amount: discountForThis,
+          discount_amount: totalRoomDiscount,              // Total discount for this room
+          room_discount: roomOnlyDiscount,                 // Room portion only (proportional)
+          extras_discount: extrasOnlyDiscount,             // Extras portion only
           coupon_code:
             isPrimary && appliedCoupon ? appliedCoupon.code : null,
           total: totalForThis,
@@ -1462,16 +2114,16 @@ export async function openNewCustomBookingModal() {
         if (isPrimary) primaryReservation = reservation;
         createdReservations.push(reservation);
 
-        // Only attach extras to the primary reservation
-        if (isPrimary && selectedExtras.length > 0 && reservation) {
-          const extrasPayload = selectedExtras.map((extra) => ({
+        // Only attach extras to the primary reservation (with discount breakdown)
+        if (isPrimary && extrasWithDiscounts.length > 0 && reservation) {
+          const extrasPayload = extrasWithDiscounts.map((extra) => ({
             reservation_id: reservation.id,
-            extra_id: extra.extra_id,
             extra_code: extra.extra_code,
             extra_name: extra.extra_name,
             price: extra.price,
             quantity: extra.quantity,
             subtotal: extra.price * extra.quantity,
+            discount_amount: extra.discount || 0  // ⭐ Match route.ts: discount_amount not discount
           }));
 
           const { error: extrasError } = await supabase
@@ -1480,9 +2132,56 @@ export async function openNewCustomBookingModal() {
 
           if (extrasError) {
             console.error('Error saving extras:', extrasError);
+          } else {
+            console.log(`✅ Saved ${extrasPayload.length} extras to reservation_extras`);
           }
         }
       }
+
+      // If this is a group booking, ensure ALL reservations (including primary) share:
+      // 1) the same group_reservation_code (the one generated once above), and
+      // 2) group_reservation_id is set for BOTH primary and children.
+      // (Primary points to itself so downstream code never sees null.)
+      if (isGroupBooking && primaryReservation && createdReservations.length > 1) {
+        // Update PRIMARY: set group code + set group_reservation_id to itself
+        const { error: grpPrimaryErr } = await supabase
+          .from('reservations')
+          .update({
+            group_reservation_code: groupCode,
+            group_reservation_id: primaryReservation.id,
+          })
+          .eq('id', primaryReservation.id);
+        if (grpPrimaryErr) throw grpPrimaryErr;
+
+        // Update CHILDREN: point to primary + carry the same group code
+        const childIds = createdReservations
+          .filter((r) => String(r.id) !== String(primaryReservation.id))
+          .map((r) => r.id);
+
+        if (childIds.length) {
+          const { error: grpChildrenErr } = await supabase
+            .from('reservations')
+            .update({
+              group_reservation_id: primaryReservation.id,
+              group_reservation_code: groupCode,
+            })
+            .in('id', childIds);
+          if (grpChildrenErr) throw grpChildrenErr;
+        }
+
+        // Keep local objects in sync (used below for email payload)
+        primaryReservation.group_reservation_code = groupCode;
+        primaryReservation.group_reservation_id = primaryReservation.id;
+
+        createdReservations.forEach((r) => {
+          r.group_reservation_code = groupCode;
+          r.group_reservation_id =
+            String(r.id) === String(primaryReservation.id)
+              ? primaryReservation.id
+              : primaryReservation.id;
+        });
+      }
+
 
       // Update coupon usage once per booking (if applied)
       if (appliedCoupon && primaryReservation) {
@@ -1509,18 +2208,109 @@ export async function openNewCustomBookingModal() {
           );
         } else {
           try {
+            // Fetch extras from database for all reservations
+            const reservationIds = createdReservations.map(r => r.id);
+            const { data: reservationExtras, error: extrasError } = await supabase
+              .from('reservation_extras')
+              .select('*')
+              .in('reservation_id', reservationIds);
+
+            if (extrasError) {
+              console.error('Error fetching extras for email:', extrasError);
+            }
+
+            console.log(`Found ${reservationExtras?.length || 0} extras for email`);
+
+            // Calculate aggregates for multi-room bookings
+            let aggregateRoomSubtotal = 0;
+            let aggregateExtrasSubtotal = 0;
+            let aggregateDiscountTotal = 0;
+            let aggregateTotal = 0;
+
+            // Build rooms array with extras for each room
+            const roomsForEmail = createdReservations.map((res) => {
+              aggregateRoomSubtotal += res.room_subtotal || 0;
+              aggregateExtrasSubtotal += res.extras_total || 0;
+              aggregateDiscountTotal += res.discount_amount || 0;
+              aggregateTotal += res.total || 0;
+
+              const roomExtras = (reservationExtras || [])
+                .filter((e) => e.reservation_id === res.id)
+                .map((e) => ({
+                  code: e.extra_code,
+                  name: e.extra_name,
+                  price: e.price,
+                  qty: e.quantity,
+                }));
+
+              return {
+                room_name: res.room_name,
+                check_in: res.check_in,
+                check_out: res.check_out,
+                nights: res.nights,
+                adults: res.adults,
+                room_subtotal: res.room_subtotal,
+                extras_total: res.extras_total,
+                discount_amount: res.discount_amount,
+                total: res.total,
+                currency: res.currency,
+                extras: roomExtras,
+              };
+            });
+
+            // Use group code for groups, otherwise primary confirmation code
+            const displayConfirmationCode = isGroupBooking && primaryReservation.group_reservation_code
+              ? primaryReservation.group_reservation_code
+              : primaryReservation.confirmation_code;
+
+            // Build email data matching webhook structure
+            const emailData = {
+              booking: {
+                confirmation_code: displayConfirmationCode,
+                group_reservation_code: isGroupBooking ? primaryReservation.group_reservation_code : null,
+                guest_first_name: primaryReservation.guest_first_name,
+                guest_last_name: primaryReservation.guest_last_name,
+                guest_email: primaryReservation.guest_email,
+                guest_phone: primaryReservation.guest_phone,
+                check_in: primaryReservation.check_in,
+                check_out: primaryReservation.check_out,
+                nights: primaryReservation.nights,
+                adults: primaryReservation.adults,
+                currency: primaryReservation.currency,
+                room_name: primaryReservation.room_name,
+                room_subtotal: primaryReservation.room_subtotal,
+                extras_total: primaryReservation.extras_total,
+                discount_amount: primaryReservation.discount_amount,
+                coupon_code: primaryReservation.coupon_code,
+                total: primaryReservation.total,
+                is_group_booking: isGroupBooking,
+                group_room_subtotal: aggregateRoomSubtotal,
+                group_extras_total: aggregateExtrasSubtotal,
+                group_discount_total: aggregateDiscountTotal,
+                group_total: aggregateTotal,
+                rooms: isGroupBooking ? roomsForEmail : [roomsForEmail[0]],
+                package_code: primaryReservation.package_code || null,
+                package_name: primaryReservation.package_name || null,
+              }
+            };
+
+            console.log('Sending email with', emailData.booking.rooms.length, 'room(s)');
+            console.log('Primary room has', emailData.booking.rooms[0].extras?.length || 0, 'extras');
+
             const emailResponse = await fetch(
               `${SOJOURN_API_BASE_URL}/api/send-booking-email`,
               {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ booking: primaryReservation }),
+                body: JSON.stringify(emailData),
               }
             );
 
             if (!emailResponse.ok) {
               const errorText = await emailResponse.text();
               console.error('Email API error:', errorText);
+            } else {
+              console.log('✅ Email sent successfully');
             }
           } catch (err) {
             console.error('Failed to send booking email:', err);
