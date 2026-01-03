@@ -510,6 +510,7 @@ function openModelModal(model, onDataChange) {
           <div class="form-group">
             <label style="display:block;margin-bottom:6px;font-weight:600;color:#334155;font-size:13px;">History Mode</label>
             <select id="model-history" style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;transition:all 0.2s;" onfocus="this.style.borderColor='#667eea'" onblur="this.style.borderColor='#e2e8f0'" style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;transition:all 0.2s;" onfocus="this.style.borderColor=\'#667eea\'" onblur="this.style.borderColor=\'#e2e8f0\'">
+              <option value="base_prices" ${model?.history_mode === 'base_prices' ? 'selected' : '' }>Base Prices</option>
               <option value="base_only" ${model?.history_mode === 'base_only' ? 'selected' : '' }>Base Prices Only</option>
               <option value="last_year_same_month" ${model?.history_mode === 'last_year_same_month' ? 'selected' : ''}>Last Year Same Month</option>
               <option value="trailing_3yr_avg" ${model?.history_mode === 'trailing_3yr_avg' ? 'selected' : ''}>Trailing 3-Year Average</option>

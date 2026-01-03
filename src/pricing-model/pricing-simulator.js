@@ -197,7 +197,9 @@ function renderResults(data) {
       
       // Dynamic label based on pricing model's history_mode
       let histLabel = '📊 Historical';
-      if (historyMode === 'last_year_same_month') {
+      if (historyMode === 'base_prices') {
+        histLabel = '💵 Base Prices';
+      } else if (historyMode === 'last_year_same_month') {
         histLabel = '📊 Historical (Last Year)';
       } else if (historyMode === 'trailing_3yr_avg') {
         histLabel = '📊 Historical (3-Year Avg)';
