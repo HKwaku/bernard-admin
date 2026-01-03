@@ -175,10 +175,24 @@ function renderResults(data) {
     const otbOcc = meta?.otb_occ !== undefined && meta?.otb_occ !== null ? meta.otb_occ : null;
     const expectedOtb = meta?.expected_otb !== undefined && meta?.expected_otb !== null ? meta.expected_otb : null;
     
-    // Calculate intermediate steps
-    const afterTier = base * tierMult;
-    const afterPace = afterTier * paceMult; // ✅ ADDED: Calculate after pace
-    const afterTarget = afterPace * targetMult; // ✅ CHANGED: Apply target on top of pace
+    // Get min/max multipliers from meta
+    const minMult = Number(meta?.month_min_mult || 0.7);
+    const maxMult = Number(meta?.month_max_mult || 2.0);
+    const minPrice = base * minMult;
+    const maxPrice = base * maxMult;
+    
+    // Helper function to clamp price
+    const clamp = (price) => Math.max(minPrice, Math.min(maxPrice, price));
+    
+    // Calculate intermediate steps WITH clamping (matches SQL logic)
+    let afterTier = base * tierMult;
+    afterTier = clamp(afterTier);
+    
+    let afterPace = afterTier * paceMult;
+    afterPace = clamp(afterPace);
+    
+    let afterTarget = afterPace * targetMult;
+    afterTarget = clamp(afterTarget);
     
     // Get history mode from meta to display accurate label
     const historyMode = meta?.history_mode;
@@ -267,6 +281,10 @@ function renderResults(data) {
     
     // Step 2: Tier Multiplier
     if (tierMult !== 1) {
+      const unclamped = base * tierMult;
+      const wasClamped = unclamped !== afterTier;
+      const clampType = unclamped < minPrice ? 'floor' : (unclamped > maxPrice ? 'ceiling' : null);
+      
       steps.push(`
         <div style="padding:12px;background:white;border-radius:6px;border:1px solid #e5e7eb;margin-bottom:8px">
           <div style="display:flex;justify-content:space-between;align-items:center">
@@ -275,6 +293,11 @@ function renderResults(data) {
               <div style="font-size:12px;color:#64748b">
                 ${money(base)} × ${tierMult.toFixed(2)} ${meta?.tier_name ? `(${meta.tier_name})` : ''}
               </div>
+              ${wasClamped ? `
+                <div style="margin-top:6px;padding:6px 10px;background:#fef3c7;border-left:3px solid #f59e0b;border-radius:4px;font-size:11px;color:#92400e">
+                  ⚠️ Price hit ${clampType} (Floor: ${money(minPrice)} || Ceiling: ${money(maxPrice)})
+                </div>
+              ` : ''}
             </div>
             <div style="font-size:16px;font-weight:600;color:#0f172a;white-space:nowrap;margin-left:8px">${money(afterTier)}</div>
           </div>
@@ -297,6 +320,10 @@ function renderResults(data) {
       const paceExplanation = paceMult > 1
         ? 'Booking faster than expected → price increased'
         : 'Booking slower than expected → price decreased';
+      
+      const unclamped = afterTier * paceMult;
+      const wasClamped = Math.abs(unclamped - afterPace) > 0.01;
+      const clampType = unclamped < minPrice ? 'floor' : (unclamped > maxPrice ? 'ceiling' : null);
       
       // Build pace comparison if we have the data
       let paceDetail = '';
@@ -331,6 +358,11 @@ function renderResults(data) {
               <div style="font-size:11px;color:#64748b;font-style:italic">
                 ${paceExplanation}
               </div>
+              ${wasClamped ? `
+                <div style="margin-top:6px;padding:6px 10px;background:#fef3c7;border-left:3px solid #f59e0b;border-radius:4px;font-size:11px;color:#92400e">
+                  ⚠️ Price hit ${clampType} (Floor: ${money(minPrice)} || Ceiling: ${money(maxPrice)})
+                </div>
+              ` : ''}
               ${paceDetail}
             </div>
             <div style="font-size:16px;font-weight:600;color:#0f172a;white-space:nowrap;margin-left:8px">${money(afterPace)}</div>
@@ -353,6 +385,10 @@ function renderResults(data) {
       const targetExplanation = targetMult > 1
         ? 'Above monthly targets → price increased'
         : 'Below monthly targets → price decreased';
+      
+      const unclamped = afterPace * targetMult;
+      const wasClamped = Math.abs(unclamped - afterTarget) > 0.01;
+      const clampType = unclamped < minPrice ? 'floor' : (unclamped > maxPrice ? 'ceiling' : null);
       
       // Build target detail if we have MTD data
       let targetDetail = '';
@@ -382,6 +418,11 @@ function renderResults(data) {
               <div style="font-size:11px;color:#64748b;font-style:italic">
                 ${targetExplanation}
               </div>
+              ${wasClamped ? `
+                <div style="margin-top:6px;padding:6px 10px;background:#fef3c7;border-left:3px solid #f59e0b;border-radius:4px;font-size:11px;color:#92400e">
+                  ⚠️ Price hit ${clampType} (Floor: ${money(minPrice)} || Ceiling: ${money(maxPrice)})
+                </div>
+              ` : ''}
               ${targetDetail}
             </div>
             <div style="font-size:16px;font-weight:600;color:#0f172a;white-space:nowrap;margin-left:8px">${money(afterTarget)}</div>
