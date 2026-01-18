@@ -360,23 +360,23 @@ function renderReservations() {
 
 // ---- Badge helpers for status & payment ----
 function formatStatusLabel(status) {
-  const s = (status || 'pending').toLowerCase();
+  const s = (status || 'pending_payment').toLowerCase();
   if (s === 'checked-in') return 'Checked In';
   if (s === 'checked-out') return 'Checked Out';
   if (s === 'cancelled') return 'Cancelled';
   if (s === 'confirmed') return 'Confirmed';
-  if (s === 'pending') return 'Pending';
+  if (s === 'pending_payment') return 'Pending Payment';
   // fallback: capitalise and replace hyphens
   return s.charAt(0).toUpperCase() + s.slice(1).replace(/-/g, ' ');
 }
 
 function getStatusBadgeClass(status) {
-  const s = (status || 'pending').toLowerCase();
+  const s = (status || 'pending_payment').toLowerCase();
   if (s === 'confirmed') return 'ok';
   if (s === 'cancelled') return 'err';
   if (s === 'checked-in') return 'checked-in';
   if (s === 'checked-out') return 'checked-out';
-  if (s === 'pending') return 'pending';
+  if (s === 'pending_payment') return 'Pending Payment';
   return 'pending';
 }
 
@@ -396,7 +396,7 @@ function getPaymentBadgeClass(status) {
   if (s === 'unpaid') return 'err';
   if (s === 'partial') return 'partial';
   if (s === 'refunded') return 'refunded';
-  return 'pending';
+  return 'unpaid';
 }
 
 /* ----------------- List view ----------------- */
@@ -1359,6 +1359,7 @@ async function openEditModal(id) {
       .date-picker-day {
         aspect-ratio: 1;
         display: flex;
+        flex-direction: column;
         align-items: center;
         justify-content: center;
         font-size: 13px;
@@ -1368,13 +1369,41 @@ async function openEditModal(id) {
         background: white;
         color: #111827;
         position: relative;
+        overflow: hidden;
+        min-width: 0;
+      }
+      .date-number {
+        font-size: 16px;
+        font-weight: 600;
+        line-height: 1;
+      }
+      .date-price {
+        font-size: 9px;
+        font-weight: 500;
+        color: #6b7280;
+        text-align: center;
+        line-height: 1.05;
+        margin-top: 4px;
+        white-space: normal;
+        max-width: 100%;
+      }
+      .date-picker-day.disabled .date-price,
+      .date-picker-day.empty .date-price {
+        display: none;
       }
       .date-picker-day:hover:not(.disabled):not(.empty) {
         background: #f3f4f6;
       }
+      .date-picker-day:hover:not(.disabled):not(.empty) .date-price {
+        color: #374151;
+      }
       .date-picker-day.selected {
         background: #f97316;
         color: white;
+      }
+      .date-picker-day.selected .date-price {
+        color: white;
+        opacity: 0.9;
       }
       .date-picker-day.in-range {
         background: rgba(249, 115, 22, 0.1);
@@ -1554,7 +1583,7 @@ async function openEditModal(id) {
           <span style="color:#92400e;font-size:14px;font-weight:500;">Select guests and dates to see available cabins.</span>
         </div>
 
-        <div class="form-grid">
+        <div class="form-grid" style="display:flex;flex-direction:column;gap:14px">
           <div class="form-group">
             <label>Package</label>
             <select id="er-package">
@@ -1593,7 +1622,7 @@ async function openEditModal(id) {
         </div>
 
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
-          <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
             <span style="background:#f3f4f6;padding:6px 12px;border-radius:8px;font-size:13px">
               Nights: <strong id="er-nights-display">1</strong>
             </span>
@@ -1781,6 +1810,13 @@ async function openEditModal(id) {
             📦 Package pricing is fixed and cannot be recalculated.
           </div>
           `}
+          <!-- Manual Price Override -->
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:10px;background:white;border:1px solid #e5e7eb;border-radius:8px">
+            <label style="font-size:13px;color:#64748b;white-space:nowrap;font-weight:500">Override Price/Night:</label>
+            <input id="er-price-override" type="number" min="0" step="0.01" placeholder="Auto" 
+                   style="width:120px;padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px" />
+            <span style="font-size:12px;color:#9ca3af;font-weight:500">GHS</span>
+          </div>
           <!-- Room pricing breakdown -->
           <div id="calc-rooms-breakdown" style="margin-bottom:6px">
             <!-- Will be populated by updatePriceBreakdown() -->
@@ -1807,7 +1843,7 @@ async function openEditModal(id) {
           <div class="form-group">
             <label>Status</label>
             <select id="er-status">
-              <option value="pending" ${r.status === 'pending' ? 'selected' : ''}>Pending</option>
+              <option value="pending_payment" ${r.status === 'pending_payment' ? 'selected' : ''}>Pending Payment</option>
               <option value="confirmed" ${r.status === 'confirmed' ? 'selected' : ''}>Confirmed</option>
               <option value="checked-in" ${r.status === 'checked-in' ? 'selected' : ''}>Checked In</option>
               <option value="checked-out" ${r.status === 'checked-out' ? 'selected' : ''}>Checked Out</option>
@@ -1817,11 +1853,9 @@ async function openEditModal(id) {
           <div class="form-group">
             <label>Payment Status</label>
             <select id="er-pay">
-              <option value="pending" ${r.payment_status === 'pending' ? 'selected' : ''}>Pending</option>
-              <option value="completed" ${r.payment_status === 'completed' ? 'selected' : ''}>Completed</option>
-              <option value="paid" ${r.payment_status === 'paid' ? 'selected' : ''}>Paid</option>
-              <option value="partial" ${r.payment_status === 'partial' ? 'selected' : ''}>Partially Paid</option>
               <option value="unpaid" ${r.payment_status === 'unpaid' ? 'selected' : ''}>Unpaid</option>
+              <option value="partial" ${r.payment_status === 'partial' ? 'selected' : ''}>Partially Paid</option>
+              <option value="paid" ${r.payment_status === 'paid' ? 'selected' : ''}>Paid</option>
               <option value="refunded" ${r.payment_status === 'refunded' ? 'selected' : ''}>Refunded</option>
             </select>
           </div>
@@ -1936,9 +1970,56 @@ async function openEditModal(id) {
   let selectedDatesCalendar = { 'er-in': null, 'er-out': null };
   let currentPickerMonth = { 'er-in': new Date(), 'er-out': new Date() };
   let calendarDisabledDates = [];
+  let calendarPrices = {}; // Store nightly prices: { 'YYYY-MM-DD': { price: 123.45, currency: 'GHS' } }
 
   let pkgId = '';
 
+  
+  // Fetch calendar pricing for a specific month
+  async function fetchCalendarPricing(year, month) {
+    try {
+      const firstDay = new Date(year, month, 1);
+      const lastDay = new Date(year, month + 1, 0);
+      const checkIn = toDateInput(firstDay);
+      const checkOut = toDateInput(new Date(lastDay.getFullYear(), lastDay.getMonth(), lastDay.getDate() + 1));
+
+      // Get all active room types
+      const { data: roomTypes, error: roomError } = await supabase
+        .from('room_types')
+        .select('id,currency')
+        .eq('is_active', true);
+
+      if (roomError || !roomTypes || !roomTypes.length) return;
+
+      // For each room type, fetch nightly rates and keep the MIN per date
+      for (const rt of roomTypes) {
+        try {
+          const { data: pricingData, error: pricingError } = await supabase.rpc('calculate_dynamic_price', {
+            p_room_type_id: rt.id,
+            p_check_in: checkIn,
+            p_check_out: checkOut,
+            p_pricing_model_id: null
+          });
+
+          if (!pricingError && pricingData && pricingData.nightly_rates) {
+            pricingData.nightly_rates.forEach(night => {
+              const nightDate = night.date;
+              const nightRate = parseFloat(night.rate || 0);
+              const nightCurrency = night.currency || pricingData.currency || rt.currency || 'GHS';
+
+              if (!calendarPrices[nightDate] || nightRate < calendarPrices[nightDate].price) {
+                calendarPrices[nightDate] = { price: nightRate, currency: nightCurrency };
+              }
+            });
+          }
+        } catch (e) {
+          // ignore per-room failures, keep going
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch calendar pricing:', err);
+    }
+  }
   
   // Load disabled dates (reuse the existing function)
   let currentAdultsForCalendar = parseInt(r.adults) || 2; // Track current adults selection
@@ -2291,7 +2372,13 @@ async function openEditModal(id) {
     const baseDate = selectedDatesCalendar[pickerId] ? new Date(selectedDatesCalendar[pickerId] + 'T00:00:00') : new Date();
     currentPickerMonth[pickerId] = new Date(baseDate.getFullYear(), baseDate.getMonth(), 1);
     
-    renderCalendar(pickerId);
+    // Fetch pricing for current and next month
+    const month = currentPickerMonth[pickerId];
+    fetchCalendarPricing(month.getFullYear(), month.getMonth()).then(() => {
+      fetchCalendarPricing(month.getFullYear(), month.getMonth() + 1).then(() => {
+        renderCalendar(pickerId);
+      });
+    });
   }
   
   function closeDatePicker() {
@@ -2378,8 +2465,19 @@ async function openEditModal(id) {
       if (isToday) classes += ' today';
       if (isInRange) classes += ' in-range';
       
+      // Get price for this date if available
+      let priceHtml = '';
+      if (!isDisabled && calendarPrices[dateStr]) {
+        const priceInfo = calendarPrices[dateStr];
+        const roundedPrice = Math.round(priceInfo.price);
+        priceHtml = '<div class="date-price">' + priceInfo.currency + ' ' + roundedPrice + '</div>';
+      }
+      
       html += '<button class="' + classes + '" data-date="' + dateStr + '"' +
-              (isDisabled ? ' disabled' : '') + '>' + day + '</button>';
+              (isDisabled ? ' disabled' : '') + '>' +
+              '<div class="date-number">' + day + '</div>' +
+              priceHtml +
+              '</button>';
     }
     
     html += '</div>';
@@ -2387,19 +2485,23 @@ async function openEditModal(id) {
     
     // Add event listeners
     picker.querySelectorAll('[data-action="prev"]').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', async (e) => {
         e.preventDefault();
         e.stopPropagation();
         currentPickerMonth[pickerId] = new Date(month.getFullYear(), month.getMonth() - 1, 1);
+        const newMonth = currentPickerMonth[pickerId];
+        await fetchCalendarPricing(newMonth.getFullYear(), newMonth.getMonth());
         renderCalendar(pickerId);
       });
     });
     
     picker.querySelectorAll('[data-action="next"]').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', async (e) => {
         e.preventDefault();
         e.stopPropagation();
         currentPickerMonth[pickerId] = new Date(month.getFullYear(), month.getMonth() + 1, 1);
+        const newMonth = currentPickerMonth[pickerId];
+        await fetchCalendarPricing(newMonth.getFullYear(), newMonth.getMonth());
         renderCalendar(pickerId);
       });
     });
@@ -2484,6 +2586,20 @@ async function openEditModal(id) {
   const initialPkgId = pkgId;
   loadCalendarDisabledDates(initialAdults, initialPkgId);
 
+  // Close date picker when clicking anywhere in the modal (except the picker itself)
+  const modalContent = wrap.querySelector('[onclick="event.stopPropagation()"]');
+  if (modalContent) {
+    modalContent.addEventListener('click', (e) => {
+      // Check if click is outside date picker dropdowns
+      const clickedPicker = e.target.closest('.date-picker-dropdown');
+      const clickedInput = e.target.closest('.date-picker-input');
+      
+      // Close if not clicking on a picker or its input
+      if (!clickedPicker && !clickedInput) {
+        closeDatePicker();
+      }
+    });
+  }
 
   
   // ===== END CALENDAR FUNCTIONS =====
@@ -2805,6 +2921,16 @@ if (recalcBtn && priceNote) {
     availableCabinsSection.style.display = 'none';
     guestInfoSection.style.display = 'none';
   });
+  
+  // Price override field listener
+  const priceOverrideEl = wrap.querySelector('#er-price-override');
+  if (priceOverrideEl) {
+    priceOverrideEl.addEventListener('input', () => {
+      if (!useOriginalPrices) {
+        computeRoomSubtotal();
+      }
+    });
+  }
 
   // --- Room pricing helpers continued ---
 
@@ -2840,56 +2966,72 @@ if (recalcBtn && priceNote) {
 
     // Nights are the same for all cabins
     nightsEl.value = String(weekdayN + weekendN);
+    
+    // Check for manual price override
+    const priceOverrideEl = wrap.querySelector('#er-price-override');
+    const priceOverride = priceOverrideEl && priceOverrideEl.value ? parseFloat(priceOverrideEl.value) : null;
 
     let totalSubtotal = 0;
     const newPerRoomSubtotals = []; // Track individual prices
+    
+    // Use manual override if provided, otherwise use dynamic pricing
+    if (priceOverride && priceOverride > 0) {
+      console.log('Using manual price override:', priceOverride, 'per night');
+      const totalNights = weekdayN + weekendN;
+      
+      for (const roomId of selectedRoomIds) {
+        const roomPrice = priceOverride * totalNights;
+        totalSubtotal += roomPrice;
+        newPerRoomSubtotals.push(roomPrice);
+      }
+    } else {
+      // Use dynamic pricing for each selected room
+      for (const roomId of selectedRoomIds) {
+        const info = roomMap[String(roomId)];
+        if (!info) continue;
 
-    // Use dynamic pricing for each selected room
-    for (const roomId of selectedRoomIds) {
-      const info = roomMap[String(roomId)];
-      if (!info) continue;
+        let roomPrice = 0;
 
-      let roomPrice = 0;
+        try {
+          console.log('Calling calculate_dynamic_price for room:', roomId, 'dates:', checkInISO, 'to', checkOutISO);
+          
+          // Call dynamic pricing function - Supabase returns {data, error}
+          const { data: pricingData, error: pricingError } = await supabase.rpc('calculate_dynamic_price', {
+            p_room_type_id: roomId,
+            p_check_in: checkInISO,
+            p_check_out: checkOutISO,
+            p_pricing_model_id: null // Uses active model
+          });
 
-      try {
-        console.log('Calling calculate_dynamic_price for room:', roomId, 'dates:', checkInISO, 'to', checkOutISO);
-        
-        // Call dynamic pricing function - Supabase returns {data, error}
-        const { data: pricingData, error: pricingError } = await supabase.rpc('calculate_dynamic_price', {
-          p_room_type_id: roomId,
-          p_check_in: checkInISO,
-          p_check_out: checkOutISO,
-          p_pricing_model_id: null // Uses active model
-        });
+          console.log('Dynamic pricing response:', pricingData);
+          console.log('Dynamic pricing error:', pricingError);
 
-        console.log('Dynamic pricing response:', pricingData);
-        console.log('Dynamic pricing error:', pricingError);
+          if (pricingError) {
+            console.error('RPC Error:', pricingError);
+            throw new Error(pricingError.message || 'Dynamic pricing failed');
+          }
 
-        if (pricingError) {
-          console.error('RPC Error:', pricingError);
-          throw new Error(pricingError.message || 'Dynamic pricing failed');
-        }
-
-        if (pricingData && pricingData.total) {
-          console.log('Using dynamic price:', pricingData.total);
-          roomPrice = parseFloat(pricingData.total);
-        } else {
-          // Fallback to base prices if no dynamic pricing returned
-          console.log('No dynamic pricing data, using base prices');
+          if (pricingData && pricingData.total) {
+            console.log('Using dynamic price:', pricingData.total);
+            roomPrice = parseFloat(pricingData.total);
+          } else {
+            // Fallback to base prices if no dynamic pricing returned
+            console.log('No dynamic pricing data, using base prices');
+            const wkdPrice = Number(info.base_price_per_night_weekday || 0);
+            const wkePrice = Number(info.base_price_per_night_weekend || 0);
+            roomPrice = weekdayN * wkdPrice + weekendN * wkePrice;
+          }
+        } catch (err) {
+          // Fallback to base prices on error
+          console.error('Dynamic pricing failed for room', roomId, '- using base prices. Error:', err);
           const wkdPrice = Number(info.base_price_per_night_weekday || 0);
           const wkePrice = Number(info.base_price_per_night_weekend || 0);
           roomPrice = weekdayN * wkdPrice + weekendN * wkePrice;
         }
-      } catch (err) {
-        // Fallback to base prices on error
-        console.error('Dynamic pricing failed for room', roomId, '- using base prices. Error:', err);
-        const wkdPrice = Number(info.base_price_per_night_weekday || 0);
-        const wkePrice = Number(info.base_price_per_night_weekend || 0);
-        roomPrice = weekdayN * wkdPrice + weekendN * wkePrice;
-      }
 
-      totalSubtotal += roomPrice;
-      newPerRoomSubtotals.push(roomPrice);
+        totalSubtotal += roomPrice;
+        newPerRoomSubtotals.push(roomPrice);
+      }
     }
 
     // Update the module-level array
@@ -3469,6 +3611,10 @@ if (recalcBtn && priceNote) {
       let roomSubtotal;
       let perRoomSubtotals = [];
       
+      // Check for manual price override
+      const priceOverrideEl = wrap.querySelector('#er-price-override');
+      const priceOverride = priceOverrideEl && priceOverrideEl.value ? parseFloat(priceOverrideEl.value) : null;
+      
       if (isPackage) {
         // === PACKAGE: Use fixed package pricing (no dynamic pricing) ===
         console.log('📦 Using fixed package pricing');
@@ -3481,6 +3627,24 @@ if (recalcBtn && priceNote) {
           perRoomSubtotals = [parseFloat(primaryReservation.room_subtotal || 0)];
           roomSubtotal = perRoomSubtotals[0];
         }
+      } else if (priceOverride && priceOverride > 0) {
+        // === MANUAL OVERRIDE: Use override price per night ===
+        console.log('💰 Using manual price override:', priceOverride, 'per night');
+        const ci = new Date(checkInISO);
+        const co = new Date(checkOutISO);
+        
+        let totalNights = 0;
+        for (let d = new Date(ci); d < co; d.setDate(d.getDate() + 1)) {
+          totalNights++;
+        }
+        
+        // Apply override price to each room
+        for (const roomId of selectedRoomIds) {
+          const roomPrice = priceOverride * totalNights;
+          perRoomSubtotals.push(roomPrice);
+        }
+        
+        roomSubtotal = perRoomSubtotals.reduce((sum, v) => sum + v, 0) || 0;
       } else {
         // === STANDARD: Recompute per-cabin subtotals using dynamic pricing ===
         const ci = new Date(checkInISO);

@@ -260,7 +260,7 @@ export async function openBookPackageModal() {
           </select>
         </div>
 
-        <div class="form-grid">
+        <div class="form-grid" style="display:flex;flex-direction:column;gap:14px">
           <div class="form-group">
             <label>Room Type</label>
             <select id="pb-room"></select>
@@ -271,7 +271,7 @@ export async function openBookPackageModal() {
           </div>
         </div>
 
-        <div class="form-grid">
+        <div class="form-grid" style="display:flex;flex-direction:column;gap:14px">
           <div class="form-group">
             <label>Check-in</label>
 
@@ -304,7 +304,7 @@ export async function openBookPackageModal() {
         </div>
 
 
-        <div class="form-grid">
+        <div class="form-grid" style="display:flex;flex-direction:column;gap:14px">
           <div class="form-group">
             <label>First Name</label>
             <input id="pb-first" type="text" />
@@ -315,7 +315,7 @@ export async function openBookPackageModal() {
           </div>
         </div>
 
-        <div class="form-grid">
+        <div class="form-grid" style="display:flex;flex-direction:column;gap:14px">
           <div class="form-group">
             <label>Email</label>
             <input id="pb-email" type="email" />
@@ -326,7 +326,7 @@ export async function openBookPackageModal() {
           </div>
         </div>
 
-        <div class="form-grid">
+        <div class="form-grid" style="display:flex;flex-direction:column;gap:14px">
           <div class="form-group">
             <label>Adults</label>
             <input id="pb-adults" type="number" min="1" step="1" value="1" />
@@ -737,16 +737,18 @@ export async function openBookPackageModal() {
   inDisplay.addEventListener('click', () => openPicker('ci'));
   outDisplay.addEventListener('click', () => openPicker('co'));
 
-  // close on outside click
-  document.addEventListener('click', (e) => {
-    if (!wrap.contains(e.target)) return;
-    const t = e.target;
-    const clickedIn =
-      t === inDisplay || t === outDisplay ||
-      inPicker.contains(t) || outPicker.contains(t);
+  // close on outside click - attached to modal content for proper scoping
+  const modalContent = wrap.querySelector('.content');
+  if (modalContent) {
+    modalContent.addEventListener('click', (e) => {
+      const t = e.target;
+      const clickedIn =
+        t === inDisplay || t === outDisplay ||
+        inPicker.contains(t) || outPicker.contains(t);
 
-    if (!clickedIn) closePickers();
-  });
+      if (!clickedIn) closePickers();
+    });
+  }
 
   // initialize display text
   syncDisplays();

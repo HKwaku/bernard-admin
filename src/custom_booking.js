@@ -1,16 +1,17 @@
 // src/custom_booking.js
 // Custom Booking Modal for Sojourn Cabins
-// VERSION: Dynamic Pricing v1.0 - Dec 28, 2024
-console.log('✅ Custom Booking with Dynamic Pricing v1.0 loaded');
+// VERSION: Dynamic Pricing v1.0 - Dec 28, 2025
+
 
 import { supabase } from './config/supabase.js';
 import { toast } from './utils/helpers.js';
 import { initReservations } from './reservations.js';
+
+console.log('✅ Custom Booking with Dynamic Pricing v1.0 loaded');
+
 // Base URL of the Sojourn public site (for email API)
 const SOJOURN_API_BASE_URL =
   'https://sojourn-cabins.vercel.app';
-
-
 
 
 // ===== HELPER FUNCTIONS =====
@@ -582,6 +583,7 @@ export async function openNewCustomBookingModal() {
       .date-picker-day {
         aspect-ratio: 1;
         display: flex;
+        flex-direction: column;
         align-items: center;
         justify-content: center;
         font-size: 13px;
@@ -591,13 +593,41 @@ export async function openNewCustomBookingModal() {
         background: white;
         color: #111827;
         position: relative;
+        overflow: hidden;
+        min-width: 0;
+      }
+      .date-number {
+        font-size: 16px;
+        font-weight: 600;
+        line-height: 1;
+      }
+      .date-price {
+        font-size: 9px;
+        font-weight: 500;
+        color: #6b7280;
+        text-align: center;
+        line-height: 1.05;
+        margin-top: 4px;
+        white-space: normal;
+        max-width: 100%;
+      }
+      .date-picker-day.disabled .date-price,
+      .date-picker-day.empty .date-price {
+        display: none;
       }
       .date-picker-day:hover:not(.disabled):not(.empty) {
         background: #f3f4f6;
       }
+      .date-picker-day:hover:not(.disabled):not(.empty) .date-price {
+        color: #374151;
+      }
       .date-picker-day.selected {
         background: #f97316;
         color: white;
+      }
+      .date-picker-day.selected .date-price {
+        color: white;
+        opacity: 0.9;
       }
       .date-picker-day.in-range {
         background: rgba(249, 115, 22, 0.1);
@@ -692,7 +722,7 @@ export async function openNewCustomBookingModal() {
           <span style="color:#92400e;font-size:14px;font-weight:500;">Select guests and dates to see available cabins.</span>
         </div>
 
-        <div class="form-grid">
+        <div class="form-grid" style="display:flex;flex-direction:column;gap:14px">
           <div class="form-group">
             <label>Adults</label>
             <select id="nb-adults">
@@ -704,24 +734,25 @@ export async function openNewCustomBookingModal() {
               <option value="6">6</option>
             </select>
           </div>
-          <div class="form-group">
-            <label>Check-in</label>
-            <div class="date-picker-wrapper">
-              <input id="nb-in" type="text" readonly class="date-picker-input" placeholder="Select date" value="${formatDisplayDateCustom(today)}" />
-              <div id="nb-in-picker" class="date-picker-dropdown"></div>
-            </div>
-          </div>
-          <div class="form-group">
-            <label>Check-out</label>
-            <div class="date-picker-wrapper">
-              <input id="nb-out" type="text" readonly class="date-picker-input" placeholder="Select date" value="${formatDisplayDateCustom(addDaysISO(today,1))}" />
-              <div id="nb-out-picker" class="date-picker-dropdown"></div>
-            </div>
+            <div class="form-group">
+          <label>Check-in</label>
+          <div class="date-picker-wrapper">
+            <input id="nb-in" type="text" readonly class="date-picker-input" />
+            <div id="nb-in-picker" class="date-picker-dropdown"></div>
           </div>
         </div>
 
+        <div class="form-group">
+          <label>Check-out</label>
+          <div class="date-picker-wrapper">
+            <input id="nb-out" type="text" readonly class="date-picker-input" />
+            <div id="nb-out-picker" class="date-picker-dropdown"></div>
+          </div>
+        </div>
+      </div>
+
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
-          <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
             <span style="background:#f3f4f6;padding:6px 12px;border-radius:8px;font-size:13px">
               Nights: <strong id="nb-nights-display">1</strong>
             </span>
@@ -811,6 +842,15 @@ export async function openNewCustomBookingModal() {
         <!-- Price Breakdown -->
         <div style="background:#f8fafc;border:1px solid var(--ring);border-radius:var(--radius-md);padding:14px;margin-top:12px">
           <div style="font-weight:700;font-size:0.875rem;margin-bottom:10px;color:var(--ink)">Price Breakdown</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;font-size:0.875rem">
+            <span style="color:var(--muted)">Override Price/Night:</span>
+            <div style="display:flex;align-items:center;gap:8px">
+              <input id="nb-price-override" type="number" min="0" step="0.01" placeholder="Auto"
+                    style="width:120px;padding:4px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px" />
+              <span style="font-size:12px;color:#9ca3af">GHS</span>
+            </div>
+          </div>
+
           <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:0.875rem">
             <span style="color:var(--muted)">Room Subtotal:</span>
             <span id="calc-room-subtotal" style="font-weight:600">GHS 0.00</span>
@@ -833,7 +873,7 @@ export async function openNewCustomBookingModal() {
           <div class="form-group">
             <label>Status</label>
             <select id="nb-status">
-              <option value="pending">Pending</option>
+              <option value="pending_payment">Pending Payment</option>
               <option value="confirmed" selected>Confirmed</option>
               <option value="checked-in">Checked In</option>
               <option value="checked-out">Checked Out</option>
@@ -932,6 +972,53 @@ export async function openNewCustomBookingModal() {
   let selectedDatesCalendar = { 'nb-in': null, 'nb-out': null };
   let currentPickerMonth = { 'nb-in': new Date(), 'nb-out': new Date() };
   let calendarDisabledDates = [];
+  let calendarPrices = {}; // Store nightly prices: { 'YYYY-MM-DD': { price: 123.45, currency: 'GHS' } }
+  
+  // Fetch calendar pricing for a specific month
+  async function fetchCalendarPricing(year, month) {
+    try {
+      const firstDay = new Date(year, month, 1);
+      const lastDay = new Date(year, month + 1, 0);
+      const checkIn = toDateInput(firstDay);
+      const checkOut = toDateInput(new Date(lastDay.getFullYear(), lastDay.getMonth(), lastDay.getDate() + 1));
+
+      // Get all active room types
+      const { data: roomTypes, error: roomError } = await supabase
+        .from('room_types')
+        .select('id,currency')
+        .eq('is_active', true);
+
+      if (roomError || !roomTypes || !roomTypes.length) return;
+
+      // For each room type, fetch nightly rates and keep the MIN per date
+      for (const rt of roomTypes) {
+        try {
+          const { data: pricingData, error: pricingError } = await supabase.rpc('calculate_dynamic_price', {
+            p_room_type_id: rt.id,
+            p_check_in: checkIn,
+            p_check_out: checkOut,
+            p_pricing_model_id: null
+          });
+
+          if (!pricingError && pricingData && pricingData.nightly_rates) {
+            pricingData.nightly_rates.forEach(night => {
+              const nightDate = night.date;
+              const nightRate = parseFloat(night.rate || 0);
+              const nightCurrency = night.currency || pricingData.currency || rt.currency || 'GHS';
+
+              if (!calendarPrices[nightDate] || nightRate < calendarPrices[nightDate].price) {
+                calendarPrices[nightDate] = { price: nightRate, currency: nightCurrency };
+              }
+            });
+          }
+        } catch (e) {
+          // ignore per-room failures, keep going
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch calendar pricing:', err);
+    }
+  }
   
   // Load disabled dates (reuse the existing function)
   let currentAdultsForCalendar = 2; // Track current adults selection
@@ -1026,7 +1113,13 @@ export async function openNewCustomBookingModal() {
     const baseDate = selectedDatesCalendar[pickerId] ? new Date(selectedDatesCalendar[pickerId] + 'T00:00:00') : new Date();
     currentPickerMonth[pickerId] = new Date(baseDate.getFullYear(), baseDate.getMonth(), 1);
     
-    renderCalendar(pickerId);
+    // Fetch pricing for current and next month
+    const month = currentPickerMonth[pickerId];
+    fetchCalendarPricing(month.getFullYear(), month.getMonth()).then(() => {
+      fetchCalendarPricing(month.getFullYear(), month.getMonth() + 1).then(() => {
+        renderCalendar(pickerId);
+      });
+    });
   }
   
   function closeDatePicker() {
@@ -1115,8 +1208,19 @@ export async function openNewCustomBookingModal() {
       if (isToday) classes += ' today';
       if (isInRange) classes += ' in-range';
       
+      // Get price for this date if available
+      let priceHtml = '';
+      if (!isDisabled && calendarPrices[dateStr]) {
+        const priceInfo = calendarPrices[dateStr];
+        const roundedPrice = Math.round(priceInfo.price);
+        priceHtml = '<div class="date-price">' + priceInfo.currency + ' ' + roundedPrice + '</div>';
+      }
+      
       html += '<button class="' + classes + '" data-date="' + dateStr + '"' +
-              (isDisabled ? ' disabled' : '') + '>' + day + '</button>';
+              (isDisabled ? ' disabled' : '') + '>' +
+              '<div class="date-number">' + day + '</div>' +
+              priceHtml +
+              '</button>';
     }
     
     html += '</div>';
@@ -1124,19 +1228,23 @@ export async function openNewCustomBookingModal() {
     
     // Add event listeners
     picker.querySelectorAll('[data-action="prev"]').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', async (e) => {
         e.preventDefault();
         e.stopPropagation();
         currentPickerMonth[pickerId] = new Date(month.getFullYear(), month.getMonth() - 1, 1);
+        const newMonth = currentPickerMonth[pickerId];
+        await fetchCalendarPricing(newMonth.getFullYear(), newMonth.getMonth());
         renderCalendar(pickerId);
       });
     });
     
     picker.querySelectorAll('[data-action="next"]').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', async (e) => {
         e.preventDefault();
         e.stopPropagation();
         currentPickerMonth[pickerId] = new Date(month.getFullYear(), month.getMonth() + 1, 1);
+        const newMonth = currentPickerMonth[pickerId];
+        await fetchCalendarPricing(newMonth.getFullYear(), newMonth.getMonth());
         renderCalendar(pickerId);
       });
     });
@@ -1203,6 +1311,21 @@ export async function openNewCustomBookingModal() {
   
   // Initialize calendar disabled dates with default adults (2)
   loadCalendarDisabledDates(2);
+  
+  // Close date picker when clicking anywhere in the modal (except the picker itself)
+  const modalContent = wrap.querySelector('[onclick="event.stopPropagation()"]');
+  if (modalContent) {
+    modalContent.addEventListener('click', (e) => {
+      // Check if click is outside date picker dropdowns
+      const clickedPicker = e.target.closest('.date-picker-dropdown');
+      const clickedInput = e.target.closest('.date-picker-input');
+      
+      // Close if not clicking on a picker or its input
+      if (!clickedPicker && !clickedInput) {
+        closeDatePicker();
+      }
+    });
+  }
   
   // ===== END CALENDAR FUNCTIONS =====
 
@@ -1302,6 +1425,14 @@ export async function openNewCustomBookingModal() {
     availableCabinsSection.style.display = 'none';
     guestInfoSection.style.display = 'none';
   });
+  
+  // Price override field listener
+  const priceOverrideEl = wrap.querySelector('#nb-price-override');
+  if (priceOverrideEl) {
+    priceOverrideEl.addEventListener('input', () => {
+      computeRoomSubtotal();
+    });
+  }
 
   // --- Room pricing helpers (weekday/weekend split, multiple cabins) ---
   const roomMap = Object.fromEntries((rooms || []).map((r) => [String(r.id), r]));
@@ -1344,49 +1475,63 @@ export async function openNewCustomBookingModal() {
 
     // Nights are the same for all cabins
     nightsEl.value = String(weekdayN + weekendN);
+    
+    // Check for manual price override
+    const priceOverrideEl = wrap.querySelector('#nb-price-override');
+    const priceOverride = priceOverrideEl && priceOverrideEl.value ? parseFloat(priceOverrideEl.value) : null;
 
     let totalSubtotal = 0;
+    
+    // Use manual override if provided, otherwise use dynamic pricing
+    if (priceOverride && priceOverride > 0) {
+      console.log('Using manual price override:', priceOverride, 'per night');
+      const totalNights = weekdayN + weekendN;
+      
+      for (const roomId of selectedRoomIds) {
+        totalSubtotal += priceOverride * totalNights;
+      }
+    } else {
+      // Use dynamic pricing for each selected room
+      for (const roomId of selectedRoomIds) {
+        const info = roomMap[String(roomId)];
+        if (!info) continue;
 
-    // Use dynamic pricing for each selected room
-    for (const roomId of selectedRoomIds) {
-      const info = roomMap[String(roomId)];
-      if (!info) continue;
+        try {
+          console.log('Calling calculate_dynamic_price for room:', roomId, 'dates:', checkInISO, 'to', checkOutISO);
+          
+          // Call dynamic pricing function - Supabase returns {data, error}
+          const { data: pricingData, error: pricingError } = await supabase.rpc('calculate_dynamic_price', {
+            p_room_type_id: roomId,
+            p_check_in: checkInISO,
+            p_check_out: checkOutISO,
+            p_pricing_model_id: null // Uses active model
+          });
 
-      try {
-        console.log('Calling calculate_dynamic_price for room:', roomId, 'dates:', checkInISO, 'to', checkOutISO);
-        
-        // Call dynamic pricing function - Supabase returns {data, error}
-        const { data: pricingData, error: pricingError } = await supabase.rpc('calculate_dynamic_price', {
-          p_room_type_id: roomId,
-          p_check_in: checkInISO,
-          p_check_out: checkOutISO,
-          p_pricing_model_id: null // Uses active model
-        });
+          console.log('Dynamic pricing response:', pricingData);
+          console.log('Dynamic pricing error:', pricingError);
 
-        console.log('Dynamic pricing response:', pricingData);
-        console.log('Dynamic pricing error:', pricingError);
+          if (pricingError) {
+            console.error('RPC Error:', pricingError);
+            throw new Error(pricingError.message || 'Dynamic pricing failed');
+          }
 
-        if (pricingError) {
-          console.error('RPC Error:', pricingError);
-          throw new Error(pricingError.message || 'Dynamic pricing failed');
-        }
-
-        if (pricingData && pricingData.total) {
-          console.log('Using dynamic price:', pricingData.total);
-          totalSubtotal += parseFloat(pricingData.total);
-        } else {
-          // Fallback to base prices if no dynamic pricing returned
-          console.log('No dynamic pricing data, using base prices');
+          if (pricingData && pricingData.total) {
+            console.log('Using dynamic price:', pricingData.total);
+            totalSubtotal += parseFloat(pricingData.total);
+          } else {
+            // Fallback to base prices if no dynamic pricing returned
+            console.log('No dynamic pricing data, using base prices');
+            const wkdPrice = Number(info.base_price_per_night_weekday || 0);
+            const wkePrice = Number(info.base_price_per_night_weekend || 0);
+            totalSubtotal += weekdayN * wkdPrice + weekendN * wkePrice;
+          }
+        } catch (err) {
+          // Fallback to base prices on error
+          console.error('Dynamic pricing failed for room', roomId, '- using base prices. Error:', err);
           const wkdPrice = Number(info.base_price_per_night_weekday || 0);
           const wkePrice = Number(info.base_price_per_night_weekend || 0);
           totalSubtotal += weekdayN * wkdPrice + weekendN * wkePrice;
         }
-      } catch (err) {
-        // Fallback to base prices on error
-        console.error('Dynamic pricing failed for room', roomId, '- using base prices. Error:', err);
-        const wkdPrice = Number(info.base_price_per_night_weekday || 0);
-        const wkePrice = Number(info.base_price_per_night_weekend || 0);
-        totalSubtotal += weekdayN * wkdPrice + weekendN * wkePrice;
       }
     }
 
@@ -1820,6 +1965,10 @@ export async function openNewCustomBookingModal() {
       const ci = new Date(checkInISO);
       const co = new Date(checkOutISO);
 
+      
+      // Check for manual price override
+      const priceOverrideEl = wrap.querySelector('#nb-price-override');
+      const priceOverride = priceOverrideEl && priceOverrideEl.value ? parseFloat(priceOverrideEl.value) : null;
       let weekdayN = 0;
       let weekendN = 0;
       for (let d = new Date(ci); d < co; d.setDate(d.getDate() + 1)) {
@@ -1829,29 +1978,40 @@ export async function openNewCustomBookingModal() {
 
       // Calculate dynamic pricing for each room
       const perRoomSubtotals = [];
+      const totalNights = weekdayN + weekendN;
+
       for (const roomId of selectedRoomIds) {
         const info = roomMap[String(roomId)] || {};
-        
+
         try {
-          // Call dynamic pricing function - Supabase returns {data, error}
-          const { data: pricingData, error: pricingError } = await supabase.rpc('calculate_dynamic_price', {
-            p_room_type_id: roomId,
-            p_check_in: checkInISO,
-            p_check_out: checkOutISO,
-            p_pricing_model_id: null // Uses active model
-          });
-
-          if (pricingError) {
-            throw new Error(pricingError.message || 'Dynamic pricing failed');
-          }
-
-          if (pricingData && pricingData.total) {
-            perRoomSubtotals.push(parseFloat(pricingData.total));
+          if (priceOverride && priceOverride > 0) {
+            // Use manual override (apply per selected room)
+            console.log('💰 Using manual price override:', priceOverride, 'per night');
+            perRoomSubtotals.push(priceOverride * totalNights);
           } else {
-            // Fallback to base prices
-            const wkdPrice = Number(info.base_price_per_night_weekday || 0);
-            const wkePrice = Number(info.base_price_per_night_weekend || 0);
-            perRoomSubtotals.push(weekdayN * wkdPrice + weekendN * wkePrice);
+            // Call dynamic pricing function - Supabase returns {data, error}
+            const { data: pricingData, error: pricingError } = await supabase.rpc(
+              'calculate_dynamic_price',
+              {
+                p_room_type_id: roomId,
+                p_check_in: checkInISO,
+                p_check_out: checkOutISO,
+                p_pricing_model_id: null // Uses active model
+              }
+            );
+
+            if (pricingError) {
+              throw new Error(pricingError.message || 'Dynamic pricing failed');
+            }
+
+            if (pricingData && pricingData.total != null) {
+              perRoomSubtotals.push(parseFloat(pricingData.total));
+            } else {
+              // Fallback to base prices
+              const wkdPrice = Number(info.base_price_per_night_weekday || 0);
+              const wkePrice = Number(info.base_price_per_night_weekend || 0);
+              perRoomSubtotals.push(weekdayN * wkdPrice + weekendN * wkePrice);
+            }
           }
         } catch (err) {
           // Fallback to base prices on error
@@ -1861,6 +2021,7 @@ export async function openNewCustomBookingModal() {
           perRoomSubtotals.push(weekdayN * wkdPrice + weekendN * wkePrice);
         }
       }
+
 
       const roomSubtotal =
         perRoomSubtotals.reduce((sum, v) => sum + v, 0) || 0;
