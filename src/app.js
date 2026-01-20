@@ -29,6 +29,9 @@ import { initChat } from './chat.js';
 import { openBookPackageModal } from './package_booking.js';
 import { openNewCustomBookingModal } from './custom_booking.js';
 import { openBlockDatesModal } from './blocked_bookings.js'; // NEW
+import { initChefMenu } from './chefMenu.js';
+import { initExtraSelections } from './extraSelections.js';
+
 
 // Main app initializer
 export function initApp() {
@@ -64,6 +67,8 @@ export function initApp() {
             <button class="tab" data-view="reservations">🗓️ Reservations</button>
             <button class="tab" data-view="rooms">🏠 Room Types</button>
             <button class="tab" data-view="extras">✨ Extras</button>
+            <button class="tab" data-view="chef-menu">👨‍🍳 Chef Menu</button>
+            <button class="tab" data-view="extra-selections">🧾 Extra Selections</button>
             <button class="tab" data-view="coupons">🎟️ Coupons</button>
             <button class="tab" data-view="packages">📦 Packages</button>
             <button class="tab" data-view="analytics">📊 Analytics</button>
@@ -94,6 +99,8 @@ export function initApp() {
               <li><button data-view="reservations" class="btn" style="width:100%">🗓️ Reservations</button></li>
               <li><button data-view="rooms"        class="btn" style="width:100%">🏠 Room Types</button></li>
               <li><button data-view="extras"       class="btn" style="width:100%">✨ Extras</button></li>
+              <li><button data-view="chef-menu" class="btn" style="width:100%">👨‍🍳 Chef Menu</button></li>
+              <li><button data-view="extra-selections" class="btn" style="width:100%">🧾 Extra Selections</button></li>
               <li><button data-view="coupons"      class="btn" style="width:100%">🎟️ Coupons</button></li>
               <li><button data-view="packages"     class="btn" style="width:100%">📦 Packages</button></li>
               <li><button data-view="analytics"    class="btn" style="width:100%">📊 Analytics</button></li>
@@ -165,6 +172,18 @@ export function initApp() {
                   <button id="add-extra-btn" class="btn">+ Add Extra</button>
                 </div>
                 <div id="extras-list" class="list">Loading…</div>
+              </div>
+            </div>
+            <div id="view-chef-menu" class="card panel">
+
+            <div class="card-bd">
+                <div id="chef-menu-root" class="list">Loading…</div>
+              </div>
+            </div>
+
+            <div id="view-extra-selections" class="card panel">
+              <div class="card-bd">
+                <div id="extra-selections-root" class="list">Loading…</div>
               </div>
             </div>
 
@@ -261,6 +280,9 @@ export function initApp() {
         reservations: 'Reservations',
         rooms: 'Room Types',
         extras: 'Extras',
+        'chef-menu': 'Chef Menu',
+        'extra-selections': 'Extra Selections',
+
         coupons: 'Coupons',
         packages: 'Packages',
         analytics: 'Analytics',
@@ -273,6 +295,8 @@ export function initApp() {
       if (btn.dataset.view === 'reservations') initReservations();
       if (btn.dataset.view === 'rooms') initRooms();
       if (btn.dataset.view === 'extras') initExtras();
+      if (btn.dataset.view === 'chef-menu') initChefMenu();
+      if (btn.dataset.view === 'extra-selections') initExtraSelections();
       if (btn.dataset.view === 'coupons') initCoupons();
       if (btn.dataset.view === 'packages') initPackages();
       if (btn.dataset.view === 'analytics') initAnalytics();
@@ -331,6 +355,8 @@ export function initApp() {
           coupons: 'Coupons',
           packages: 'Packages',
           analytics: 'Analytics',
+          'chef-menu': 'Chef Menu',
+          'extra-selections': 'Extra Selections',
         };
         $('#section-title').textContent = titles[view] || 'Dashboard';
 

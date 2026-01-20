@@ -102,6 +102,33 @@ body {
   min-width: 0;
 }
 
+/* Desktop: put brand above tabs without changing markup */
+@media (min-width: 1024px) {
+  .topbar {
+    align-items: flex-start;
+  }
+
+  .brand {
+    flex: 0 0 100%;
+    order: 0;
+    margin-bottom: 10px;
+  }
+
+  .tabs {
+    flex: 1 1 auto;
+    justify-content: flex-start;
+    order: 1;
+  }
+
+  .now {
+    order: 2;
+    margin-left: auto;
+  }
+}
+
+
+
+
 /* Booking Buttons Container */
 .booking-buttons {
   display: flex;
@@ -945,7 +972,7 @@ label {
   }
 
   .topbar {
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
   }
 
   .tabs {
@@ -1171,7 +1198,7 @@ label {
     }
     
     #view-rooms .item .row {
-      flex-wrap: nowrap;
+      flex-wrap: wrap;
     }
     
     #view-rooms .item .row > div:first-child {
