@@ -4181,23 +4181,33 @@ if (recalcBtn && priceNote) {
             );
             
             
-            // --- ALSO send experiences/extras selection email ---
-          const confirmationCode =
-          reservation.group_reservation_code || reservation.confirmation_code;
+          // --- ALSO send the Experiences/Extras selection email ---
+          // Route expects: { booking, extrasLink }
+          try {
+            const extrasLink = `${String(SOJOURN_API_BASE_URL || '').replace(/\/$/, '')}/extras?code=${encodeURIComponent(displayConfirmationCode || '')}`;
 
-          const extrasLink = `https://sojourn-cabins.vercel.app/experiences?code=${confirmationCode}`;
+            const extrasEmailResponse = await fetch(
+              `${SOJOURN_API_BASE_URL}/api/send-extras-selection-email`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  booking: emailData.booking,
+                  extrasLink,
+                }),
+              }
+            );
 
-          await fetch(
-            `${SOJOURN_API_BASE_URL}/api/send-extras-selection-email`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                booking: emailData.booking,
-                extrasLink,
-              }),
+            if (!extrasEmailResponse.ok) {
+              const errorText = await extrasEmailResponse.text();
+              console.error('Extras selection email API error:', errorText);
+            } else {
+              console.log('✅ Extras selection email sent successfully');
             }
-          );
+          } catch (err) {
+            console.error('Failed to send extras selection email:', err);
+          }
+
 
 
             if (!selectionEmailResponse.ok) {
