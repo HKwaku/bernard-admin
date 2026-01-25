@@ -1128,6 +1128,8 @@ export async function openBookPackageModal() {
             })),
           };
 
+          const displayConfirmationCode =
+          reservation.group_reservation_code || reservation.confirmation_code;
 
 
           try {
@@ -1143,6 +1145,9 @@ export async function openBookPackageModal() {
             // --- ALSO send the Experiences/Extras selection email ---
             // Route expects: { booking, extrasLink }
             try {
+              const displayConfirmationCode =
+                reservation.group_reservation_code || reservation.confirmation_code;
+
               const extrasLink = `${String(SOJOURN_API_BASE_URL || '').replace(/\/$/, '')}/extras?code=${encodeURIComponent(displayConfirmationCode || '')}`;
 
               const extrasEmailResponse = await fetch(
@@ -1151,7 +1156,7 @@ export async function openBookPackageModal() {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
-                    booking: emailData.booking,
+                    booking: bookingForEmail,
                     extrasLink,
                   }),
                 }
@@ -1166,6 +1171,7 @@ export async function openBookPackageModal() {
             } catch (err) {
               console.error('Failed to send extras selection email:', err);
             }
+
 
 
             if (!emailResponse.ok) {
