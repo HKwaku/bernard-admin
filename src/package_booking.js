@@ -212,8 +212,9 @@ export async function openBookPackageModal() {
   if (extraIds.length) {
     const { data: extras } = await supabase
       .from('extras')
-      .select('id, name, price, currency, code')
+      .select('id, name, price, currency, code, needs_guest_input')
       .in('id', extraIds);
+
 
     extrasById = new Map((extras || []).map((e) => [e.id, e]));
   }
@@ -230,6 +231,7 @@ export async function openBookPackageModal() {
       name: ex.name || '',
       price: ex.price || 0,
       currency: ex.currency || pkgMap.get(px.package_id)?.currency || 'GHS',
+      needs_guest_input: !!ex.needs_guest_input,
     });
     extrasByPackage.set(px.package_id, arr);
   });
@@ -1116,22 +1118,49 @@ export async function openBookPackageModal() {
             'SOJOURN_API_BASE_URL is not set – cannot send booking email.'
           );
         } else {
-          const bookingForEmail = {
-          // everything from the reservation record we just inserted
-          ...reservation,
-          // enrich with package info
-          package_name: pkg.name,
-          package_code: pkg.code,
-          packageExtras: (extras || []).map((e) => ({
-            name: e.name,
-            quantity: e.quantity || 1,
-          })),
-        };
-
-
           const displayConfirmationCode =
-          reservation.group_reservation_code || reservation.confirmation_code;
+            reservation.group_reservation_code || reservation.confirmation_code;
 
+          // Build extras in the structure the extras-email template expects
+          const roomExtrasForEmail = (extras || []).map((e) => ({
+            code: e.code || null,
+            name: e.name || null,
+            price: e.price || 0,
+            qty: e.quantity || 1,
+            // this is the critical flag your template uses
+            needs_selection: !!e.needs_guest_input,
+          }));
+
+          const bookingForEmail = {
+            ...reservation,
+            confirmation_code: displayConfirmationCode,
+            package_name: pkg.name,
+            package_code: pkg.code,
+
+            // IMPORTANT: extras email reads booking.rooms[].extras[]
+            rooms: [
+              {
+                room_name: reservation.room_name,
+                check_in: reservation.check_in,
+                check_out: reservation.check_out,
+                nights: reservation.nights,
+                adults: reservation.adults,
+                room_subtotal: reservation.room_subtotal,
+                extras_total: reservation.extras_total,
+                discount_amount: reservation.discount_amount,
+                total: reservation.total,
+                currency: reservation.currency,
+                extras: roomExtrasForEmail,
+              },
+            ],
+
+            // keep this too (booking email can use it)
+            packageExtras: (extras || []).map((e) => ({
+              name: e.name,
+              quantity: e.quantity || 1,
+              needs_selection: !!e.needs_guest_input,
+            })),
+          };
 
           try {
             const emailResponse = await fetch(
@@ -1142,51 +1171,46 @@ export async function openBookPackageModal() {
                 body: JSON.stringify({ booking: bookingForEmail }),
               }
             );
-            
-            // --- ALSO send the Experiences/Extras selection email ---
-            try {
-              const displayConfirmationCode =
-                reservation.group_reservation_code || reservation.confirmation_code;
-
-              // only send if there are package extras
-              if ((extras || []).length > 0) {
-                const base = String(SOJOURN_API_BASE_URL || '').replace(/\/$/, '');
-                const extrasLink = `${base}/extra-selections?code=${encodeURIComponent(displayConfirmationCode || '')}`;
-
-                const extrasEmailResponse = await fetch(
-                  `${SOJOURN_API_BASE_URL}/api/send-extra-selections-email`,
-                  {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      booking: bookingForEmail,
-                      extrasLink,
-                    }),
-                  }
-                );
-
-                if (!extrasEmailResponse.ok) {
-                  const errorText = await extrasEmailResponse.text();
-                  console.error('Extra selections email API error:', errorText);
-                } else {
-                  console.log('✅ Extra selections email sent successfully');
-                }
-              } else {
-                console.log('ℹ️ No package extras, skipping extra selections email');
-              }
-            } catch (err) {
-              console.error('Failed to send extra selections email:', err);
-            }
-
 
             if (!emailResponse.ok) {
               const errorText = await emailResponse.text();
               console.error('Email API error:', errorText);
             }
+
+            // Send extras/experiences selection email ONLY if at least one needs details
+            const hasExtrasNeedingSelection = roomExtrasForEmail.some(
+              (x) => x.needs_selection
+            );
+
+            if (hasExtrasNeedingSelection) {
+              const base = String(SOJOURN_API_BASE_URL || '').replace(/\/$/, '');
+              const extrasLink = `${base}/extra-selections?code=${encodeURIComponent(
+                displayConfirmationCode || ''
+              )}`;
+
+              const extrasEmailResponse = await fetch(
+                `${SOJOURN_API_BASE_URL}/api/send-extra-selections-email`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    booking: bookingForEmail,
+                    extrasLink,
+                  }),
+                }
+              );
+
+              if (!extrasEmailResponse.ok) {
+                const errorText = await extrasEmailResponse.text();
+                console.error('Extra selections email API error:', errorText);
+              } else {
+                console.log('✅ Extra selections email sent successfully');
+              }
+            }
           } catch (err) {
             console.error('Failed to send booking email:', err);
           }
-        }
+
       }
       toast('Package booking created');
       wrap.remove();
