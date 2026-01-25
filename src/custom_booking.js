@@ -2494,15 +2494,6 @@ export async function openNewCustomBookingModal() {
               console.error('Failed to send extras selection email:', err);
             }
 
-
-            if (!selectionEmailResponse.ok) {
-              const errorText = await selectionEmailResponse.text();
-              console.error('Extras selection Email API error:', errorText);
-            } else {
-              console.log('✅ Extras selection email sent successfully');
-            }
-
-
             if (!emailResponse.ok) {
               const errorText = await emailResponse.text();
               console.error('Email API error:', errorText);
