@@ -1117,16 +1117,17 @@ export async function openBookPackageModal() {
           );
         } else {
           const bookingForEmail = {
-            // everything from the reservation record we just inserted
-            ...reservation,
-            // enrich with package info
-            package_name: pkg.name,
-            package_code: pkg.code,
-            packageExtras: (extras || []).map((e) => ({
-              name: e.name,
-              quantity: e.quantity || 1,
-            })),
-          };
+          // everything from the reservation record we just inserted
+          ...reservation,
+          // enrich with package info
+          package_name: pkg.name,
+          package_code: pkg.code,
+          packageExtras: (extras || []).map((e) => ({
+            name: e.name,
+            quantity: e.quantity || 1,
+          })),
+        };
+
 
           const displayConfirmationCode =
           reservation.group_reservation_code || reservation.confirmation_code;
@@ -1143,35 +1144,39 @@ export async function openBookPackageModal() {
             );
             
             // --- ALSO send the Experiences/Extras selection email ---
-            // Route expects: { booking, extrasLink }
             try {
               const displayConfirmationCode =
                 reservation.group_reservation_code || reservation.confirmation_code;
 
-              const extrasLink = `${String(SOJOURN_API_BASE_URL || '').replace(/\/$/, '')}/extras?code=${encodeURIComponent(displayConfirmationCode || '')}`;
+              // only send if there are package extras
+              if ((extras || []).length > 0) {
+                const base = String(SOJOURN_API_BASE_URL || '').replace(/\/$/, '');
+                const extrasLink = `${base}/extra-selections?code=${encodeURIComponent(displayConfirmationCode || '')}`;
 
-              const extrasEmailResponse = await fetch(
-                `${SOJOURN_API_BASE_URL}/api/send-extras-selection-email`,
-                {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    booking: bookingForEmail,
-                    extrasLink,
-                  }),
+                const extrasEmailResponse = await fetch(
+                  `${SOJOURN_API_BASE_URL}/api/send-extra-selections-email`,
+                  {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      booking: bookingForEmail,
+                      extrasLink,
+                    }),
+                  }
+                );
+
+                if (!extrasEmailResponse.ok) {
+                  const errorText = await extrasEmailResponse.text();
+                  console.error('Extra selections email API error:', errorText);
+                } else {
+                  console.log('✅ Extra selections email sent successfully');
                 }
-              );
-
-              if (!extrasEmailResponse.ok) {
-                const errorText = await extrasEmailResponse.text();
-                console.error('Extras selection email API error:', errorText);
               } else {
-                console.log('✅ Extras selection email sent successfully');
+                console.log('ℹ️ No package extras, skipping extra selections email');
               }
             } catch (err) {
-              console.error('Failed to send extras selection email:', err);
+              console.error('Failed to send extra selections email:', err);
             }
-
 
 
             if (!emailResponse.ok) {
