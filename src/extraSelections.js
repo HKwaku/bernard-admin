@@ -31,6 +31,7 @@ export function initExtraSelections() {
           <option value="all">All statuses</option>
           <option value="pending">Pending</option>
           <option value="completed">Completed</option>
+          <option value="submitted">Submitted</option>
         </select>
         <button id="extraselections-refresh" class="btn">Refresh</button>
       </div>
@@ -112,18 +113,18 @@ export function initExtraSelections() {
 
 async function load() {
   const list = document.getElementById('extraselections-list');
-  if (list) list.textContent = 'Loading…';
-
   try {
-    // Load menu items first
+    if (list) list.textContent = 'Loading…';
+
+    // Load menu items
     const { data: menuData } = await supabase
       .from('chef_menu_items')
       .select('id, name');
 
-    _menuItems = {};
-    menuData?.forEach(item => {
-      _menuItems[item.id] = item.name;
-    });
+    if (menuData) {
+      _menuItems = {};
+      menuData.forEach(m => (_menuItems[m.id] = m.name));
+    }
 
     // Load reservations with extras
     const { data, error } = await supabase
@@ -156,6 +157,44 @@ async function load() {
     if (error) throw error;
 
     _reservations = data || [];
+    
+    // Now fetch needs_guest_input for all extras
+    if (_reservations.length > 0) {
+      const allExtraCodes = new Set();
+      _reservations.forEach(res => {
+        if (res.reservation_extras) {
+          res.reservation_extras.forEach(extra => {
+            if (extra.extra_code) {
+              allExtraCodes.add(extra.extra_code);
+            }
+          });
+        }
+      });
+      
+      if (allExtraCodes.size > 0) {
+        const { data: extrasData } = await supabase
+          .from('extras')
+          .select('code, needs_guest_input')
+          .in('code', Array.from(allExtraCodes));
+        
+        // Create a map for quick lookup
+        const needsInputMap = {};
+        if (extrasData) {
+          extrasData.forEach(extra => {
+            needsInputMap[extra.code] = extra.needs_guest_input;
+          });
+        }
+        
+        // Attach needs_guest_input to each reservation_extra
+        _reservations.forEach(res => {
+          if (res.reservation_extras) {
+            res.reservation_extras.forEach(extra => {
+              extra.needs_guest_input = needsInputMap[extra.extra_code];
+            });
+          }
+        });
+      }
+    }
 
     // Default all to collapsed
     if (collapsedGroups.size === 0) {
@@ -231,7 +270,10 @@ function render() {
     const totalExtras = res.reservation_extras.length;
     const isCollapsed = collapsedGroups.has(String(res.id));
 
+
     // Determine overall status color
+    const allSubmitted = res.reservation_extras.every(e => getEffectiveStatus(e) === 'submitted');
+    const someSubmitted = res.reservation_extras.some(e => getEffectiveStatus(e) === 'submitted');
     const allCompleted = res.reservation_extras.every(e => getEffectiveStatus(e) === 'completed');
     const someCompleted = res.reservation_extras.some(e => getEffectiveStatus(e) === 'completed');
 
@@ -239,10 +281,13 @@ function render() {
     let borderColor = '#f59e0b'; // orange for pending
     let bgGradient = 'linear-gradient(to right, #fffbeb, white)';
     
-    if (allCompleted) {
-      borderColor = '#10b981'; // green for completed
+    if (allSubmitted) {
+      borderColor = '#10b981'; // green for all submitted
       bgGradient = 'linear-gradient(to right, #ecfdf5, white)';
-    } else if (someCompleted) {
+    } else if (allCompleted) {
+      borderColor = '#f59e0b'; // amber for all completed
+      bgGradient = 'linear-gradient(to right, #fef3c7, white)';
+    } else if (someSubmitted || someCompleted) {
       borderColor = '#3b82f6'; // blue for mixed
       bgGradient = 'linear-gradient(to right, #eff6ff, white)';
     }
@@ -351,23 +396,37 @@ function hasSubmittedSelectionData(selection_data) {
 }
 
 function getEffectiveStatus(extra) {
+  // If needs_guest_input is false, always show "selection not required"
+  if (extra.needs_guest_input === false) {
+    return 'selection not required';
+  }
+  
   const st = String(extra.selection_status || 'pending').toLowerCase();
-  if (st === 'completed') return 'completed';
-
-  // If we have selected_at OR meaningful selection_data, treat as completed in UI
-  if (extra.selected_at) return 'completed';
-  if (hasSubmittedSelectionData(extra.selection_data)) return 'completed';
-
-  return 'pending';
+  // Return the actual status from the database column
+  // Possible values: 'pending', 'completed', 'submitted', 'selection not required'
+  return st;
 }
 
 
 function renderStatusBadges(extras) {
   const badges = extras.map(e => {
     const st = getEffectiveStatus(e);
-    const badge = st === 'completed'
-      ? '<span class="badge ok">Completed</span>'
-      : '<span class="badge pending">Pending</span>';
+    let badge = '';
+    
+    if (st === 'submitted') {
+      // Green for submitted
+      badge = '<span class="badge" style="background:#d1fae5;color:#065f46;border:1px solid #6ee7b7">Submitted</span>';
+    } else if (st === 'completed') {
+      // Amber for completed
+      badge = '<span class="badge" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d">Completed</span>';
+    } else if (st === 'selection not required') {
+      // Grey for not required
+      badge = '<span class="badge" style="background:#f3f4f6;color:#6b7280;border:1px solid #d1d5db">Not Required</span>';
+    } else {
+      // Default pending (orange/amber)
+      badge = '<span class="badge pending">Pending</span>';
+    }
+    
     return badge;
   });
   return badges.join(' ');
@@ -375,7 +434,29 @@ function renderStatusBadges(extras) {
 
 function renderExtraCard(extra, resId) {
   const st = getEffectiveStatus(extra);
-  const isCompleted = st === 'completed';
+  
+  // Generate badge HTML and status text based on status
+  let badgeHtml = '';
+  let statusText = '';
+  let isActionable = false;
+  
+  if (st === 'submitted') {
+    badgeHtml = '<span class="badge" style="background:#d1fae5;color:#065f46;border:1px solid #6ee7b7">Submitted</span>';
+    statusText = 'Submitted';
+    isActionable = true;
+  } else if (st === 'completed') {
+    badgeHtml = '<span class="badge" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d">Completed</span>';
+    statusText = 'Completed';
+    isActionable = false;
+  } else if (st === 'selection not required') {
+    badgeHtml = '<span class="badge" style="background:#f3f4f6;color:#6b7280;border:1px solid #d1d5db">Not Required</span>';
+    statusText = 'Not Required';
+    isActionable = false;
+  } else {
+    badgeHtml = '<span class="badge pending">Pending</span>';
+    statusText = 'Pending';
+    isActionable = true;
+  }
 
   
   return `
@@ -387,9 +468,7 @@ function renderExtraCard(extra, resId) {
           ${extra.selected_at ? `<div style="color:var(--muted);font-size:0.85rem">Selected: ${formatDate(extra.selected_at)}</div>` : ''}
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <span class="badge ${isCompleted ? 'ok' : 'pending'}">
-            ${isCompleted ? 'Completed' : 'Pending'}
-          </span>
+          ${badgeHtml}
 
           <button
             class="btn btn-sm"
@@ -401,11 +480,11 @@ function renderExtraCard(extra, resId) {
           </button>
 
           <button
-            class="btn btn-sm ${isCompleted ? '' : 'btn-primary'}"
+            class="btn btn-sm ${st === 'submitted' ? '' : 'btn-primary'}"
             data-action="toggle"
             data-extra-id="${extra.id}"
           >
-            ${isCompleted ? 'Mark Pending' : 'Mark Completed'}
+            ${st === 'submitted' ? 'Mark Pending' : 'Mark Submitted'}
           </button>
         </div>
 
@@ -426,7 +505,7 @@ async function toggleStatus(extraId) {
       }
     }
 
-    const newStatus = currentStatus === 'completed' ? 'pending' : 'completed';
+    const newStatus = currentStatus === 'submitted' ? 'pending' : 'submitted';
 
     const { error } = await supabase
       .from('reservation_extras')
@@ -435,7 +514,7 @@ async function toggleStatus(extraId) {
 
     if (error) throw error;
     
-    toast(newStatus === 'completed' ? 'Marked as completed' : 'Marked as pending');
+    toast(newStatus === 'submitted' ? 'Marked as submitted' : 'Marked as pending');
 
     // Update local state
     for (const res of _reservations) {
@@ -448,6 +527,7 @@ async function toggleStatus(extraId) {
     
     render();
   } catch (e) {
+    console.error('toggle status error', e);
     console.error('toggle status error', e);
     alert('Failed to update status');
   }
@@ -632,9 +712,17 @@ function renderExtraDetail(extra, totalGuests, res) {
           <div style="color:var(--muted);margin-top:2px">Quantity: ${Number(extra.quantity || 1)}</div>
           ${extra.selected_at ? `<div style="color:var(--muted);font-size:0.85rem">Submitted: ${formatDate(extra.selected_at)}</div>` : ''}
         </div>
-        <span class="badge ${st === 'completed' ? 'ok' : 'pending'}">
-          ${st === 'completed' ? 'Completed' : 'Pending'}
-        </span>
+        ${(() => {
+          if (st === 'submitted') {
+            return '<span class="badge" style="background:#d1fae5;color:#065f46;border:1px solid #6ee7b7">Submitted</span>';
+          } else if (st === 'completed') {
+            return '<span class="badge" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d">Completed</span>';
+          } else if (st === 'selection not required') {
+            return '<span class="badge" style="background:#f3f4f6;color:#6b7280;border:1px solid #d1d5db">Not Required</span>';
+          } else {
+            return '<span class="badge pending">Pending</span>';
+          }
+        })()}
       </div>
       ${content}
     </div>
@@ -1196,7 +1284,7 @@ function openEditSelectionsModal(res, extra) {
                 </select>
               </label>
               <label>Time
-                <input class="input edit-nonchef-time" data-key="${key}" value="${escapeHtml(cur.time || '')}" placeholder="e.g. 16:00" />
+                <input type="time" class="input edit-nonchef-time" data-key="${key}" value="${escapeHtml(cur.time || '')}" placeholder="e.g. 16:00" />
               </label>
             </div>
           </div>
