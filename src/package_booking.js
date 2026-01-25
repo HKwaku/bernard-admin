@@ -1210,6 +1210,7 @@ export async function openBookPackageModal() {
           } catch (err) {
             console.error('Failed to send booking email:', err);
           }
+        }
 
       }
       toast('Package booking created');
