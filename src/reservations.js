@@ -4179,16 +4179,26 @@ if (recalcBtn && priceNote) {
                 body: JSON.stringify(emailData),
               }
             );
-
+            
+            
             // --- ALSO send experiences/extras selection email ---
-            const selectionEmailResponse = await fetch(
-              `${SOJOURN_API_BASE_URL}/api/send-extras-selection-email`,
-              {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(emailData),
-              }
-            );
+          const confirmationCode =
+          reservation.group_reservation_code || reservation.confirmation_code;
+
+          const extrasLink = `https://sojourn-cabins.vercel.app/experiences?code=${confirmationCode}`;
+
+          await fetch(
+            `${SOJOURN_API_BASE_URL}/api/send-extras-selection-email`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                booking: emailData.booking,
+                extrasLink,
+              }),
+            }
+          );
+
 
             if (!selectionEmailResponse.ok) {
               const errorText = await selectionEmailResponse.text();

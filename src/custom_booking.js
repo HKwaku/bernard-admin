@@ -2468,12 +2468,20 @@ export async function openNewCustomBookingModal() {
             );
 
             // --- ALSO send experiences/extras selection email ---
-            const selectionEmailResponse = await fetch(
+            const confirmationCode =
+            booking.group_reservation_code || booking.confirmation_code;
+
+            const extrasLink = `https://sojourn-cabins.vercel.app/experiences?code=${confirmationCode}`;
+
+            await fetch(
               `${SOJOURN_API_BASE_URL}/api/send-extras-selection-email`,
               {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(emailData),
+                body: JSON.stringify({
+                  booking,
+                  extrasLink,
+                }),
               }
             );
 

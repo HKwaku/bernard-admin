@@ -1139,16 +1139,25 @@ export async function openBookPackageModal() {
                 body: JSON.stringify({ booking: bookingForEmail }),
               }
             );
-
+            
             // --- ALSO send experiences/extras selection email ---
-            const selectionEmailResponse = await fetch(
+            const confirmationCode =
+            bookingForEmail.group_reservation_code || bookingForEmail.confirmation_code;
+
+            const extrasLink = `https://sojourn-cabins.vercel.app/experiences?code=${confirmationCode}`;
+
+            await fetch(
               `${SOJOURN_API_BASE_URL}/api/send-extras-selection-email`,
               {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ booking: bookingForEmail }),
+                body: JSON.stringify({
+                  booking: bookingForEmail,
+                  extrasLink,
+                }),
               }
             );
+
 
             if (!selectionEmailResponse.ok) {
               const errorText = await selectionEmailResponse.text();
