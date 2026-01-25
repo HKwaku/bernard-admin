@@ -1140,6 +1140,24 @@ export async function openBookPackageModal() {
               }
             );
 
+            // --- ALSO send experiences/extras selection email ---
+            const selectionEmailResponse = await fetch(
+              `${SOJOURN_API_BASE_URL}/api/send-extras-selection-email`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ booking: bookingForEmail }),
+              }
+            );
+
+            if (!selectionEmailResponse.ok) {
+              const errorText = await selectionEmailResponse.text();
+              console.error('Extras selection Email API error:', errorText);
+            } else {
+              console.log('✅ Extras selection email sent successfully');
+            }
+
+
             if (!emailResponse.ok) {
               const errorText = await emailResponse.text();
               console.error('Email API error:', errorText);
