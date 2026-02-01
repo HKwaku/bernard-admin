@@ -241,7 +241,7 @@ async function fetchReservationsForPeriod(start, end) {
     .select('id, total, room_subtotal, extras_total, check_in, check_out, nights, reservation_extras(subtotal)')
     .lte('check_in', sqlDate(end))
     .gte('check_out', sqlDate(start))
-    .in('status', ['confirmed', 'checked-in', 'checked-out']);
+    .in('status', ['confirmed', 'completed', 'checked-in', 'checked-out']);
 
   if (error) throw error;
   return data || [];
@@ -415,7 +415,7 @@ async function getWeekdayWeekendComparison(start, end) {
     .select('check_in, check_out, nights')
     .lte('check_in', sqlDate(end))
     .gte('check_out', sqlDate(start))
-    .in('status', ['confirmed', 'checked-in', 'checked-out']);
+    .in('status', ['confirmed', 'completed', 'checked-in', 'checked-out']);
 
   if (error) throw error;
 
@@ -513,7 +513,7 @@ async function generateRevenueTimeSeries(periods, granularity = 'day') {
       .select('total, check_in, check_out')
       .lte('check_in', sqlDate(period.end))
       .gte('check_out', sqlDate(period.start))
-      .in('status', ['confirmed', 'checked-in', 'checked-out']);
+      .in('status', ['confirmed', 'completed', 'checked-in', 'checked-out']);
 
     const revenueByDate = {};
     
