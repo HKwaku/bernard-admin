@@ -250,45 +250,77 @@ async function fetchReservationsForPeriod(start, end) {
 // Calculate occupancy metrics
 async function calculateOccupancyMetrics(reservations, start, end) {
   const NUM_CABINS = 3;
-  const totalDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
-  
+
+  // Normalize to local midnight to match analytics.js (prevents UTC parsing drift)
+  const periodStart = new Date(start);
+  periodStart.setHours(0, 0, 0, 0);
+
+  const periodEnd = new Date(end);
+  periodEnd.setHours(0, 0, 0, 0);
+
+  const totalDays =
+    Math.ceil((periodEnd - periodStart) / (1000 * 60 * 60 * 24)) + 1;
+
   // Get blocked dates for this period
   const { data: blockedDates } = await supabase
     .from('blocked_dates')
     .select('blocked_date, room_type_id')
-    .gte('blocked_date', sqlDate(start))
-    .lte('blocked_date', sqlDate(end));
-  
+    .gte('blocked_date', sqlDate(periodStart))
+    .lte('blocked_date', sqlDate(periodEnd));
+
   const blockedNights = (blockedDates || []).length;
-  const totalCabinNights = (NUM_CABINS * totalDays) - blockedNights;
+
+  const theoreticalCapacity = totalDays * NUM_CABINS;
+  const availableNights = theoreticalCapacity - blockedNights;
 
   let occupiedNights = 0;
   let totalNights = 0;
 
-  reservations.forEach(r => {
+  (reservations || []).forEach((r) => {
     if (!r.check_in || !r.check_out) return;
+
     totalNights += r.nights || 0;
-    
-    // Calculate occupied nights within range
-    const checkIn = new Date(r.check_in);
-    const checkOut = new Date(r.check_out);
-    const rangeStart = new Date(Math.max(checkIn, start));
-    const rangeEnd = new Date(Math.min(checkOut, end));
-    const nights = Math.max(0, Math.ceil((rangeEnd - rangeStart) / (1000 * 60 * 60 * 24)));
-    occupiedNights += nights;
+
+    // Match analytics.js: parse as local-midnight strings
+    const checkIn = new Date(r.check_in + 'T00:00:00');
+    const checkOut = new Date(r.check_out + 'T00:00:00');
+
+    const rangeStart = new Date(Math.max(checkIn, periodStart));
+    const rangeEnd = new Date(Math.min(checkOut, periodEnd));
+
+    const nightsInRange = Math.max(
+      0,
+      Math.ceil((rangeEnd - rangeStart) / (1000 * 60 * 60 * 24))
+    );
+
+    occupiedNights += nightsInRange;
   });
 
-  const occupancyRate = totalCabinNights > 0 ? (occupiedNights / totalCabinNights) * 100 : 0;
-  const avgLOS = reservations.length > 0 ? totalNights / reservations.length : 0;
+  const occupancyRate =
+    availableNights > 0 ? (occupiedNights / availableNights) * 100 : 0;
 
-  return { occupancyRate, avgLOS, totalNights, bookings: reservations.length, availableNights: totalCabinNights };
+  const avgLOS = (reservations || []).length > 0
+    ? totalNights / (reservations || []).length
+    : 0;
+
+  return {
+    occupancyRate,
+    avgLOS,
+    totalNights,
+    bookings: (reservations || []).length,
+    availableNights
+  };
 }
+
 
 // Calculate revenue metrics
 function calculateRevenueMetrics(reservations, availableNights, start, end) {
   const totalRevenue = reservations.reduce((sum, r) => sum + (parseFloat(r.total) || 0), 0);
   const roomRevenue = reservations.reduce((sum, r) => sum + (parseFloat(r.room_subtotal) || 0), 0);
-  
+  const MS_PER_DAY = 1000 * 60 * 60 * 24;
+  const endExclusive = new Date(end);
+  endExclusive.setDate(endExclusive.getDate() + 1);
+
   // Use extras_total field to match main analytics exactly
   const extrasRevenue = reservations.reduce(
     (sum, r) => sum + (parseFloat(r.extras_total) || 0),
@@ -302,9 +334,10 @@ function calculateRevenueMetrics(reservations, availableNights, start, end) {
     const checkIn = new Date(r.check_in);
     const checkOut = new Date(r.check_out);
     const rangeStart = new Date(Math.max(checkIn, start));
-    const rangeEnd = new Date(Math.min(checkOut, end));
-    const nightsInRange = Math.max(0, Math.ceil((rangeEnd - rangeStart) / (1000 * 60 * 60 * 24)));
+    const rangeEndExclusive = new Date(Math.min(checkOut, endExclusive));
+    const nightsInRange = Math.max(0, Math.floor((rangeEndExclusive - rangeStart) / MS_PER_DAY));
     occupiedNights += nightsInRange;
+
   });
 
   const avgBookingValue = reservations.length > 0 ? totalRevenue / reservations.length : 0;
@@ -359,6 +392,9 @@ function calculateExtrasMetrics(reservations) {
 // Get weekday vs weekend occupancy
 async function getWeekdayWeekendComparison(start, end) {
   // First get weekend definitions
+  const endExclusive = new Date(end);
+  endExclusive.setDate(endExclusive.getDate() + 1);
+
   const { data: weekendDefs, error: weekendError } = await supabase
     .from('weekend_definitions')
     .select('*');
@@ -391,7 +427,9 @@ async function getWeekdayWeekendComparison(start, end) {
     const checkOut = new Date(r.check_out);
     let currentDate = new Date(checkIn);
 
-    while (currentDate < checkOut) {
+    const loopEnd = new Date(Math.min(checkOut, endExclusive));
+    while (currentDate < loopEnd) {
+
       const dayOfWeek = currentDate.getDay(); // 0 = Sunday, 6 = Saturday
       const isWeekend = weekendMap[dayOfWeek] || false;
 
@@ -1099,7 +1137,10 @@ export async function renderComparisonView(dateRange) {
     const revenueData = await generateRevenueTimeSeries(periods, 'day');
     renderComparisonLineChart('revenue-trend-comparison', revenueData, { 
       min: 0,
-      dateRange: { start: dateRange.start, end: dateRange.end }
+      dateRange: { start: periods.current.start, end: periods.current.end },
+      allowedModes,
+      defaultMode,
+      defaultGranularity: 'day'
     });
 
   } catch (error) {

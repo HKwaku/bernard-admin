@@ -55,12 +55,20 @@ const COUNTRY_CODE_MAP = {
 // Date range state (matches parent analytics.js)
 let dateRange = {
   start: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-  end: new Date()
+  end: (() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  })()
 };
 
+
 function sqlDate(d) {
-  return d.toISOString().split('T')[0];
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
 }
+
 
 // Initialize Client Analytics
 export function initClientAnalytics() {
@@ -69,9 +77,13 @@ export function initClientAnalytics() {
 
 // Update date range from parent
 export function updateClientAnalyticsDateRange(start, end) {
-  dateRange = { start, end };
+  // Normalise to local-midnight dates to match analytics.js
+  const s = new Date(sqlDate(start) + 'T00:00:00');
+  const e = new Date(sqlDate(end) + 'T00:00:00');
+  dateRange = { start: s, end: e };
   renderClientAnalyticsContent();
 }
+
 
 // Main render function (now mirrors analytics-comparison structure)
 function renderClientAnalytics() {
@@ -165,8 +177,8 @@ async function renderClientOverviewMetrics() {
     const { data: reservations, error } = await supabase
       .from('reservations')
       .select('id, guest_first_name, guest_last_name, guest_email, created_at, total, status, adults, children')
-      .gte('created_at', sqlDate(dateRange.start))
-      .lte('created_at', sqlDate(dateRange.end))
+      .lte('check_in', sqlDate(dateRange.end))
+      .gte('check_out', sqlDate(dateRange.start))
       .in('status', ['confirmed', 'checked-in', 'checked-out']);
 
     if (error) throw error;
@@ -341,8 +353,8 @@ async function renderCountrySplit() {
     const { data: reservations, error } = await supabase
       .from('reservations')
       .select('country_code')
-      .gte('created_at', sqlDate(dateRange.start))
-      .lte('created_at', sqlDate(dateRange.end))
+      .lte('check_in', sqlDate(dateRange.end))
+      .gte('check_out', sqlDate(dateRange.start))
       .in('status', ['confirmed', 'checked-in', 'checked-out']);
 
     if (error) throw error;
@@ -413,8 +425,8 @@ async function renderGenderSplit() {
     const { data: reservations, error } = await supabase
       .from('reservations')
       .select('guest_gender')
-      .gte('created_at', sqlDate(dateRange.start))
-      .lte('created_at', sqlDate(dateRange.end))
+      .lte('check_in', sqlDate(dateRange.end))
+      .gte('check_out', sqlDate(dateRange.start))      
       .in('status', ['confirmed', 'checked-in', 'checked-out']);
 
     if (error) throw error;
@@ -524,8 +536,8 @@ async function renderGuestTypeAnalysis() {
     const { data: periodReservations, error: periodError } = await supabase
       .from('reservations')
       .select('guest_email, total')
-      .gte('created_at', sqlDate(dateRange.start))
-      .lte('created_at', sqlDate(dateRange.end))
+      .lte('check_in', sqlDate(dateRange.end))
+      .gte('check_out', sqlDate(dateRange.start))
       .in('status', ['confirmed', 'checked-in', 'checked-out']);
 
     if (periodError) throw periodError;
@@ -629,8 +641,8 @@ async function renderBookingLeadTime() {
     const { data: reservations, error } = await supabase
       .from('reservations')
       .select('created_at, check_in')
-      .gte('created_at', sqlDate(dateRange.start))
-      .lte('created_at', sqlDate(dateRange.end))
+      .lte('check_in', sqlDate(dateRange.end))
+      .gte('check_out', sqlDate(dateRange.start))
       .in('status', ['confirmed', 'checked-in', 'checked-out']);
 
     if (error) throw error;
@@ -728,8 +740,8 @@ async function renderRoomPreferences() {
     const { data: periodReservations, error: periodError } = await supabase
       .from('reservations')
       .select('guest_email, room_type_code, created_at')
-      .gte('created_at', sqlDate(dateRange.start))
-      .lte('created_at', sqlDate(dateRange.end))
+      .lte('check_in', sqlDate(dateRange.end))
+      .gte('check_out', sqlDate(dateRange.start))
       .in('status', ['confirmed', 'checked-in', 'checked-out']);
 
     if (periodError) throw periodError;

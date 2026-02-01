@@ -92,6 +92,43 @@ let dateRange = {
 function sqlDate(d) {
   return d.toISOString().split('T')[0];
 }
+
+// Display helper for UK-style dates (DD/MM/YYYY)
+function formatDateUK(d) {
+  try {
+    return d.toLocaleDateString('en-GB');
+  } catch {
+    return '';
+  }
+}
+
+// Parse UK date string "DD/MM/YYYY" -> Date (local midnight)
+function parseDateUK(value) {
+  if (!value) return null;
+  const s = String(value).trim();
+
+  // Accept DD/MM/YYYY (optionally allow "-" too)
+  const parts = s.includes('/') ? s.split('/') : s.split('-');
+  if (parts.length !== 3) return null;
+
+  const [dd, mm, yyyy] = parts.map(p => p.trim());
+  const day = parseInt(dd, 10);
+  const month = parseInt(mm, 10);
+  const year = parseInt(yyyy, 10);
+
+  if (!year || !month || !day) return null;
+  if (month < 1 || month > 12) return null;
+  if (day < 1 || day > 31) return null;
+
+  const d = new Date(year, month - 1, day);
+
+  // Validate (catches 31/02/2026 etc.)
+  if (d.getFullYear() !== year || d.getMonth() !== (month - 1) || d.getDate() !== day) return null;
+
+  return d;
+}
+
+
 // ---- Chart granularity state & helpers ----
 // 'day' | 'week' | 'month' for each chart
 const chartGranularity = {
@@ -221,13 +258,31 @@ view.innerHTML = `
         <!-- Custom range trigger -->
         <span style="color: #cbd5e1; font-size: 13px; margin: 0 2px;">|</span>
         <button id="btn-custom-range" class="btn btn-sm" style="background: transparent; border: 1px solid #e2e8f0; color: #64748b; padding: 5px 9px; font-size: 12px; border-radius: 6px; cursor: pointer;">Custom</button>
+        <span id="custom-range-label" style="color:#64748b;font-size:12px;">&nbsp;</span>
         <!-- Custom date-range pickers (hidden until Custom clicked) -->
         <div id="custom-date-range" style="display: none; gap: 8px; flex-wrap: wrap; align-items: center;">
-          <input type="date" id="analytics-start" class="input" style="width: auto;">
-          <span style="color: #64748b;">to</span>
-          <input type="date" id="analytics-end" class="input" style="width: auto;">
-          <button id="apply-date-range" class="btn btn-sm">Apply</button>
-        </div>
+        <input
+          type="text"
+          id="analytics-start"
+          class="input"
+          style="width: 120px;"
+          placeholder="DD/MM/YYYY"
+          inputmode="numeric"
+          autocomplete="off"
+        >
+        <span style="color: #64748b;">to</span>
+        <input
+          type="text"
+          id="analytics-end"
+          class="input"
+          style="width: 120px;"
+          placeholder="DD/MM/YYYY"
+          inputmode="numeric"
+          autocomplete="off"
+        >
+        <button id="apply-date-range" class="btn btn-sm">Apply</button>
+      </div>
+
       </div>
       <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
         <!-- View Toggle -->
@@ -405,6 +460,51 @@ view.innerHTML = `
 
 // Initialise month/year checkbox dropdowns (must run AFTER HTML exists)
 initMonthYearCheckboxDropdowns();
+
+// Initialize date pickers for custom date range with UK format
+function initDatePickers() {
+  function setupFlatpickr() {
+    flatpickr('#analytics-start', {
+      dateFormat: 'd/m/Y',
+      allowInput: true,
+      onClose: function(selectedDates, dateStr, instance) {
+        // When date is selected, keep UK format
+      }
+    });
+    
+    flatpickr('#analytics-end', {
+      dateFormat: 'd/m/Y',
+      allowInput: true,
+      onClose: function(selectedDates, dateStr, instance) {
+        // When date is selected, keep UK format
+      }
+    });
+  }
+  
+  // Check if flatpickr is already loaded
+  if (typeof flatpickr !== 'undefined') {
+    setupFlatpickr();
+  } else {
+    // Dynamically load flatpickr
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css';
+    document.head.appendChild(link);
+    
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/flatpickr';
+    script.onload = () => {
+      setupFlatpickr();
+    };
+    script.onerror = () => {
+      console.error('Failed to load flatpickr');
+    };
+    document.head.appendChild(script);
+  }
+}
+
+// Call it after a short delay to ensure DOM is ready
+setTimeout(initDatePickers, 100);
 syncCheckboxDropdownsToDateRange();
 
   // Chart granularity buttons (Revenue + Occupancy)
@@ -2007,9 +2107,34 @@ function handleMonthYearChange() {
 
 // "Custom" button clicked → show the date pickers pre-filled with current range
 function openCustomRange() {
-  document.getElementById('analytics-start').value = sqlDate(dateRange.start);
-  document.getElementById('analytics-end').value   = sqlDate(dateRange.end);
+  document.getElementById('analytics-start').value = formatDateUK(dateRange.start);
+  document.getElementById('analytics-end').value   = formatDateUK(dateRange.end);
   document.getElementById('custom-date-range').style.display = 'flex';
+  const lbl = document.getElementById('custom-range-label');
+  if (lbl) lbl.textContent = `${formatDateUK(dateRange.start)} – ${formatDateUK(dateRange.end)}`;
+  
+  // Re-initialize date pickers when shown
+  if (typeof flatpickr !== 'undefined') {
+    setTimeout(() => {
+      const startInput = document.getElementById('analytics-start');
+      const endInput = document.getElementById('analytics-end');
+      
+      // Destroy existing instances if any
+      if (startInput._flatpickr) startInput._flatpickr.destroy();
+      if (endInput._flatpickr) endInput._flatpickr.destroy();
+      
+      // Create new instances
+      flatpickr('#analytics-start', {
+        dateFormat: 'd/m/Y',
+        allowInput: true,
+      });
+      
+      flatpickr('#analytics-end', {
+        dateFormat: 'd/m/Y',
+        allowInput: true,
+      });
+    }, 50);
+  }
 }
 
 // "Apply" clicked inside the custom picker row
@@ -2017,16 +2142,24 @@ function applyCustomDateRange() {
   const start = document.getElementById('analytics-start').value;
   const end   = document.getElementById('analytics-end').value;
 
-  if (start && end) {
-    dateRange.start = new Date(start + 'T00:00:00');
-    dateRange.end   = new Date(end   + 'T00:00:00');
+  const startDate = parseDateUK(start);
+  const endDate   = parseDateUK(end);
+
+  if (startDate && endDate) {
+    dateRange.start = startDate;
+    dateRange.end   = endDate;
+
     autoSetGranularityFromRange();
     syncCheckboxDropdownsToDateRange();
     refreshView();
   } else {
-    toast('Please select both start and end dates');
+    toast('Please enter dates as DD/MM/YYYY');
   }
+
+  const lbl = document.getElementById('custom-range-label');
+  if (lbl) lbl.textContent = `${formatDateUK(dateRange.start)} – ${formatDateUK(dateRange.end)}`;
 }
+
 
 function initMonthYearCheckboxDropdowns() {
   const monthBtn = document.getElementById('month-dd-btn');
