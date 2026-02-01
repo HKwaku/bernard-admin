@@ -106,7 +106,7 @@ function renderComparisonCard(label, current, mom, qoq, yoy, formatter = (v) => 
 async function fetchReservationsForPeriod(start, end) {
   const { data, error } = await supabase
     .from('reservations')
-    .select('*, reservation_extras(subtotal)')
+    .select('total, room_subtotal, extras_total, check_in, check_out, nights, reservation_extras(subtotal)')
     .gte('check_in', sqlDate(start))
     .lte('check_in', sqlDate(end))
     .in('status', ['confirmed', 'checked-in', 'checked-out']);
@@ -153,23 +153,26 @@ async function calculateOccupancyMetrics(reservations, start, end) {
 }
 
 // Calculate revenue metrics
-function calculateRevenueMetrics(reservations, availableNights) {
+function calculateRevenueMetrics(reservations, availableNights, start, end) {
   const totalRevenue = reservations.reduce((sum, r) => sum + (parseFloat(r.total) || 0), 0);
   const roomRevenue = reservations.reduce((sum, r) => sum + (parseFloat(r.room_subtotal) || 0), 0);
   
-  let extrasRevenue = 0;
-  reservations.forEach(r => {
-    if (r.reservation_extras) {
-      r.reservation_extras.forEach(e => {
-        extrasRevenue += parseFloat(e.subtotal) || 0;
-      });
-    }
-  });
+  // Use extras_total field to match main analytics exactly
+  const extrasRevenue = reservations.reduce(
+    (sum, r) => sum + (parseFloat(r.extras_total) || 0),
+    0
+  );
 
-  // Calculate occupied nights within range for ADR
+  // Calculate occupied nights WITHIN the date range (not total r.nights)
   let occupiedNights = 0;
   reservations.forEach(r => {
-    occupiedNights += r.nights || 0;
+    if (!r.check_in || !r.check_out) return;
+    const checkIn = new Date(r.check_in);
+    const checkOut = new Date(r.check_out);
+    const rangeStart = new Date(Math.max(checkIn, start));
+    const rangeEnd = new Date(Math.min(checkOut, end));
+    const nightsInRange = Math.max(0, Math.ceil((rangeEnd - rangeStart) / (1000 * 60 * 60 * 24)));
+    occupiedNights += nightsInRange;
   });
 
   const avgBookingValue = reservations.length > 0 ? totalRevenue / reservations.length : 0;
@@ -190,20 +193,29 @@ function calculateRevenueMetrics(reservations, availableNights) {
 function calculateExtrasMetrics(reservations) {
   let totalBookingsWithExtras = 0;
   let totalExtras = 0;
-  let totalExtrasRevenue = 0;
 
   reservations.forEach(r => {
-    if (r.reservation_extras && r.reservation_extras.length > 0) {
+    // Use extras_total field to match main analytics methodology
+    // This ensures consistency: attachment rate based on $ amount, not just relation existence
+    const extrasTotal = parseFloat(r.extras_total) || 0;
+    if (extrasTotal > 0) {
       totalBookingsWithExtras++;
+    }
+    
+    // Count items from reservation_extras for "Avg Extras Per Booking"
+    if (r.reservation_extras && r.reservation_extras.length > 0) {
       totalExtras += r.reservation_extras.length;
-      r.reservation_extras.forEach(e => {
-        totalExtrasRevenue += parseFloat(e.subtotal) || 0;
-      });
     }
   });
 
   const attachRate = reservations.length > 0 ? (totalBookingsWithExtras / reservations.length) * 100 : 0;
   const avgPerBooking = totalBookingsWithExtras > 0 ? totalExtras / totalBookingsWithExtras : 0;
+  
+  // Total extras revenue from extras_total field (matches main analytics exactly)
+  const totalExtrasRevenue = reservations.reduce(
+    (sum, r) => sum + (parseFloat(r.extras_total) || 0),
+    0
+  );
 
   return { attachRate, avgPerBooking, totalExtrasRevenue };
 }
@@ -717,10 +729,10 @@ export async function renderComparisonView(dateRange) {
       availableNights: occupancyData.yoy.capacity.available
     };
 
-    const currentRevenue = calculateRevenueMetrics(currentRes, currentOccupancy.availableNights);
-    const momRevenue = calculateRevenueMetrics(momRes, momOccupancy.availableNights);
-    const qoqRevenue = calculateRevenueMetrics(qoqRes, qoqOccupancy.availableNights);
-    const yoyRevenue = calculateRevenueMetrics(yoyRes, yoyOccupancy.availableNights);
+    const currentRevenue = calculateRevenueMetrics(currentRes, currentOccupancy.availableNights, dateRange.start, dateRange.end);
+    const momRevenue = calculateRevenueMetrics(momRes, momOccupancy.availableNights, periods.momStart, periods.momEnd);
+    const qoqRevenue = calculateRevenueMetrics(qoqRes, qoqOccupancy.availableNights, periods.qoqStart, periods.qoqEnd);
+    const yoyRevenue = calculateRevenueMetrics(yoyRes, yoyOccupancy.availableNights, periods.yoyStart, periods.yoyEnd);
 
     const currentExtras = calculateExtrasMetrics(currentRes);
     const momExtras = calculateExtrasMetrics(momRes);

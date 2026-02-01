@@ -107,9 +107,9 @@ function autoSetGranularityFromRange() {
   const days = daysInRange(dateRange.start, dateRange.end);
 
   let mode = 'day';
-  if (days > 90 && days <= 180) {
+  if (days > 31 && days <= 90) {
     mode = 'week';
-  } else if (days > 180) {
+  } else if (days > 90) {
     mode = 'month';
   }
 
@@ -145,17 +145,32 @@ view.innerHTML = `
 
     <!-- Date Range Selector + View Toggle -->
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; width: 100%; box-sizing: border-box;">
-      <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-        <select id="analytics-period" class="select">
-          <option value="7">Last 7 days</option>
-          <option value="30" selected>Last 30 days</option>
-          <option value="90">Last 90 days</option>
-          <option value="365">Last 12 months</option>
-          <option value="custom">Custom Range</option>
+      <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+        <!-- Month dropdown -->
+        <select id="analytics-month" class="select" style="min-width: 118px;">
+          <option value="all">All Months</option>
+          <option value="0">January</option>
+          <option value="1">February</option>
+          <option value="2">March</option>
+          <option value="3">April</option>
+          <option value="4">May</option>
+          <option value="5">June</option>
+          <option value="6">July</option>
+          <option value="7">August</option>
+          <option value="8">September</option>
+          <option value="9">October</option>
+          <option value="10">November</option>
+          <option value="11">December</option>
         </select>
-        <div id="custom-date-range" style="display: none; gap: 8px; flex-wrap: wrap;">
+        <!-- Year dropdown (populated by JS) -->
+        <select id="analytics-year" class="select" style="min-width: 78px;"></select>
+        <!-- Custom range trigger -->
+        <span style="color: #cbd5e1; font-size: 13px; margin: 0 2px;">|</span>
+        <button id="btn-custom-range" class="btn btn-sm" style="background: transparent; border: 1px solid #e2e8f0; color: #64748b; padding: 5px 9px; font-size: 12px; border-radius: 6px; cursor: pointer;">Custom</button>
+        <!-- Custom date-range pickers (hidden until Custom clicked) -->
+        <div id="custom-date-range" style="display: none; gap: 8px; flex-wrap: wrap; align-items: center;">
           <input type="date" id="analytics-start" class="input" style="width: auto;">
-          <span>to</span>
+          <span style="color: #64748b;">to</span>
           <input type="date" id="analytics-end" class="input" style="width: auto;">
           <button id="apply-date-range" class="btn btn-sm">Apply</button>
         </div>
@@ -339,8 +354,12 @@ view.innerHTML = `
     btn.addEventListener('click', handleChartGranularityClick);
   });
 
-  // Event listeners
-  document.getElementById('analytics-period')?.addEventListener('change', handlePeriodChange);
+  // Date filter – Month / Year / Custom
+  populateYearSelect();
+  syncDropdownsToDateRange();
+  document.getElementById('analytics-month')?.addEventListener('change', handleMonthYearChange);
+  document.getElementById('analytics-year')?.addEventListener('change', handleMonthYearChange);
+  document.getElementById('btn-custom-range')?.addEventListener('click', openCustomRange);
   document.getElementById('apply-date-range')?.addEventListener('click', applyCustomDateRange);
   
 
@@ -547,6 +566,24 @@ function renderStandardViewContent() {
       btn.addEventListener('click', handleChartGranularityClick);
     });
   }, 100);
+
+  // Init drill-through modal (idempotent) and attach delegated click handler
+  initDrillThroughModal();
+  const content = document.getElementById('analytics-content');
+  if (content && !content.__drillBound) {
+    content.addEventListener('click', (e) => {
+      // 1) Metric tile click
+      const card = e.target.closest('.metric-card[data-drill]');
+      if (card) { handleDrillClick(card.dataset.drill); return; }
+      // 2) Horizontal bar click
+      const bar = e.target.closest('.drill-bar-row[data-drill-bar]');
+      if (bar) { handleBarDrillClick(bar.dataset.drillBar); return; }
+      // 3) Upcoming check-in row click
+      const checkin = e.target.closest('.drill-checkin-row[data-drill-checkin]');
+      if (checkin) { handleCheckinDrillClick(checkin.dataset.drillCheckin); return; }
+    });
+    content.__drillBound = true;
+  }
   
   loadAllAnalytics();
 }
@@ -600,26 +637,26 @@ async function loadOccupancyMetrics() {
     const occupancy = data.occupancy;
 
     const html = `
-      <div class="metric-card">
+      <div class="metric-card" data-drill="occupancy">
         <div class="metric-label">Occupancy Rate</div>
         <div class="metric-value">${occupancy.occupancy_rate}%</div>
         <div class="metric-subtext">${occupancy.occupied_nights} of ${capacity.available} nights occupied</div>
       </div>
-      <div class="metric-card">
+      <div class="metric-card" data-drill="occupancy">
         <div class="metric-label">Nights Sold</div>
         <div class="metric-value">${occupancy.nights_sold}</div>
       </div>
-      <div class="metric-card">
+      <div class="metric-card" data-drill="occupancy">
         <div class="metric-label">Available Nights</div>
         <div class="metric-value">${capacity.available}</div>
         <div class="metric-subtext">${capacity.blocked} nights blocked</div>
       </div>
-      <div class="metric-card">
+      <div class="metric-card" data-drill="occupancy">
         <div class="metric-label">ALOS</div>
         <div class="metric-value">${occupancy.alos}</div>
         <div class="metric-subtext">Average Length of Stay</div>
       </div>
-      <div class="metric-card">
+      <div class="metric-card" data-drill="occupancy">
         <div class="metric-label">Bookings in Period</div>
         <div class="metric-value">${occupancy.bookings_count}</div>
       </div>
@@ -651,11 +688,6 @@ async function loadRevenueMetrics() {
       .gte('blocked_date', sqlDate(dateRange.start))
       .lte('blocked_date', sqlDate(dateRange.end));
 
-    console.log('🔍 Revenue Metrics Debug:', {
-      dateRange: { start: sqlDate(dateRange.start), end: sqlDate(dateRange.end) },
-      blockedDates: blockedDates || [],
-      blockedCount: (blockedDates || []).length
-    });
 
     // Calculate available nights (excluding blocked dates)
     const daysInPeriod = Math.max(
@@ -706,33 +738,33 @@ async function loadRevenueMetrics() {
     const adr = occupiedNightsInRange > 0 ? roomRevenue / occupiedNightsInRange : 0;
 
     const html = `
-      <div class="metric-card">
+      <div class="metric-card" data-drill="revenue">
         <div class="metric-label">Total Revenue</div>
         <div class="metric-value">${formatCurrencyCompact(totalRevenue, 'GHS')}</div>
       </div>
-      <div class="metric-card">
+      <div class="metric-card" data-drill="revenue">
         <div class="metric-label">Room Revenue</div>
         <div class="metric-value">${formatCurrencyCompact(roomRevenue, 'GHS')}</div>
       </div>
-      <div class="metric-card">
+      <div class="metric-card" data-drill="revenue">
         <div class="metric-label">Extras Revenue</div>
         <div class="metric-value">${formatCurrencyCompact(extrasRevenue, 'GHS')}</div>
       </div>
-      <div class="metric-card">
+      <div class="metric-card" data-drill="revenue">
         <div class="metric-label">Avg Booking Value</div>
         <div class="metric-value">${formatCurrencyCompact(avgBookingValue, 'GHS')}</div>
       </div>
-      <div class="metric-card">
+      <div class="metric-card" data-drill="revenue">
         <div class="metric-label">ADR</div>
         <div class="metric-value">${formatCurrencyCompact(adr, 'GHS')}</div>
         <div class="metric-subtext">Average Daily Rate</div>
       </div>
-      <div class="metric-card">
+      <div class="metric-card" data-drill="revenue">
         <div class="metric-label">RevPAR</div>
         <div class="metric-value">${formatCurrencyCompact(revPAR, 'GHS')}</div>
         <div class="metric-subtext">Revenue per Available Room</div>
       </div>
-      <div class="metric-card">
+      <div class="metric-card" data-drill="revenue">
         <div class="metric-label">TRevPAR</div>
         <div class="metric-value">${formatCurrencyCompact(trevpar, 'GHS')}</div>
         <div class="metric-subtext">Total Revenue per Available Room</div>
@@ -912,11 +944,14 @@ async function loadRevenueChart() {
       });
 
     const mode = chartGranularity.revenue || 'day';
+    const isMobile = window.innerWidth <= 768;
     let points = [];
 
     if (mode === 'day') {
       points = dailySeries.map(({ date, value }) => ({
-        label: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        label: isMobile
+          ? date.toLocaleDateString('en-US', { day: 'numeric' })
+          : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         value,
       }));
     } else {
@@ -991,12 +1026,22 @@ async function loadOccupancyTrendChart() {
     }
 
     // Transform database result into chart points
-    const points = (data || []).map(item => ({
-      label: mode === 'month'
-        ? new Date(item.date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
-        : new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      value: item.occupancy_rate
-    }));
+    const isMobile = window.innerWidth <= 768;
+    const points = (data || []).map(item => {
+      const d = new Date(item.date + 'T00:00:00');
+      let label;
+      if (mode === 'month') {
+        label = d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      } else if (mode === 'week') {
+        label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      } else {
+        // day mode
+        label = isMobile
+          ? d.toLocaleDateString('en-US', { day: 'numeric' })
+          : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      }
+      return { label, value: item.occupancy_rate };
+    });
 
     renderLineChart('occupancy-trend-chart', points, {
       min: 0,
@@ -1038,7 +1083,7 @@ async function loadOccupancyChart() {
     
     Object.entries(cabins).forEach(([cabin, percentage]) => {
       html += `
-        <div style="display: flex; align-items: center; gap: 12px;">
+        <div class="drill-bar-row" data-drill-bar="cabin-${cabin}" style="display: flex; align-items: center; gap: 12px; cursor: pointer; border-radius: 6px; padding: 4px 0; transition: background 0.15s ease;">
           <div style="min-width: 60px; font-weight: 600; color: #0f172a;">${cabin}</div>
           <div style="flex: 1; height: 32px; background: #f1f5f9; border-radius: 6px; overflow: hidden; position: relative;">
             <div style="width: ${percentage}%; height: 100%; background: linear-gradient(90deg, #4f46e5 0%, #22c55e 100%); transition: width 0.5s ease;"></div>
@@ -1106,28 +1151,27 @@ async function loadExtrasMetrics() {
     const topExtra = Object.entries(extraCounts).sort((a, b) => b[1] - a[1])[0];
 
     const html = `
-      <div class="metric-card">
+      <div class="metric-card" data-drill="extras">
         <div class="metric-label">Extras Revenue</div>
         <div class="metric-value">${formatCurrencyCompact(totalRevenue, 'GHS')}</div>
       </div>
-      <div class="metric-card">
+      <div class="metric-card" data-drill="extras">
         <div class="metric-label">Extras Attach Rate</div>
         <div class="metric-value">${attachRate.toFixed(0)}%</div>
       </div>
-      <div class="metric-card">
+      <div class="metric-card" data-drill="extras">
         <div class="metric-label">Avg Per Booking</div>
         <div class="metric-value">${avgPerBooking.toFixed(1)}</div>
       </div>
-            <div class="metric-card">
+      <div class="metric-card" data-drill="extras">
         <div class="metric-label">Total Extras Sold</div>
         <div class="metric-value">${reservationExtras.length}</div>
       </div>
-      <div class="metric-card">
+      <div class="metric-card" data-drill="extras">
         <div class="metric-label">Top Extra</div>
         <div class="metric-value" style="font-size: 16px;">${topExtra ? topExtra[0] : 'N/A'}</div>
         <div style="font-size: 13px; color: #64748b; margin-top: 4px;">${topExtra ? topExtra[1] + ' bookings' : ''}</div>
       </div>
-
     `;
 
     document.getElementById('extras-metrics').innerHTML = html;
@@ -1166,7 +1210,7 @@ async function loadExtrasCharts() {
     sortedExtras.forEach(([name, count]) => {
       const width = (count / maxCount) * 100;
       bookingsHtml += `
-        <div style="display: flex; align-items: center; gap: 12px;">
+        <div class="drill-bar-row" data-drill-bar="extra-${name}" style="display: flex; align-items: center; gap: 12px; cursor: pointer; border-radius: 6px; padding: 4px 0; transition: background 0.15s ease;">
           <div style="min-width: 150px; font-size: 14px; color: #0f172a;">${name}</div>
           <div style="flex: 1; height: 28px; background: #f1f5f9; border-radius: 6px; overflow: hidden;">
             <div style="width: ${width}%; height: 100%; background: linear-gradient(90deg, #4f46e5 0%, #22c55e 100%);"></div>
@@ -1191,7 +1235,7 @@ async function loadExtrasCharts() {
       const barWidth = (revenue / maxRevenue) * 100;
       
       revenueHtml += `
-        <div style="display: flex; flex-direction: column; gap: 6px;">
+        <div class="drill-bar-row" data-drill-bar="extra-${name}" style="display: flex; flex-direction: column; gap: 6px; cursor: pointer; border-radius: 6px; padding: 6px; transition: background 0.15s ease;">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span style="font-size: 14px; color: #0f172a; font-weight: 500;">${name}</span>
             <span style="font-size: 14px; font-weight: 600; color: #0f172a;">${formatCurrencyCompact(revenue, 'GHS')}</span>
@@ -1231,6 +1275,7 @@ async function loadExtrasCharts() {
 
 async function loadPairingAnalysis() {
   try {
+    // Fetch reservations in date range with their extras
     const { data: reservations, error } = await supabase
       .from('reservations')
       .select(`
@@ -1238,29 +1283,37 @@ async function loadPairingAnalysis() {
         check_in,
         reservation_extras(extra_name)
       `)
-      .gte('check_in', dateRange.start.toISOString().split('T')[0])
-      .lte('check_in', dateRange.end.toISOString().split('T')[0])
+      .gte('check_in', sqlDate(dateRange.start))
+      .lte('check_in', sqlDate(dateRange.end))
       .in('status', ['confirmed', 'checked-in', 'checked-out']);
 
     if (error) throw error;
+
+    if (!reservations || reservations.length === 0) {
+      document.getElementById('pairing-analysis').innerHTML =
+        '<div class="analytics-empty">No reservations in this period</div>';
+      return;
+    }
 
     // Count extras per booking
     const extrasDistribution = { 0: 0, 1: 0, '2+': 0 };
     const pairs = {};
 
     reservations.forEach(r => {
-      const extrasCount = r.reservation_extras?.length || 0;
+      // Normalise: Supabase may return null or [] for empty relation
+      const extras = r.reservation_extras || [];
+      const extrasCount = extras.length;
       
       if (extrasCount === 0) extrasDistribution[0]++;
       else if (extrasCount === 1) extrasDistribution[1]++;
       else extrasDistribution['2+']++;
 
-      // Track pairs
+      // Track pairs – only when 2+ extras exist
       if (extrasCount >= 2) {
-        const extras = r.reservation_extras.map(e => e.extra_name).sort();
-        for (let i = 0; i < extras.length - 1; i++) {
-          for (let j = i + 1; j < extras.length; j++) {
-            const pair = `${extras[i]} + ${extras[j]}`;
+        const names = extras.map(e => e.extra_name).sort();
+        for (let i = 0; i < names.length - 1; i++) {
+          for (let j = i + 1; j < names.length; j++) {
+            const pair = `${names[i]} + ${names[j]}`;
             pairs[pair] = (pairs[pair] || 0) + 1;
           }
         }
@@ -1282,7 +1335,7 @@ async function loadPairingAnalysis() {
       html += '<div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px;">';
       topPairs.forEach(([pair, count]) => {
         html += `
-          <div style="padding: 14px; background: #f9fafb; border-left: 3px solid #c9a86a; border-radius: 6px;">
+          <div class="drill-bar-row" data-drill-bar="pairing-${pair}" style="padding: 14px; background: #f9fafb; border-left: 3px solid #c9a86a; border-radius: 6px; cursor: pointer; transition: background 0.15s ease;">
             <span style="font-size: 15px; color: #0f172a;">${pair}</span>
             <strong style="margin-left: 8px; color: #c9a86a;">(${count} bookings)</strong>
           </div>
@@ -1290,20 +1343,20 @@ async function loadPairingAnalysis() {
       });
       html += '</div>';
     } else {
-      html += '<div style="text-align: center; padding: 20px; color: #94a3b8;">No common pairings found</div>';
+      html += '<div style="text-align: center; padding: 20px; color: #94a3b8;">No common pairings found in this period</div>';
     }
 
     html += `
-      <div style="display: flex; justify-content: space-around; padding: 20px; background: #f9fafb; border-radius: 8px;">
-        <div style="text-align: center;">
+      <div style="display: flex; justify-content: space-around; padding: 20px; background: #f9fafb; border-radius: 8px; gap: 8px;">
+        <div class="drill-bar-row" data-drill-bar="extrascount-0" style="text-align: center; flex: 1; cursor: pointer; border-radius: 6px; padding: 8px; transition: background 0.15s ease;">
           <div style="font-size: 28px; font-weight: 600; color: #0f172a;">${pct0}%</div>
           <div style="font-size: 13px; color: #64748b; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px;">0 Extras</div>
         </div>
-        <div style="text-align: center;">
+        <div class="drill-bar-row" data-drill-bar="extrascount-1" style="text-align: center; flex: 1; cursor: pointer; border-radius: 6px; padding: 8px; transition: background 0.15s ease;">
           <div style="font-size: 28px; font-weight: 600; color: #0f172a;">${pct1}%</div>
           <div style="font-size: 13px; color: #64748b; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px;">1 Extra</div>
         </div>
-        <div style="text-align: center;">
+        <div class="drill-bar-row" data-drill-bar="extrascount-2" style="text-align: center; flex: 1; cursor: pointer; border-radius: 6px; padding: 8px; transition: background 0.15s ease;">
           <div style="font-size: 28px; font-weight: 600; color: #0f172a;">${pct2}%</div>
           <div style="font-size: 13px; color: #64748b; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px;">2+ Extras</div>
         </div>
@@ -1313,6 +1366,8 @@ async function loadPairingAnalysis() {
     document.getElementById('pairing-analysis').innerHTML = html;
   } catch (error) {
     console.error('Error loading pairing analysis:', error);
+    document.getElementById('pairing-analysis').innerHTML =
+      '<div style="text-align:center; color:#ef4444;">Error loading pairing data</div>';
   }
 }
 
@@ -1341,20 +1396,20 @@ async function loadPackageMetrics() {
     const topPackage = Object.entries(packageCounts).sort((a, b) => b[1] - a[1])[0];
 
     const html = `
-      <div class="metric-card">
+      <div class="metric-card" data-drill="packages">
         <div class="metric-label">Package Uptake Rate</div>
         <div class="metric-value">${uptakeRate.toFixed(0)}%</div>
       </div>
-      <div class="metric-card">
+      <div class="metric-card" data-drill="packages">
         <div class="metric-label">Most Popular Package</div>
         <div class="metric-value" style="font-size: 16px;">${topPackage ? topPackage[0] : 'N/A'}</div>
         <div style="font-size: 13px; color: #64748b; margin-top: 4px;">${topPackage ? topPackage[1] + ' bookings' : ''}</div>
       </div>
-      <div class="metric-card">
+      <div class="metric-card" data-drill="packages">
         <div class="metric-label">Package Revenue</div>
         <div class="metric-value">${formatCurrencyCompact(packageRevenue, 'GHS')}</div>
       </div>
-      <div class="metric-card">
+      <div class="metric-card" data-drill="packages">
         <div class="metric-label">Avg Package Value</div>
         <div class="metric-value">${formatCurrencyCompact(avgPackageValue, 'GHS')}</div>
       </div>
@@ -1399,7 +1454,7 @@ async function loadPackageCharts() {
       const width = (count / maxCount) * 100;
       const isNoPackage = name === 'No Package';
       bookingsHtml += `
-        <div style="display: flex; align-items: center; gap: 12px;">
+        <div class="drill-bar-row" data-drill-bar="package-${name}" style="display: flex; align-items: center; gap: 12px; cursor: pointer; border-radius: 6px; padding: 4px 0; transition: background 0.15s ease;">
           <div style="min-width: 140px; font-size: 14px; color: #0f172a;">${name}</div>
           <div style="flex: 1; height: 28px; background: #f1f5f9; border-radius: 6px; overflow: hidden;">
             <div style="width: ${width}%; height: 100%; background: ${isNoPackage ? 'linear-gradient(90deg, #94a3b8 0%, #64748b 100%)' : 'linear-gradient(90deg, #c9a86a 0%, #d4b577 100%)'};"></div>
@@ -1418,7 +1473,7 @@ async function loadPackageCharts() {
     sortedRevenue.forEach(([name, revenue]) => {
       const percentage = totalRevenue > 0 ? (revenue / totalRevenue) * 100 : 0;
       revenueHtml += `
-        <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: #f9fafb; border-radius: 6px;">
+        <div class="drill-bar-row" data-drill-bar="package-${name}" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: #f9fafb; border-radius: 6px; cursor: pointer; transition: background 0.15s ease;">
           <div style="display: flex; align-items: center; gap: 10px;">
             <div style="width: 16px; height: 16px; border-radius: 4px; background: linear-gradient(135deg, #c9a86a 0%, #b89858 100%);"></div>
             <span style="font-size: 14px; color: #0f172a;">${name}</span>
@@ -1454,7 +1509,7 @@ async function loadCouponMetrics() {
     const { data: reservations, error: resError } = await supabase
       .from('reservations')
       .select(
-        'coupon_code, coupon_discount, discount_amount, total, extras_total, check_in'
+        'coupon_code, coupon_discount, discount_amount, room_discount, extras_discount, total, extras_total, check_in'
       )
       .gte('check_in', sqlDate(dateRange.start))
       .lte('check_in', sqlDate(dateRange.end))
@@ -1469,10 +1524,10 @@ async function loadCouponMetrics() {
     const withoutCouponRes = allRes.filter((r) => !r.coupon_code);
 
     // ---------- Core coupon metrics ----------
+    // discount_amount is the total discount (room + extras combined).
+    // room_discount and extras_discount are the breakdown (may be 0 if not populated).
     const totalDiscount = withCouponRes.reduce((sum, r) => {
-      const couponDisc = parseFloat(r.coupon_discount) || 0;
-      const extraDisc = parseFloat(r.discount_amount) || 0;
-      return sum + couponDisc + extraDisc;
+      return sum + (parseFloat(r.discount_amount) || 0);
     }, 0);
 
     const avgDiscount =
@@ -1485,8 +1540,7 @@ async function loadCouponMetrics() {
     const mostUsed =
       (coupons || [])
         .filter((c) => (c.current_uses || 0) > 0)
-        .sort((a, b) => (b.current_uses || 0) - (a.current_uses || 0))
-        .slice(-1)[0] || null;
+        .sort((a, b) => (b.current_uses || 0) - (a.current_uses || 0))[0] || null;
 
     // ---------- Impact metrics ----------
     const sumTotal = (rows) =>
@@ -1520,41 +1574,41 @@ async function loadCouponMetrics() {
 
     // ---------- ALL coupon metrics in one metricsHtml ----------
     const metricsHtml = `
-      <div class="metric-card">
+      <div class="metric-card" data-drill="coupons">
         <div class="metric-label">Total Discount Given</div>
         <div class="metric-value">${formatCurrencyCompact(totalDiscount, 'GHS')}</div>
       </div>
 
-      <div class="metric-card">
+      <div class="metric-card" data-drill="coupons">
         <div class="metric-label">Avg Discount</div>
         <div class="metric-value">${formatCurrencyCompact(avgDiscount, 'GHS')}</div>
       </div>
 
-      <div class="metric-card">
+      <div class="metric-card" data-drill="coupons">
         <div class="metric-label">Avg Booking with Coupon</div>
         <div class="metric-value">${formatCurrencyCompact(avgWith, 'GHS')}</div>
         <div class="metric-subtext">Based on ${withCouponRes.length} bookings</div>
       </div>
 
-      <div class="metric-card">
+      <div class="metric-card" data-drill="coupons">
         <div class="metric-label">Avg Booking without Coupon</div>
         <div class="metric-value">${formatCurrencyCompact(avgWithout, 'GHS')}</div>
         <div class="metric-subtext">Based on ${withoutCouponRes.length} bookings</div>
       </div>
 
-      <div class="metric-card">
+      <div class="metric-card" data-drill="coupons">
         <div class="metric-label">Active Coupons</div>
         <div class="metric-value">${coupons?.length || 0}</div>
         <div class="metric-subtext">currently active</div>
       </div>
 
-      <div class="metric-card">
+      <div class="metric-card" data-drill="coupons">
         <div class="metric-label">Redemption Rate</div>
         <div class="metric-value">${redemptionRate.toFixed(0)}%</div>
       </div>
 
       <!-- Most used coupon -->
-      <div class="metric-card">
+      <div class="metric-card" data-drill="coupons">
         <div class="metric-label">Most Used Coupon</div>
         <div class="metric-value">${mostUsed ? mostUsed.code : 'N/A'}</div>
         <div class="metric-subtext">
@@ -1562,7 +1616,7 @@ async function loadCouponMetrics() {
         </div>
       </div>
 
-      <div class="metric-card">
+      <div class="metric-card" data-drill="coupons">
         <div class="metric-label">Extras Attachment Rate</div>
         <div class="metric-value">${attachWith.toFixed(
           0
@@ -1615,7 +1669,7 @@ async function loadCouponCharts() {
         const width = (count / maxUsage) * 100;
 
         usageHtml += `
-          <div style="display: flex; align-items: center; gap: 12px;">
+          <div class="drill-bar-row" data-drill-bar="coupon-${c.code}" style="display: flex; align-items: center; gap: 12px; cursor: pointer; border-radius: 6px; padding: 4px 0; transition: background 0.15s ease;">
             <div style="min-width: 120px; font-size: 14px; font-family: monospace; font-weight: 600; color: #0f172a;">
               ${c.code}
             </div>
@@ -1659,7 +1713,7 @@ async function loadUpcomingCheckins() {
 
     const { data: reservations, error } = await supabase
       .from('reservations')
-      .select('check_in, room_type_code, guest_first_name, guest_last_name')
+      .select('confirmation_code, check_in, room_type_code, guest_first_name, guest_last_name')
       .gte('check_in', todayStr)
       .lte('check_in', in7DaysStr)
       .in('status', ['confirmed', 'checked-in'])
@@ -1690,7 +1744,7 @@ async function loadUpcomingCheckins() {
         .join(' ') || 'Guest';
 
       html += `
-        <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e2e8f0; width: 100%; box-sizing: border-box;">
+        <div class="drill-checkin-row" data-drill-checkin="${r.confirmation_code || ''}" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 6px; border-bottom: 1px solid #e2e8f0; width: 100%; box-sizing: border-box; cursor: pointer; border-radius: 6px; transition: background 0.15s ease;">
           <div style="display: flex; align-items: center; gap: 12px; flex-shrink: 0;">
             <span style="font-weight: 600; color: #c9a86a;">${dateLabel}</span>
             <span style="font-weight: 600; color: #0f172a;">${r.room_type_code || ''}</span>
@@ -1715,7 +1769,7 @@ async function loadUpcomingCheckins() {
 
 async function loadCurrentStatus() {
   try {
-    const today = new Date().toISOString().split('T')[0].split('T')[0];
+    const today = new Date().toISOString().split('T')[0];
 
     const { data: reservations, error } = await supabase
       .from('reservations')
@@ -1737,12 +1791,12 @@ async function loadCurrentStatus() {
       .from('reservations')
       .select('id')
       .gte('check_in', today)
-      .lte('check_in', in30Days.toISOString().split('T')[0].split('T')[0])
+      .lte('check_in', in30Days.toISOString().split('T')[0])
       .in('status', ['confirmed', 'checked-in']);
 
     const html = `
       <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; width: 100%; box-sizing: border-box;">
-        <div style="text-align: center; padding: 20px; background: #f9fafb; border-radius: 8px; box-sizing: border-box;">
+        <div class="drill-bar-row" data-drill-bar="status-occupied" style="text-align: center; padding: 20px; background: #f9fafb; border-radius: 8px; box-sizing: border-box; cursor: pointer; transition: background 0.15s ease;">
           <div style="font-size: 36px; font-weight: 600; color: #c9a86a;">${occupied}</div>
           <div style="font-size: 12px; color: #64748b; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px;">Occupied</div>
         </div>
@@ -1755,7 +1809,7 @@ async function loadCurrentStatus() {
           <div style="font-size: 12px; color: #64748b; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px;">Maintenance</div>
         </div>
       </div>
-      <div style="padding: 24px; background: #f9fafb; border-radius: 8px; text-align: center; width: 100%; box-sizing: border-box;">
+      <div class="drill-bar-row" data-drill-bar="status-next30" style="padding: 24px; background: #f9fafb; border-radius: 8px; text-align: center; width: 100%; box-sizing: border-box; cursor: pointer; transition: background 0.15s ease;">
         <div style="font-size: 14px; color: #64748b; margin-bottom: 8px;">Next 30 Days</div>
         <div style="font-size: 36px; font-weight: 600; color: #c9a86a;">${upcoming?.length || 0} Bookings</div>
       </div>
@@ -1783,51 +1837,539 @@ function handleChartGranularityClick(e) {
   }
 }
 
-function handlePeriodChange(e) {
-  const period = e.target.value;
-  const customRange = document.getElementById('custom-date-range');
-  
-  if (period === 'custom') {
-    customRange.style.display = 'flex';
-  } else {
-    customRange.style.display = 'none';
-    const days = parseInt(period);
-    dateRange.end = new Date();
-    dateRange.start = new Date();
-    dateRange.start.setDate(dateRange.start.getDate() - days);
-    autoSetGranularityFromRange();
-    
-    // Re-render based on current view mode
-    if (viewMode === 'comparison') {
-      renderComparisonView(dateRange);
-    } else if (viewMode === 'client') {
-      updateClientAnalyticsDateRange(dateRange.start, dateRange.end);
-    } else {
-      loadAllAnalytics();
-    }
+// ============================================================
+// DATE FILTER – independent Month + Year dropdowns + Custom
+// ============================================================
+
+// Fill the Year <select> from current year back to 2023
+function populateYearSelect() {
+  const sel = document.getElementById('analytics-year');
+  if (!sel) return;
+  const now = new Date();
+  sel.innerHTML = '';
+  for (let y = now.getFullYear(); y >= 2023; y--) {
+    sel.innerHTML += `<option value="${y}">${y}</option>`;
   }
+  sel.value = String(now.getFullYear());
 }
 
+// Read the current dateRange and set the two dropdowns to match.
+// If dateRange is exactly one calendar month  → select that month + year.
+// Otherwise (full year, or arbitrary custom)  → "All Months" + start year.
+function syncDropdownsToDateRange() {
+  const monthSel = document.getElementById('analytics-month');
+  const yearSel  = document.getElementById('analytics-year');
+  if (!monthSel || !yearSel) return;
+
+  const s = dateRange.start, e = dateRange.end;
+  const sameMonth   = s.getFullYear() === e.getFullYear() && s.getMonth() === e.getMonth();
+  const startsFirst = s.getDate() === 1;
+
+  if (sameMonth && startsFirst) {
+    monthSel.value = String(s.getMonth());
+  } else {
+    monthSel.value = 'all';
+  }
+  yearSel.value = String(s.getFullYear());
+}
+
+// Either dropdown changed → compute new dateRange and reload
+function handleMonthYearChange() {
+  // Dismiss the custom picker row whenever the user touches a dropdown
+  document.getElementById('custom-date-range').style.display = 'none';
+
+  const monthVal = document.getElementById('analytics-month').value; // 'all' | '0'..'11'
+  const year     = parseInt(document.getElementById('analytics-year').value, 10);
+  const now      = new Date();
+
+  if (monthVal === 'all') {
+    // Full year: Jan 1 … Dec 31   (or today if it is the current year)
+    dateRange.start = new Date(year, 0, 1);
+    dateRange.end   = (year === now.getFullYear())
+      ? new Date(year, now.getMonth(), now.getDate())
+      : new Date(year, 11, 31);
+  } else {
+    const month = parseInt(monthVal, 10);
+    dateRange.start = new Date(year, month, 1);
+
+    // End = today if it's the current month/year, otherwise the last day of that month
+    if (year === now.getFullYear() && month === now.getMonth()) {
+      dateRange.end = new Date(year, month, now.getDate());
+    } else {
+      // day 0 of the *next* month = last day of this month
+      dateRange.end = new Date(year, month + 1, 0);
+    }
+  }
+
+  autoSetGranularityFromRange();
+  refreshView();
+}
+
+// "Custom" button clicked → show the date pickers pre-filled with current range
+function openCustomRange() {
+  document.getElementById('analytics-start').value = sqlDate(dateRange.start);
+  document.getElementById('analytics-end').value   = sqlDate(dateRange.end);
+  document.getElementById('custom-date-range').style.display = 'flex';
+}
+
+// "Apply" clicked inside the custom picker row
 function applyCustomDateRange() {
   const start = document.getElementById('analytics-start').value;
-  const end = document.getElementById('analytics-end').value;
-  
+  const end   = document.getElementById('analytics-end').value;
+
   if (start && end) {
-    dateRange.start = new Date(start);
-    dateRange.end = new Date(end);
+    dateRange.start = new Date(start + 'T00:00:00');
+    dateRange.end   = new Date(end   + 'T00:00:00');
     autoSetGranularityFromRange();
-    
-    // Re-render based on current view mode
-    if (viewMode === 'comparison') {
-      renderComparisonView(dateRange);
-    } else if (viewMode === 'client') {
-      updateClientAnalyticsDateRange(dateRange.start, dateRange.end);
-    } else {
-      loadAllAnalytics();
-    }
+    syncDropdownsToDateRange();   // update dropdowns to reflect the applied range
+    refreshView();
   } else {
     toast('Please select both start and end dates');
   }
+}
+
+// Shared helper – dispatches to whichever view is currently active
+function refreshView() {
+  if (viewMode === 'comparison') {
+    renderComparisonView(dateRange);
+  } else if (viewMode === 'client') {
+    updateClientAnalyticsDateRange(dateRange.start, dateRange.end);
+  } else {
+    loadAllAnalytics();
+  }
+}
+
+// ============================================================
+// DRILL-THROUGH MODAL  – click a metric tile to see details
+// ============================================================
+
+function initDrillThroughModal() {
+  // Inject modal HTML once
+  let modal = document.getElementById('drill-modal');
+  if (modal) return;
+
+  modal = document.createElement('div');
+  modal.id = 'drill-modal';
+  modal.className = 'drill-modal-overlay';
+  modal.innerHTML = `
+    <div class="drill-modal-content">
+      <div class="drill-modal-header">
+        <h3 class="drill-modal-title" id="drill-modal-title">Details</h3>
+        <button class="drill-modal-close" id="drill-modal-close">&times;</button>
+      </div>
+      <div class="drill-modal-body" id="drill-modal-body">Loading…</div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  // Close handlers
+  document.getElementById('drill-modal-close').addEventListener('click', closeDrillModal);
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeDrillModal();
+  });
+  // Escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeDrillModal();
+  });
+}
+
+function openDrillModal(title, bodyHtml) {
+  initDrillThroughModal();
+  document.getElementById('drill-modal-title').textContent = title;
+  document.getElementById('drill-modal-body').innerHTML = bodyHtml;
+  document.getElementById('drill-modal').classList.add('active');
+}
+
+function closeDrillModal() {
+  const modal = document.getElementById('drill-modal');
+  if (modal) modal.classList.remove('active');
+}
+
+async function handleDrillClick(type) {
+  const titleMap = {
+    occupancy:       'Occupancy – Reservations in Period',
+    revenue:         'Revenue – Reservations in Period',
+    extras:          'Extras – Reservations with Add-ons',
+    packages:        'Packages – Reservations with Packages',
+    coupons:         'Coupon Analytics – Reservations with Coupons',
+  };
+  const title = titleMap[type] || 'Details';
+  openDrillModal(title, '<div style="text-align:center;padding:24px;color:#64748b;">Loading…</div>');
+
+  try {
+    let reservations;
+    if (type === 'extras') {
+      // Need reservation_extras joined
+      const { data, error } = await supabase
+        .from('reservation_extras')
+        .select('reservation_id, extra_name, subtotal, quantity, reservations!inner(confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total)')
+        .gte('reservations.check_in', sqlDate(dateRange.start))
+        .lte('reservations.check_in', sqlDate(dateRange.end));
+      if (error) throw error;
+
+      // Group by reservation
+      const grouped = {};
+      (data || []).forEach(row => {
+        const code = row.reservations.confirmation_code;
+        if (!grouped[code]) {
+          grouped[code] = { ...row.reservations, extras: [] };
+        }
+        grouped[code].extras.push({ name: row.extra_name, subtotal: row.subtotal, qty: row.quantity });
+      });
+      reservations = Object.values(grouped);
+    } else if (type === 'packages') {
+      const { data, error } = await supabase
+        .from('reservations')
+        .select('confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total, packages(name)')
+        .gte('check_in', sqlDate(dateRange.start))
+        .lte('check_in', sqlDate(dateRange.end))
+        .in('status', ['confirmed', 'checked-in', 'checked-out'])
+        .not('package_id', 'is', null);
+      if (error) throw error;
+      reservations = data || [];
+    } else if (type === 'coupons') {
+      const { data, error } = await supabase
+        .from('reservations')
+        .select('confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total, nights, status, coupon_code, coupon_discount, discount_amount, room_discount, extras_discount')
+        .gte('check_in', sqlDate(dateRange.start))
+        .lte('check_in', sqlDate(dateRange.end))
+        .in('status', ['confirmed', 'checked-in', 'checked-out'])
+        .not('coupon_code', 'is', null)
+        .order('check_in', { ascending: false });
+      if (error) throw error;
+      reservations = data || [];
+    } else {
+      // occupancy / revenue – plain reservations list
+      const { data, error } = await supabase
+        .from('reservations')
+        .select('confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total, nights, status')
+        .gte('check_in', sqlDate(dateRange.start))
+        .lte('check_in', sqlDate(dateRange.end))
+        .in('status', ['confirmed', 'checked-in', 'checked-out'])
+        .order('check_in', { ascending: false });
+      if (error) throw error;
+      reservations = data || [];
+    }
+
+    const html = buildDrillTable(type, reservations);
+    document.getElementById('drill-modal-body').innerHTML = html;
+  } catch (err) {
+    console.error('Drill-through error:', err);
+    document.getElementById('drill-modal-body').innerHTML =
+      '<div style="text-align:center;padding:24px;color:#ef4444;">Error loading details</div>';
+  }
+}
+
+// ---- Bar drill: coupon-CODE | extra-NAME | package-NAME | cabin-CODE ----
+async function handleBarDrillClick(barKey) {
+  // Parse prefix and value: "coupon-SUMMER25" → { prefix:'coupon', value:'SUMMER25' }
+  const dashIdx = barKey.indexOf('-');
+  const prefix  = barKey.slice(0, dashIdx);
+  const value   = barKey.slice(dashIdx + 1);
+
+  const titleMap = {
+    coupon:       (v) => `Coupon "${v}" – Reservations`,
+    extra:        (v) => `Extra "${v}" – Reservations`,
+    package:      (v) => `Package "${v}" – Reservations`,
+    cabin:        (v) => `Cabin ${v} – Reservations in Period`,
+    pairing:      (v) => `Pairing: ${v}`,
+    extrascount:  (v) => v === '2' ? 'Reservations with 2+ Extras' : `Reservations with ${v} Extra${v === '1' ? '' : 's'}`,
+    status:       (v) => v === 'occupied' ? 'Currently Occupied Cabins' : 'Next 30 Days – Upcoming Bookings',
+  };
+  const title = (titleMap[prefix] || (() => 'Details'))(value);
+  openDrillModal(title, '<div style="text-align:center;padding:24px;color:#64748b;">Loading…</div>');
+
+  try {
+    let rows;
+
+    if (prefix === 'coupon') {
+      const { data, error } = await supabase
+        .from('reservations')
+        .select('confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total, nights, status, coupon_code, coupon_discount, discount_amount, room_discount, extras_discount')
+        .gte('check_in', sqlDate(dateRange.start))
+        .lte('check_in', sqlDate(dateRange.end))
+        .in('status', ['confirmed', 'checked-in', 'checked-out'])
+        .eq('coupon_code', value)
+        .order('check_in', { ascending: false });
+      if (error) throw error;
+      rows = data || [];
+      document.getElementById('drill-modal-body').innerHTML = buildDrillTable('coupons', rows);
+
+    } else if (prefix === 'extra') {
+      const { data, error } = await supabase
+        .from('reservation_extras')
+        .select('reservation_id, extra_name, subtotal, quantity, reservations!inner(confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total)')
+        .gte('reservations.check_in', sqlDate(dateRange.start))
+        .lte('reservations.check_in', sqlDate(dateRange.end))
+        .eq('extra_name', value);
+      if (error) throw error;
+      // Group by reservation (same pattern as extras drill)
+      const grouped = {};
+      (data || []).forEach(row => {
+        const code = row.reservations.confirmation_code;
+        if (!grouped[code]) grouped[code] = { ...row.reservations, extras: [] };
+        grouped[code].extras.push({ name: row.extra_name, subtotal: row.subtotal, qty: row.quantity });
+      });
+      rows = Object.values(grouped);
+      document.getElementById('drill-modal-body').innerHTML = buildDrillTable('extras', rows);
+
+    } else if (prefix === 'package') {
+      if (value === 'No Package') {
+        // Reservations without a package
+        const { data, error } = await supabase
+          .from('reservations')
+          .select('confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total, nights, status')
+          .gte('check_in', sqlDate(dateRange.start))
+          .lte('check_in', sqlDate(dateRange.end))
+          .in('status', ['confirmed', 'checked-in', 'checked-out'])
+          .is('package_id', null)
+          .order('check_in', { ascending: false });
+        if (error) throw error;
+        rows = data || [];
+        document.getElementById('drill-modal-body').innerHTML = buildDrillTable('occupancy', rows);
+      } else {
+        const { data, error } = await supabase
+          .from('reservations')
+          .select('confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total, packages(name)')
+          .gte('check_in', sqlDate(dateRange.start))
+          .lte('check_in', sqlDate(dateRange.end))
+          .in('status', ['confirmed', 'checked-in', 'checked-out'])
+          .not('package_id', 'is', null)
+          .eq('packages.name', value);
+        if (error) throw error;
+        rows = data || [];
+        document.getElementById('drill-modal-body').innerHTML = buildDrillTable('packages', rows);
+      }
+
+    } else if (prefix === 'cabin') {
+      const { data, error } = await supabase
+        .from('reservations')
+        .select('confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total, nights, status')
+        .gte('check_in', sqlDate(dateRange.start))
+        .lte('check_in', sqlDate(dateRange.end))
+        .in('status', ['confirmed', 'checked-in', 'checked-out'])
+        .eq('room_type_code', value)
+        .order('check_in', { ascending: false });
+      if (error) throw error;
+      rows = data || [];
+      document.getElementById('drill-modal-body').innerHTML = buildDrillTable('occupancy', rows);
+
+    } else if (prefix === 'pairing') {
+      // value = "Extra A + Extra B" — find reservations that have BOTH
+      const extraNames = value.split(' + ').map(s => s.trim());
+      const { data: allExtras, error: extErr } = await supabase
+        .from('reservation_extras')
+        .select('reservation_id, extra_name, subtotal, quantity, reservations!inner(confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total)')
+        .gte('reservations.check_in', sqlDate(dateRange.start))
+        .lte('reservations.check_in', sqlDate(dateRange.end));
+      if (extErr) throw extErr;
+      const grouped = {};
+      (allExtras || []).forEach(row => {
+        const code = row.reservations.confirmation_code;
+        if (!grouped[code]) grouped[code] = { ...row.reservations, extras: [], _names: new Set() };
+        grouped[code].extras.push({ name: row.extra_name, subtotal: row.subtotal, qty: row.quantity });
+        grouped[code]._names.add(row.extra_name);
+      });
+      rows = Object.values(grouped).filter(r => extraNames.every(n => r._names.has(n)));
+      document.getElementById('drill-modal-body').innerHTML = buildDrillTable('extras', rows);
+
+    } else if (prefix === 'extrascount') {
+      // value = '0' | '1' | '2' (2 means 2+)
+      const { data: allRes, error: resErr } = await supabase
+        .from('reservations')
+        .select('confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total, nights, status, reservation_extras(extra_name, subtotal, quantity)')
+        .gte('check_in', sqlDate(dateRange.start))
+        .lte('check_in', sqlDate(dateRange.end))
+        .in('status', ['confirmed', 'checked-in', 'checked-out']);
+      if (resErr) throw resErr;
+      const target = parseInt(value, 10);
+      rows = (allRes || []).filter(r => {
+        const cnt = (r.reservation_extras || []).length;
+        if (target === 0) return cnt === 0;
+        if (target === 1) return cnt === 1;
+        return cnt >= 2;
+      }).map(r => ({
+        ...r,
+        extras: (r.reservation_extras || []).map(e => ({ name: e.extra_name, subtotal: e.subtotal, qty: e.quantity }))
+      }));
+      document.getElementById('drill-modal-body').innerHTML = buildDrillTable('extras', rows);
+
+    } else if (prefix === 'status') {
+      if (value === 'occupied') {
+        const today = new Date().toISOString().split('T')[0];
+        const { data, error } = await supabase
+          .from('reservations')
+          .select('confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total, nights, status')
+          .lte('check_in', today)
+          .gte('check_out', today)
+          .eq('status', 'checked-in')
+          .order('check_out', { ascending: true });
+        if (error) throw error;
+        rows = data || [];
+        document.getElementById('drill-modal-body').innerHTML = buildDrillTable('occupancy', rows);
+      } else if (value === 'next30') {
+        const today = new Date();
+        const in30 = new Date(); in30.setDate(in30.getDate() + 30);
+        const { data, error } = await supabase
+          .from('reservations')
+          .select('confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total, nights, status')
+          .gte('check_in', sqlDate(today))
+          .lte('check_in', sqlDate(in30))
+          .in('status', ['confirmed', 'checked-in'])
+          .order('check_in', { ascending: true });
+        if (error) throw error;
+        rows = data || [];
+        document.getElementById('drill-modal-body').innerHTML = buildDrillTable('occupancy', rows);
+      }
+    }
+  } catch (err) {
+    console.error('Bar drill-through error:', err);
+    document.getElementById('drill-modal-body').innerHTML =
+      '<div style="text-align:center;padding:24px;color:#ef4444;">Error loading details</div>';
+  }
+}
+
+// ---- Check-in row drill: opens full reservation detail by confirmation_code ----
+async function handleCheckinDrillClick(confirmationCode) {
+  if (!confirmationCode) return;
+  openDrillModal(`Reservation ${confirmationCode}`, '<div style="text-align:center;padding:24px;color:#64748b;">Loading…</div>');
+
+  try {
+    const { data, error } = await supabase
+      .from('reservations')
+      .select('id, confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total, nights, status, coupon_code, coupon_discount, discount_amount, room_discount, extras_discount, package_id, packages(name)')
+      .eq('confirmation_code', confirmationCode)
+      .single();
+    if (error) throw error;
+
+    // Also fetch extras for this reservation
+    const { data: extras } = await supabase
+      .from('reservation_extras')
+      .select('extra_name, quantity, subtotal')
+      .eq('reservation_id', data.id || '')
+      // fallback: match by confirmation if id not returned
+      ;
+
+    const r = data;
+    const extrasStr = (extras || []).map(e => `${e.extra_name} ×${e.quantity}`).join(', ') || '–';
+    const totalCouponDisc = parseFloat(r.discount_amount) || 0;
+    const roomDisc = parseFloat(r.room_discount) || 0;
+    const extrasDisc = parseFloat(r.extras_discount) || 0;
+    const hasBreakdown = roomDisc > 0 || extrasDisc > 0;
+    const discountStr = r.coupon_code
+      ? `${r.coupon_code} (–${formatCurrencyCompact(totalCouponDisc, 'GHS')}${hasBreakdown ? `, R: ${formatCurrencyCompact(roomDisc, 'GHS')}, E: ${formatCurrencyCompact(extrasDisc, 'GHS')}` : ''})`
+      : '–';
+
+    const html = `
+      <div class="drill-table-wrap">
+        <table class="drill-table">
+          <tbody>
+            <tr><td style="font-weight:600;color:#64748b;width:140px;">Confirmation</td><td>${r.confirmation_code || '–'}</td></tr>
+            <tr><td style="font-weight:600;color:#64748b;">Guest</td><td>${[r.guest_first_name, r.guest_last_name].filter(Boolean).join(' ') || '–'}</td></tr>
+            <tr><td style="font-weight:600;color:#64748b;">Cabin</td><td>${r.room_type_code || '–'}</td></tr>
+            <tr><td style="font-weight:600;color:#64748b;">Check-in</td><td>${fmtDate(r.check_in)}</td></tr>
+            <tr><td style="font-weight:600;color:#64748b;">Check-out</td><td>${fmtDate(r.check_out)}</td></tr>
+            <tr><td style="font-weight:600;color:#64748b;">Nights</td><td>${r.nights || '–'}</td></tr>
+            <tr><td style="font-weight:600;color:#64748b;">Status</td><td><span class="drill-status drill-status-${(r.status||'').replace('-','')}">${r.status || '–'}</span></td></tr>
+            <tr><td style="font-weight:600;color:#64748b;">Package</td><td>${r.packages?.name || '–'}</td></tr>
+            <tr><td style="font-weight:600;color:#64748b;">Extras</td><td>${extrasStr}</td></tr>
+            <tr><td style="font-weight:600;color:#64748b;">Coupon</td><td>${discountStr}</td></tr>
+            <tr><td style="font-weight:600;color:#64748b;">Total</td><td style="font-weight:700;font-size:18px;color:#c9a86a;">${formatCurrencyCompact(parseFloat(r.total) || 0, 'GHS')}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    `;
+    document.getElementById('drill-modal-body').innerHTML = html;
+  } catch (err) {
+    console.error('Check-in drill error:', err);
+    document.getElementById('drill-modal-body').innerHTML =
+      '<div style="text-align:center;padding:24px;color:#ef4444;">Error loading reservation details</div>';
+  }
+}
+
+function buildDrillTable(type, rows) {
+  if (!rows || rows.length === 0) {
+    return '<div style="text-align:center;padding:32px;color:#94a3b8;">No reservations found for this period</div>';
+  }
+
+  let headers, bodyFn;
+
+  switch (type) {
+    case 'extras':
+      headers = ['Confirmation', 'Guest', 'Room', 'Check-in', 'Check-out', 'Extras', 'Total'];
+      bodyFn = (r) => {
+        const extrasStr = (r.extras || []).map(e => `${e.name} ×${e.qty}`).join(', ');
+        return `
+          <td>${r.confirmation_code || '–'}</td>
+          <td>${[r.guest_first_name, r.guest_last_name].filter(Boolean).join(' ') || '–'}</td>
+          <td>${r.room_type_code || '–'}</td>
+          <td>${fmtDate(r.check_in)}</td>
+          <td>${fmtDate(r.check_out)}</td>
+          <td>${extrasStr}</td>
+          <td style="text-align:right;">${formatCurrencyCompact(parseFloat(r.total) || 0, 'GHS')}</td>
+        `;
+      };
+      break;
+    case 'packages':
+      headers = ['Confirmation', 'Guest', 'Room', 'Check-in', 'Check-out', 'Package', 'Total'];
+      bodyFn = (r) => `
+        <td>${r.confirmation_code || '–'}</td>
+        <td>${[r.guest_first_name, r.guest_last_name].filter(Boolean).join(' ') || '–'}</td>
+        <td>${r.room_type_code || '–'}</td>
+        <td>${fmtDate(r.check_in)}</td>
+        <td>${fmtDate(r.check_out)}</td>
+        <td>${r.packages?.name || '–'}</td>
+        <td style="text-align:right;">${formatCurrencyCompact(parseFloat(r.total) || 0, 'GHS')}</td>
+      `;
+      break;
+    case 'coupons':
+      headers = ['Confirmation', 'Guest', 'Room', 'Check-in', 'Check-out', 'Coupon', 'Discount', 'Total'];
+      bodyFn = (r) => {
+        const discount = parseFloat(r.discount_amount) || 0;
+        const roomDisc = parseFloat(r.room_discount) || 0;
+        const extrasDisc = parseFloat(r.extras_discount) || 0;
+        const hasBreakdown = roomDisc > 0 || extrasDisc > 0;
+        return `
+          <td>${r.confirmation_code || '–'}</td>
+          <td>${[r.guest_first_name, r.guest_last_name].filter(Boolean).join(' ') || '–'}</td>
+          <td>${r.room_type_code || '–'}</td>
+          <td>${fmtDate(r.check_in)}</td>
+          <td>${fmtDate(r.check_out)}</td>
+          <td style="font-family:monospace;font-weight:600;">${r.coupon_code || '–'}</td>
+          <td style="text-align:right;color:#ef4444;">
+            –${formatCurrencyCompact(discount, 'GHS')}
+            ${hasBreakdown ? `<br><small style="color:#94a3b8;">(R: ${formatCurrencyCompact(roomDisc, 'GHS')} + E: ${formatCurrencyCompact(extrasDisc, 'GHS')})</small>` : ''}
+          </td>
+          <td style="text-align:right;">${formatCurrencyCompact(parseFloat(r.total) || 0, 'GHS')}</td>
+        `;
+      };
+      break;
+    default: // occupancy, revenue
+      headers = ['Confirmation', 'Guest', 'Room', 'Check-in', 'Check-out', 'Nights', 'Status', 'Total'];
+      bodyFn = (r) => `
+        <td>${r.confirmation_code || '–'}</td>
+        <td>${[r.guest_first_name, r.guest_last_name].filter(Boolean).join(' ') || '–'}</td>
+        <td>${r.room_type_code || '–'}</td>
+        <td>${fmtDate(r.check_in)}</td>
+        <td>${fmtDate(r.check_out)}</td>
+        <td>${r.nights || '–'}</td>
+        <td><span class="drill-status drill-status-${(r.status||'').replace('-','')}">${r.status || '–'}</span></td>
+        <td style="text-align:right;">${formatCurrencyCompact(parseFloat(r.total) || 0, 'GHS')}</td>
+      `;
+  }
+
+  let html = `<div class="drill-table-wrap"><table class="drill-table">
+    <thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>
+    <tbody>`;
+  rows.forEach(r => { html += `<tr>${bodyFn(r)}</tr>`; });
+  html += '</tbody></table></div>';
+  return html;
+}
+
+function fmtDate(str) {
+  if (!str) return '–';
+  const d = new Date(str + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function exportAnalytics() {

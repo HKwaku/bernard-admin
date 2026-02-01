@@ -2,7 +2,7 @@
  * ANALYTICS LAYOUT + SECTION SEPARATORS
  ********************************************/
 
-.analytics-section {
+ .analytics-section {
   margin: 40px 0;
   padding-bottom: 32px;
   border-bottom: 2px solid #e2e8f0;
@@ -1545,4 +1545,189 @@
 .change-neutral {
   color: #64748b;
   font-weight: 500;
+}
+
+/***  Clickable metric tiles  ***/
+.metric-card[data-drill] {
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+}
+.metric-card[data-drill]:hover {
+  border-color: #c9a86a;
+  box-shadow:
+    0 4px 12px rgba(201, 168, 106, 0.18),
+    0 2px 4px rgba(15, 23, 42, 0.06);
+  transform: translateY(-1px);
+}
+.metric-card[data-drill]:active {
+  transform: translateY(0);
+}
+
+/* Clickable horizontal bar rows */
+.drill-bar-row {
+  cursor: pointer;
+}
+.drill-bar-row:hover {
+  background: rgba(201, 168, 106, 0.08);
+}
+.drill-bar-row:active {
+  background: rgba(201, 168, 106, 0.15);
+}
+
+/* Clickable upcoming check-in rows */
+.drill-checkin-row {
+  cursor: pointer;
+}
+.drill-checkin-row:hover {
+  background: rgba(201, 168, 106, 0.08);
+}
+.drill-checkin-row:active {
+  background: rgba(201, 168, 106, 0.15);
+}
+
+/***  Drill-through modal overlay  ***/
+.drill-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  padding: 16px;
+  box-sizing: border-box;
+}
+.drill-modal-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/***  Drill-through modal box  ***/
+.drill-modal-content {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.2);
+  width: 100%;
+  max-width: 860px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: drill-slide-up 0.22s ease;
+}
+@keyframes drill-slide-up {
+  from { transform: translateY(24px); opacity: 0; }
+  to   { transform: translateY(0);     opacity: 1; }
+}
+
+.drill-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid #e2e8f0;
+  flex-shrink: 0;
+}
+.drill-modal-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0;
+}
+.drill-modal-close {
+  border: none;
+  background: none;
+  font-size: 24px;
+  line-height: 1;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  transition: color 0.15s, background 0.15s;
+}
+.drill-modal-close:hover {
+  color: #0f172a;
+  background: #f1f5f9;
+}
+
+.drill-modal-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/***  Drill table  ***/
+.drill-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.drill-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  color: #0f172a;
+}
+.drill-table th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 0 10px 10px;
+  border-bottom: 2px solid #e2e8f0;
+  white-space: nowrap;
+}
+.drill-table td {
+  padding: 10px;
+  border-bottom: 1px solid #f1f5f9;
+  white-space: nowrap;
+}
+.drill-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.drill-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+/***  Status badges in drill table  ***/
+.drill-status {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+.drill-status-confirmed   { background: #eef2ff; color: #4338ca; }
+.drill-status-checkedin   { background: #dcfce7; color: #15803d; }
+.drill-status-checkedout  { background: #f3f4f6; color: #6b7280; }
+
+/***  Drill modal responsive  ***/
+@media (max-width: 768px) {
+  .drill-modal-content {
+    max-height: 85vh;
+    border-radius: 12px 12px 0 0;
+    align-self: flex-end;
+  }
+  .drill-modal-overlay {
+    align-items: flex-end;
+  }
+  .drill-modal-header {
+    padding: 16px 18px 12px;
+  }
+  .drill-modal-body {
+    padding: 16px 18px;
+  }
+  .drill-table th,
+  .drill-table td {
+    padding: 8px 7px;
+    font-size: 12px;
+  }
+  .drill-table th {
+    font-size: 10px;
+  }
 }

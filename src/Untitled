@@ -58,8 +58,36 @@ let dateRange = {
   end: new Date()
 };
 
+function formatCurrencyCompact(amount, currency = 'GHS') {
+  const absAmount = Math.abs(amount);
+  let value, suffix;
+  
+  if (absAmount >= 1000000) {
+    value = (amount / 1000000).toFixed(1);
+    suffix = 'M';
+  } else if (absAmount >= 1000) {
+    value = (amount / 1000).toFixed(1);
+    // Remove trailing .0
+    if (value.endsWith('.0')) value = value.slice(0, -2);
+    suffix = 'K';
+  } else {
+    return `${currency} ${amount.toFixed(2)}`;
+  }
+  
+  // Remove trailing .0
+  if (value.endsWith('.0')) value = value.slice(0, -2);
+  
+  return `${currency} ${value}${suffix}`;
+}
+
 function sqlDate(d) {
   return d.toISOString().split('T')[0];
+}
+
+function fmtDate(str) {
+  if (!str) return '–';
+  const d = new Date(str + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 // Initialize Client Analytics
@@ -197,7 +225,7 @@ async function renderClientOverviewMetrics() {
     }, 0);
 
     // Average booking value
-    const totalRevenue = reservations.reduce((sum, r) => sum + (parseFloat(r.total) || 0), 0);
+    const totalRevenue = reservations.reduce((sum, r) => sum + (r.total || 0), 0);
     const avgBookingValue = reservations.length > 0 ? totalRevenue / reservations.length : 0;
 
     const html = `
@@ -554,10 +582,10 @@ async function renderGuestTypeAnalysis() {
       
       if (firstBooking >= periodStart) {
         newGuestBookings++;
-        newGuestRevenue += (parseFloat(r.total) || 0);
+        newGuestRevenue += (r.total || 0);
       } else {
         returningGuestBookings++;
-        returningGuestRevenue += (parseFloat(r.total) || 0);
+        returningGuestRevenue += (r.total || 0);
       }
     });
 
@@ -900,7 +928,7 @@ async function renderGuestLifetimeValue() {
     reservations.forEach(r => {
       if (!r.guest_email) return;
       const email = r.guest_email.toLowerCase();
-      guestLTV[email] = (guestLTV[email] || 0) + (parseFloat(r.total) || 0);
+      guestLTV[email] = (guestLTV[email] || 0) + (r.total || 0);
     });
 
     const ltvValues = Object.values(guestLTV);
