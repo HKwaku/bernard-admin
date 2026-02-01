@@ -777,7 +777,7 @@ async function loadOccupancyMetrics() {
       .select('check_in, check_out, nights')
       .lte('check_in', sqlDate(dateRange.end))
       .gte('check_out', sqlDate(dateRange.start))
-      .in('status', ['confirmed', 'checked-in', 'checked-out']);
+      .in('status', ['confirmed', 'completed', 'checked-in', 'checked-out']);
 
     if (error) throw error;
 
@@ -864,7 +864,7 @@ async function loadRevenueMetrics() {
       .select('total, room_subtotal, extras_total, check_in, check_out, nights')
       .lte('check_in', sqlDate(dateRange.end))
       .gte('check_out', sqlDate(dateRange.start))
-      .in('status', ['confirmed', 'checked-in', 'checked-out']);
+      .in('status', ['confirmed','completed', 'checked-in', 'checked-out']);
 
     if (error) throw error;
 
@@ -1104,7 +1104,7 @@ async function loadRevenueChart() {
       .select('total, check_in')
       .lte('check_in', sqlDate(dateRange.end))
       .gte('check_out', sqlDate(dateRange.start))
-      .in('status', ['confirmed', 'checked-in', 'checked-out'])
+      .in('status', ['confirmed','completed', 'checked-in', 'checked-out'])
       .order('check_in');
 
     if (error) throw error;
@@ -1315,7 +1315,7 @@ async function loadExtrasMetrics() {
       .select('*, reservations!inner(check_in, check_out, status)')
       .lte('reservations.check_in', dateRange.end.toISOString().split('T')[0])
       .gte('reservations.check_out', dateRange.start.toISOString().split('T')[0])
-      .in('reservations.status', ['confirmed', 'checked-in', 'checked-out']);
+      .in('reservations.status', ['confirmed', 'completed', 'checked-in', 'checked-out']);
 
 
     if (error) throw error;
@@ -1325,7 +1325,7 @@ async function loadExtrasMetrics() {
       .select('id')
       .lte('check_in', dateRange.end.toISOString().split('T')[0])
       .gte('check_out', dateRange.start.toISOString().split('T')[0])
-      .in('status', ['confirmed', 'checked-in', 'checked-out']);
+      .in('status', ['confirmed', 'completed', 'checked-in', 'checked-out']);
 
     const totalRevenue = reservationExtras.reduce((sum, e) => sum + (parseFloat(e.subtotal) || 0), 0);
     const bookingsWithExtras = new Set(reservationExtras.map(e => e.reservation_id)).size;
@@ -1376,7 +1376,7 @@ async function loadExtrasCharts() {
       .select('extra_name, subtotal, quantity, reservations!inner(check_in, check_out, status)')
       .lte('reservations.check_in', dateRange.end.toISOString().split('T')[0])
       .gte('reservations.check_out', dateRange.start.toISOString().split('T')[0])
-      .in('reservations.status', ['confirmed', 'checked-in', 'checked-out']);
+      .in('reservations.status', ['confirmed', 'completed', 'checked-in', 'checked-out']);
 
 
     if (error) throw error;
@@ -1476,7 +1476,7 @@ async function loadPairingAnalysis() {
       `)
       .lte('check_in', sqlDate(dateRange.end))
       .gte('check_out', sqlDate(dateRange.start))
-      .in('status', ['confirmed', 'checked-in', 'checked-out']);
+      .in('status', ['confirmed', 'completed', 'checked-in', 'checked-out']);
 
     if (error) throw error;
 
@@ -1569,7 +1569,7 @@ async function loadPackageMetrics() {
       .select('package_id, total, packages(name)')
       .lte('check_in', dateRange.end.toISOString().split('T')[0])
       .gte('check_out', dateRange.start.toISOString().split('T')[0])
-      .in('status', ['confirmed', 'checked-in', 'checked-out']);
+      .in('status', ['confirmed', 'completed', 'checked-in', 'checked-out']);
 
     if (error) throw error;
 
@@ -1619,7 +1619,7 @@ async function loadPackageCharts() {
       .select('package_id, total, packages(name)')
       .lte('check_in', dateRange.end.toISOString().split('T')[0])
       .gte('check_out', dateRange.start.toISOString().split('T')[0])
-      .in('status', ['confirmed', 'checked-in', 'checked-out']);
+      .in('status', ['confirmed', 'completed', 'checked-in', 'checked-out']);
 
     if (error) throw error;
 
@@ -1704,7 +1704,7 @@ async function loadCouponMetrics() {
       )
       .lte('check_in', sqlDate(dateRange.end))
       .gte('check_out', sqlDate(dateRange.start))
-      .in('status', ['confirmed', 'checked-in', 'checked-out']);
+      .in('status', ['confirmed', 'completed', 'checked-in', 'checked-out']);
 
     if (couponsError || resError) throw (couponsError || resError);
 
@@ -2443,7 +2443,7 @@ async function handleDrillClick(type) {
         .select('confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total, packages(name)')
         .lte('check_in', sqlDate(dateRange.end))
       .gte('check_out', sqlDate(dateRange.start))
-        .in('status', ['confirmed', 'checked-in', 'checked-out'])
+        .in('status', ['confirmed', 'completed', 'checked-in', 'checked-out'])
         .not('package_id', 'is', null);
       if (error) throw error;
       reservations = data || [];
@@ -2453,7 +2453,7 @@ async function handleDrillClick(type) {
         .select('confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total, nights, status, coupon_code, coupon_discount, discount_amount, room_discount, extras_discount')
         .lte('check_in', sqlDate(dateRange.end))
       .gte('check_out', sqlDate(dateRange.start))
-        .in('status', ['confirmed', 'checked-in', 'checked-out'])
+        .in('status', ['confirmed', 'completed', 'checked-in', 'checked-out'])
         .not('coupon_code', 'is', null)
         .order('check_in', { ascending: false });
       if (error) throw error;
@@ -2465,7 +2465,7 @@ async function handleDrillClick(type) {
         .select('confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total, nights, status')
         .lte('check_in', sqlDate(dateRange.end))
       .gte('check_out', sqlDate(dateRange.start))
-        .in('status', ['confirmed', 'checked-in', 'checked-out'])
+        .in('status', ['confirmed', 'completed', 'checked-in', 'checked-out'])
         .order('check_in', { ascending: false });
       if (error) throw error;
       reservations = data || [];
@@ -2508,7 +2508,7 @@ async function handleBarDrillClick(barKey) {
         .select('confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total, nights, status, coupon_code, coupon_discount, discount_amount, room_discount, extras_discount')
         .lte('check_in', sqlDate(dateRange.end))
       .gte('check_out', sqlDate(dateRange.start))
-        .in('status', ['confirmed', 'checked-in', 'checked-out'])
+        .in('status', ['confirmed', 'completed', 'checked-in', 'checked-out'])
         .eq('coupon_code', value)
         .order('check_in', { ascending: false });
       if (error) throw error;
@@ -2541,7 +2541,7 @@ async function handleBarDrillClick(barKey) {
           .select('confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total, nights, status')
           .lte('check_in', sqlDate(dateRange.end))
       .gte('check_out', sqlDate(dateRange.start))
-          .in('status', ['confirmed', 'checked-in', 'checked-out'])
+          .in('status', ['confirmed', 'completed', 'checked-in', 'checked-out'])
           .is('package_id', null)
           .order('check_in', { ascending: false });
         if (error) throw error;
@@ -2553,7 +2553,7 @@ async function handleBarDrillClick(barKey) {
           .select('confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total, packages(name)')
           .lte('check_in', sqlDate(dateRange.end))
       .gte('check_out', sqlDate(dateRange.start))
-          .in('status', ['confirmed', 'checked-in', 'checked-out'])
+          .in('status', ['confirmed', 'completed', 'checked-in', 'checked-out'])
           .not('package_id', 'is', null)
           .eq('packages.name', value);
         if (error) throw error;
@@ -2567,7 +2567,7 @@ async function handleBarDrillClick(barKey) {
         .select('confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total, nights, status')
         .lte('check_in', sqlDate(dateRange.end))
       .gte('check_out', sqlDate(dateRange.start))
-        .in('status', ['confirmed', 'checked-in', 'checked-out'])
+        .in('status', ['confirmed', 'completed', 'checked-in', 'checked-out'])
         .eq('room_type_code', value)
         .order('check_in', { ascending: false });
       if (error) throw error;
@@ -2600,7 +2600,7 @@ async function handleBarDrillClick(barKey) {
         .select('confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total, nights, status, reservation_extras(extra_name, subtotal, quantity)')
         .lte('check_in', sqlDate(dateRange.end))
       .gte('check_out', sqlDate(dateRange.start))
-        .in('status', ['confirmed', 'checked-in', 'checked-out']);
+        .in('status', ['confirmed', 'completed', 'checked-in', 'checked-out']);
       if (resErr) throw resErr;
       const target = parseInt(value, 10);
       rows = (allRes || []).filter(r => {
