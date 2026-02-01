@@ -274,39 +274,37 @@ async function calculateOccupancyMetrics(reservations, start, end) {
   const availableNights = theoreticalCapacity - blockedNights;
 
   let occupiedNights = 0;
-  let totalNights = 0;
+  const msPerDay = 1000 * 60 * 60 * 24;
 
   (reservations || []).forEach((r) => {
     if (!r.check_in || !r.check_out) return;
 
-    totalNights += r.nights || 0;
-
-    // Match analytics.js: parse as local-midnight strings
+    // Parse dates
     const checkIn = new Date(r.check_in + 'T00:00:00');
     const checkOut = new Date(r.check_out + 'T00:00:00');
 
-    const rangeStart = new Date(Math.max(checkIn, periodStart));
-    const rangeEnd = new Date(Math.min(checkOut, periodEnd));
+    // Clip to period boundaries
+    const rangeStart = new Date(Math.max(checkIn.getTime(), periodStart.getTime()));
+    const rangeEnd = new Date(Math.min(checkOut.getTime(), periodEnd.getTime() + msPerDay));
 
-    const nightsInRange = Math.max(
-      0,
-      Math.ceil((rangeEnd - rangeStart) / (1000 * 60 * 60 * 24))
-    );
-
+    // Calculate nights in range
+    const nightsInRange = Math.max(0, (rangeEnd - rangeStart) / msPerDay);
     occupiedNights += nightsInRange;
   });
+
+  occupiedNights = Math.round(occupiedNights);
 
   const occupancyRate =
     availableNights > 0 ? (occupiedNights / availableNights) * 100 : 0;
 
   const avgLOS = (reservations || []).length > 0
-    ? totalNights / (reservations || []).length
+    ? occupiedNights / (reservations || []).length
     : 0;
 
   return {
     occupancyRate,
     avgLOS,
-    totalNights,
+    totalNights: occupiedNights,
     bookings: (reservations || []).length,
     availableNights
   };
@@ -328,17 +326,21 @@ function calculateRevenueMetrics(reservations, availableNights, start, end) {
   );
 
   // Calculate occupied nights WITHIN the date range (not total r.nights)
+  // Calculate occupied nights by clipping
   let occupiedNights = 0;
+  const msPerDay = 1000 * 60 * 60 * 24;
+  
   reservations.forEach(r => {
     if (!r.check_in || !r.check_out) return;
     const checkIn = new Date(r.check_in);
     const checkOut = new Date(r.check_out);
-    const rangeStart = new Date(Math.max(checkIn, start));
-    const rangeEndExclusive = new Date(Math.min(checkOut, endExclusive));
-    const nightsInRange = Math.max(0, Math.floor((rangeEndExclusive - rangeStart) / MS_PER_DAY));
+    const rangeStart = new Date(Math.max(checkIn.getTime(), start.getTime()));
+    const rangeEnd = new Date(Math.min(checkOut.getTime(), endExclusive.getTime() + msPerDay));
+    const nightsInRange = Math.max(0, (rangeEnd - rangeStart) / msPerDay);
     occupiedNights += nightsInRange;
-
   });
+  
+  occupiedNights = Math.round(occupiedNights);
 
   const avgBookingValue = reservations.length > 0 ? totalRevenue / reservations.length : 0;
   

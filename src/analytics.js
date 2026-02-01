@@ -795,22 +795,32 @@ async function loadOccupancyMetrics() {
     const blockedNights = (blockedDates || []).length;
     const availableNights = theoreticalCapacity - blockedNights;
 
-    // Calculate occupied nights with boundary clipping
+    // Calculate occupied nights by clipping each reservation to the period
+    // This gives us the actual nights occupied within the period boundaries
     let occupiedNights = 0;
-    let totalNightsSold = 0;
     (reservations || []).forEach(r => {
       if (!r.check_in || !r.check_out) return;
+      
+      // Parse dates
       const checkIn = new Date(r.check_in + 'T00:00:00');
       const checkOut = new Date(r.check_out + 'T00:00:00');
-      const rangeStart = new Date(Math.max(checkIn, dateRange.start));
-      const rangeEnd = new Date(Math.min(checkOut, dateRange.end));
-      const nightsInRange = Math.max(0, Math.ceil((rangeEnd - rangeStart) / (1000 * 60 * 60 * 24)));
+      
+      // Clip to period boundaries
+      // Add 1 day to period end to make it inclusive for the checkout boundary
+      const rangeStart = new Date(Math.max(checkIn.getTime(), dateRange.start.getTime()));
+      const rangeEnd = new Date(Math.min(checkOut.getTime(), dateRange.end.getTime() + (1000 * 60 * 60 * 24)));
+      
+      // Calculate nights within this period
+      const msPerDay = 1000 * 60 * 60 * 24;
+      const nightsInRange = Math.max(0, (rangeEnd - rangeStart) / msPerDay);
       occupiedNights += nightsInRange;
-      totalNightsSold += (r.nights || 0);
     });
 
+    // Round to avoid floating point issues
+    occupiedNights = Math.round(occupiedNights);
+
     const occupancyRate = availableNights > 0 ? (occupiedNights / availableNights) * 100 : 0;
-    const alos = (reservations || []).length > 0 ? totalNightsSold / (reservations || []).length : 0;
+    const alos = (reservations || []).length > 0 ? occupiedNights / (reservations || []).length : 0;
 
     const html = `
       <div class="metric-card" data-drill="occupancy">
@@ -820,7 +830,8 @@ async function loadOccupancyMetrics() {
       </div>
       <div class="metric-card" data-drill="occupancy">
         <div class="metric-label">Nights Sold</div>
-        <div class="metric-value">${totalNightsSold}</div>
+        <div class="metric-value">${occupiedNights}</div>
+        <div class="metric-subtext">in selected period</div>
       </div>
       <div class="metric-card" data-drill="occupancy">
         <div class="metric-label">Available Nights</div>
@@ -896,7 +907,7 @@ async function loadRevenueMetrics() {
       const checkIn = new Date(r.check_in);
       const checkOut = new Date(r.check_out);
       const rangeStart = new Date(Math.max(checkIn, dateRange.start));
-      const rangeEnd = new Date(Math.min(checkOut, dateRange.end));
+      const rangeEnd = new Date(Math.min(checkOut, dateRange.end.getTime() + (1000 * 60 * 60 * 24)));
       const nightsInRange = Math.max(0, Math.ceil((rangeEnd - rangeStart) / (1000 * 60 * 60 * 24)));
       occupiedNightsInRange += nightsInRange;
     });
