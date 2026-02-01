@@ -29,36 +29,142 @@ function sqlDate(d) {
 }
 
 // Calculate comparison periods
+// Calculate comparison periods (selection-aware)
+// Returns: { periods: { current, mom?, qoq?, yoy? }, meta: { showMom, showQoq, showYoy } }
 function getComparisonPeriods(currentStart, currentEnd) {
   const start = new Date(currentStart);
   const end = new Date(currentEnd);
-  const daysDiff = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
 
-  // MoM (Month over Month)
-  const momStart = new Date(start);
-  momStart.setMonth(momStart.getMonth() - 1);
-  const momEnd = new Date(end);
-  momEnd.setMonth(momEnd.getMonth() - 1);
+  const lastDayOfMonth = (y, m) => new Date(y, m + 1, 0).getDate();
 
-  // QoQ (Quarter over Quarter)
-  const qoqStart = new Date(start);
-  qoqStart.setMonth(qoqStart.getMonth() - 3);
-  const qoqEnd = new Date(end);
-  qoqEnd.setMonth(qoqEnd.getMonth() - 3);
+  // Used only for "custom range" fallback (same-shaped window shift)
+  function adjustDate(date, monthDiff, yearDiff = 0) {
+    const d = new Date(date);
+    const day = d.getDate();
+    const month = d.getMonth();
+    const year = d.getFullYear();
 
-  // YoY (Year over Year)
-  const yoyStart = new Date(start);
-  yoyStart.setFullYear(yoyStart.getFullYear() - 1);
-  const yoyEnd = new Date(end);
-  yoyEnd.setFullYear(yoyEnd.getFullYear() - 1);
+    const targetYear = year + yearDiff + Math.floor((month + monthDiff) / 12);
+    const targetMonth = ((month + monthDiff) % 12 + 12) % 12;
+    const targetDay = Math.min(day, lastDayOfMonth(targetYear, targetMonth));
+    return new Date(targetYear, targetMonth, targetDay);
+  }
 
-  return {
-    current: { start, end },
-    mom: { start: momStart, end: momEnd },
-    qoq: { start: qoqStart, end: qoqEnd },
-    yoy: { start: yoyStart, end: yoyEnd }
+  // -------- Detect selection type --------
+  const sameYear = start.getFullYear() === end.getFullYear();
+
+  const isFullMonth =
+    start.getDate() === 1 &&
+    start.getMonth() === end.getMonth() &&
+    sameYear &&
+    end.getDate() === lastDayOfMonth(end.getFullYear(), end.getMonth());
+
+  const isFullYear =
+    start.getDate() === 1 &&
+    start.getMonth() === 0 &&
+    sameYear &&
+    end.getMonth() === 11 &&
+    end.getDate() === 31;
+
+  const quarterStartMonths = [0, 3, 6, 9];
+  const isQuarterStart = start.getDate() === 1 && quarterStartMonths.includes(start.getMonth());
+  const expectedQuarterEndMonth = start.getMonth() + 2;
+  const isFullQuarter =
+    isQuarterStart &&
+    sameYear &&
+    end.getMonth() === expectedQuarterEndMonth &&
+    end.getDate() === lastDayOfMonth(end.getFullYear(), end.getMonth());
+
+  // -------- Build periods + which comparisons to show --------
+  const periods = { current: { start, end } };
+  const meta = {
+    showMom: true,
+    showQoq: true,
+    showYoy: true,
   };
+
+  // Full year → show YoY only
+  if (isFullYear) {
+    meta.showMom = false;
+    meta.showQoq = false;
+
+    periods.yoy = {
+      start: new Date(start.getFullYear() - 1, 0, 1),
+      end: new Date(start.getFullYear() - 1, 11, 31),
+    };
+
+    return { periods, meta };
+  }
+
+  // Full quarter → hide MoM; QoQ = previous quarter bucket; YoY = same quarter last year
+  if (isFullQuarter) {
+    meta.showMom = false;
+
+    const currQStartMonth = start.getMonth(); // 0,3,6,9
+    let prevQStartMonth = currQStartMonth - 3;
+    let prevQYear = start.getFullYear();
+    if (prevQStartMonth < 0) {
+      prevQStartMonth += 12;
+      prevQYear -= 1;
+    }
+
+    periods.qoq = {
+      start: new Date(prevQYear, prevQStartMonth, 1),
+      end: new Date(prevQYear, prevQStartMonth + 3, 0), // end of prev quarter
+    };
+
+    const yoyYear = start.getFullYear() - 1;
+    periods.yoy = {
+      start: new Date(yoyYear, currQStartMonth, 1),
+      end: new Date(yoyYear, currQStartMonth + 3, 0),
+    };
+
+    return { periods, meta };
+  }
+
+  // Single calendar month → MoM = previous month bucket; QoQ = previous quarter bucket; YoY = same month last year
+  if (isFullMonth) {
+    // MoM bucket
+    const prevMonthAnchor = adjustDate(start, -1);
+    periods.mom = {
+      start: new Date(prevMonthAnchor.getFullYear(), prevMonthAnchor.getMonth(), 1),
+      end: new Date(prevMonthAnchor.getFullYear(), prevMonthAnchor.getMonth() + 1, 0),
+    };
+
+    // QoQ bucket (previous quarter)
+    const currMonth = start.getMonth();
+    const currQuarterStartMonth = Math.floor(currMonth / 3) * 3;
+
+    let prevQuarterStartMonth = currQuarterStartMonth - 3;
+    let prevQuarterYear = start.getFullYear();
+    if (prevQuarterStartMonth < 0) {
+      prevQuarterStartMonth += 12;
+      prevQuarterYear -= 1;
+    }
+
+    periods.qoq = {
+      start: new Date(prevQuarterYear, prevQuarterStartMonth, 1),
+      end: new Date(prevQuarterYear, prevQuarterStartMonth + 3, 0),
+    };
+
+    // YoY bucket (same month last year)
+    const yoyYear = start.getFullYear() - 1;
+    periods.yoy = {
+      start: new Date(yoyYear, start.getMonth(), 1),
+      end: new Date(yoyYear, start.getMonth() + 1, 0),
+    };
+
+    return { periods, meta };
+  }
+
+  // Custom range fallback: keep existing behavior (same-shaped window shifted)
+  periods.mom = { start: adjustDate(start, -1), end: adjustDate(end, -1) };
+  periods.qoq = { start: adjustDate(start, -3), end: adjustDate(end, -3) };
+  periods.yoy = { start: adjustDate(start, 0, -1), end: adjustDate(end, 0, -1) };
+
+  return { periods, meta };
 }
+
 
 // Helper to format change percentage
 function formatChange(current, previous) {
@@ -75,40 +181,66 @@ function formatChange(current, previous) {
 }
 
 // Render comparison metric card
-function renderComparisonCard(label, current, mom, qoq, yoy, formatter = (v) => v.toFixed(1)) {
-  const momChange = formatChange(current, mom);
-  const qoqChange = formatChange(current, qoq);
-  const yoyChange = formatChange(current, yoy);
+function renderComparisonCard(
+  label,
+  current,
+  mom,
+  qoq,
+  yoy,
+  formatter = (v) => v.toFixed(1),
+  meta = { showMom: true, showQoq: true, showYoy: true }
+) {
+  const rows = [];
+
+  if (meta.showMom) {
+    const momChange = formatChange(current, mom);
+    rows.push(`
+      <div style="display:flex;justify-content:space-between;font-size:11px;">
+        <span style="color:#64748b;">vs Last Month:</span>
+        <span class="change-${momChange.className}">${momChange.text}</span>
+      </div>
+    `);
+  }
+
+  if (meta.showQoq) {
+    const qoqChange = formatChange(current, qoq);
+    rows.push(`
+      <div style="display:flex;justify-content:space-between;font-size:11px;">
+        <span style="color:#64748b;">vs Last Quarter:</span>
+        <span class="change-${qoqChange.className}">${qoqChange.text}</span>
+      </div>
+    `);
+  }
+
+  if (meta.showYoy) {
+    const yoyChange = formatChange(current, yoy);
+    rows.push(`
+      <div style="display:flex;justify-content:space-between;font-size:11px;">
+        <span style="color:#64748b;">vs Last Year:</span>
+        <span class="change-${yoyChange.className}">${yoyChange.text}</span>
+      </div>
+    `);
+  }
 
   return `
     <div class="metric-card">
       <div class="metric-label">${label}</div>
       <div class="metric-value">${formatter(current)}</div>
-      <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 4px;">
-        <div style="display: flex; justify-content: space-between; font-size: 11px;">
-          <span style="color: #64748b;">vs Last Month:</span>
-          <span class="change-${momChange.className}">${momChange.text}</span>
-        </div>
-        <div style="display: flex; justify-content: space-between; font-size: 11px;">
-          <span style="color: #64748b;">vs Last Quarter:</span>
-          <span class="change-${qoqChange.className}">${qoqChange.text}</span>
-        </div>
-        <div style="display: flex; justify-content: space-between; font-size: 11px;">
-          <span style="color: #64748b;">vs Last Year:</span>
-          <span class="change-${yoyChange.className}">${yoyChange.text}</span>
-        </div>
+      <div style="margin-top:12px;display:flex;flex-direction:column;gap:4px;">
+        ${rows.join('')}
       </div>
     </div>
   `;
 }
 
+
 // Fetch reservations for a period
 async function fetchReservationsForPeriod(start, end) {
   const { data, error } = await supabase
     .from('reservations')
-    .select('total, room_subtotal, extras_total, check_in, check_out, nights, reservation_extras(subtotal)')
-    .gte('check_in', sqlDate(start))
+    .select('id, total, room_subtotal, extras_total, check_in, check_out, nights, reservation_extras(subtotal)')
     .lte('check_in', sqlDate(end))
+    .gte('check_out', sqlDate(start))
     .in('status', ['confirmed', 'checked-in', 'checked-out']);
 
   if (error) throw error;
@@ -191,34 +323,38 @@ function calculateRevenueMetrics(reservations, availableNights, start, end) {
 
 // Calculate extras metrics
 function calculateExtrasMetrics(reservations) {
-  let totalBookingsWithExtras = 0;
-  let totalExtras = 0;
-
+  // WARNING: This function receives reservations WITH reservation_extras relation
+  // But we need to calculate exactly like main analytics which queries reservation_extras directly
+  
+  // Flatten all reservation_extras from all reservations
+  const allExtras = [];
   reservations.forEach(r => {
-    // Use extras_total field to match main analytics methodology
-    // This ensures consistency: attachment rate based on $ amount, not just relation existence
-    const extrasTotal = parseFloat(r.extras_total) || 0;
-    if (extrasTotal > 0) {
-      totalBookingsWithExtras++;
-    }
-    
-    // Count items from reservation_extras for "Avg Extras Per Booking"
     if (r.reservation_extras && r.reservation_extras.length > 0) {
-      totalExtras += r.reservation_extras.length;
+      r.reservation_extras.forEach(extra => {
+        allExtras.push({
+          ...extra,
+          reservation_id: r.id
+        });
+      });
     }
   });
-
-  const attachRate = reservations.length > 0 ? (totalBookingsWithExtras / reservations.length) * 100 : 0;
-  const avgPerBooking = totalBookingsWithExtras > 0 ? totalExtras / totalBookingsWithExtras : 0;
   
-  // Total extras revenue from extras_total field (matches main analytics exactly)
-  const totalExtrasRevenue = reservations.reduce(
-    (sum, r) => sum + (parseFloat(r.extras_total) || 0),
-    0
-  );
+  // Now calculate EXACTLY like main analytics:
+  // 1. Total revenue from extras subtotals (not extras_total field!)
+  const totalExtrasRevenue = allExtras.reduce((sum, e) => sum + (parseFloat(e.subtotal) || 0), 0);
+  
+  // 2. Unique reservations with extras
+  const bookingsWithExtras = new Set(allExtras.map(e => e.reservation_id)).size;
+  
+  // 3. Attach rate = unique reservations with extras / total reservations
+  const attachRate = reservations.length > 0 ? (bookingsWithExtras / reservations.length) * 100 : 0;
+  
+  // 4. Avg per booking = total extras items / bookings with extras
+  const avgPerBooking = bookingsWithExtras > 0 ? allExtras.length / bookingsWithExtras : 0;
 
   return { attachRate, avgPerBooking, totalExtrasRevenue };
 }
+
 
 // Get weekday vs weekend occupancy
 async function getWeekdayWeekendComparison(start, end) {
@@ -235,12 +371,12 @@ async function getWeekdayWeekendComparison(start, end) {
     weekendMap[wd.day_of_week] = wd.is_weekend;
   });
 
-  // Get all reservations
+  // Get all reservations with overlap detection
   const { data: reservations, error } = await supabase
     .from('reservations')
     .select('check_in, check_out, nights')
-    .gte('check_in', sqlDate(start))
     .lte('check_in', sqlDate(end))
+    .gte('check_out', sqlDate(start))
     .in('status', ['confirmed', 'checked-in', 'checked-out']);
 
   if (error) throw error;
@@ -334,9 +470,9 @@ async function generateRevenueTimeSeries(periods, granularity = 'day') {
   for (const [label, period] of Object.entries(periods)) {
     const { data: reservations } = await supabase
       .from('reservations')
-      .select('total, check_in')
-      .gte('check_in', sqlDate(period.start))
+      .select('total, check_in, check_out')
       .lte('check_in', sqlDate(period.end))
+      .gte('check_out', sqlDate(period.start))
       .in('status', ['confirmed', 'checked-in', 'checked-out']);
 
     const revenueByDate = {};
@@ -444,8 +580,27 @@ function renderComparisonLineChart(containerId, datasets, options = {}) {
   }
 
   // Default to MoM comparison and daily granularity
-  const comparisonMode = options.defaultMode || 'mom';
+  // Allowed comparison modes (derived from selection type)
+  const allowedModes = options.allowedModes || ['mom', 'qoq', 'yoy'];
+  const defaultMode = allowedModes.includes(options.defaultMode)
+    ? options.defaultMode
+    : (allowedModes[0] || 'yoy');
+
   const granularity = options.defaultGranularity || 'day';
+  const comparisonMode = defaultMode;
+
+  const momBtn = allowedModes.includes('mom')
+    ? `<button class="chart-btn ${defaultMode === 'mom' ? 'active' : ''}" data-mode="mom" data-chart="${containerId}">MoM</button>`
+    : '';
+
+  const qoqBtn = allowedModes.includes('qoq')
+    ? `<button class="chart-btn ${defaultMode === 'qoq' ? 'active' : ''}" data-mode="qoq" data-chart="${containerId}">QoQ</button>`
+    : '';
+
+  const yoyBtn = allowedModes.includes('yoy')
+    ? `<button class="chart-btn ${defaultMode === 'yoy' ? 'active' : ''}" data-mode="yoy" data-chart="${containerId}">YoY</button>`
+    : '';
+
   
   // Store datasets for re-rendering
   window[`${containerId}_datasets`] = datasets;
@@ -457,18 +612,13 @@ function renderComparisonLineChart(containerId, datasets, options = {}) {
   container.innerHTML = `
     <div id="${wrapperId}">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
-        <!-- Granularity Toggle -->
-        <div class="chart-controls">
-          <button class="chart-btn active" data-granularity="day" data-chart="${containerId}">D</button>
-          <button class="chart-btn" data-granularity="week" data-chart="${containerId}">W</button>
-          <button class="chart-btn" data-granularity="month" data-chart="${containerId}">M</button>
-        </div>
         <!-- Comparison Period Toggle -->
-        <div class="chart-controls">
-          <button class="chart-btn active" data-mode="mom" data-chart="${containerId}">MoM</button>
-          <button class="chart-btn" data-mode="qoq" data-chart="${containerId}">QoQ</button>
-          <button class="chart-btn" data-mode="yoy" data-chart="${containerId}">YoY</button>
-        </div>
+          <div class="chart-controls">
+            ${momBtn}
+            ${qoqBtn}
+            ${yoyBtn}
+          </div>
+
       </div>
       <div id="${containerId}-chart">Loading...</div>
     </div>
@@ -486,7 +636,10 @@ function renderComparisonLineChart(containerId, datasets, options = {}) {
       });
       
       // Get current comparison mode
-      const currentMode = container.querySelector('.chart-btn[data-mode].active')?.dataset.mode || 'mom';
+      const currentMode =
+        container.querySelector('.chart-btn[data-mode].active')?.dataset.mode ||
+        (allowedModes[0] || 'yoy');
+
       
       // Show loading
       document.getElementById(`${chartId}-chart`).innerHTML = '<div style="padding: 40px; text-align: center; color: #64748b;">Loading...</div>';
@@ -532,7 +685,7 @@ async function reloadChartData(chartId, mode, granularity) {
       end: new Date() 
     };
     
-    const periods = getComparisonPeriods(dateRange.start, dateRange.end);
+    const { periods, meta } = getComparisonPeriods(dateRange.start, dateRange.end);
     
     // Regenerate data based on chart type
     let newDatasets;
@@ -544,9 +697,21 @@ async function reloadChartData(chartId, mode, granularity) {
     
     // Store new datasets
     window[`${chartId}_datasets`] = newDatasets;
-    
+
+    const allowedModes = [];
+    if (meta.showMom) allowedModes.push('mom');
+    if (meta.showQoq) allowedModes.push('qoq');
+    if (meta.showYoy) allowedModes.push('yoy');
+
+    const safeMode = allowedModes.includes(mode) ? mode : (allowedModes[0] || 'yoy');
+
+    // Persist allowed modes so the chart UI can hide/show buttons correctly
+    const newOptions = { ...storedOptions, allowedModes, defaultMode: safeMode };
+    window[`${chartId}_options`] = newOptions;
+
     // Re-render
-    renderComparisonLineChartContent(`${chartId}-chart`, newDatasets, mode, storedOptions);
+    renderComparisonLineChart(chartId, newDatasets, newOptions);
+
   } catch (error) {
     console.error('Error reloading chart data:', error);
     document.getElementById(`${chartId}-chart`).innerHTML = '<div class="analytics-empty">Error loading chart data</div>';
@@ -670,70 +835,58 @@ export async function renderComparisonView(dateRange) {
   container.innerHTML = '<div style="padding: 40px; text-align: center; color: #64748b;">Loading comparison data...</div>';
 
   try {
-    const periods = getComparisonPeriods(dateRange.start, dateRange.end);
+    const { periods, meta } = getComparisonPeriods(dateRange.start, dateRange.end);
 
-    // Fetch data for all periods
-    const [currentRes, momRes, qoqRes, yoyRes] = await Promise.all([
+    const tasks = [
       fetchReservationsForPeriod(periods.current.start, periods.current.end),
-      fetchReservationsForPeriod(periods.mom.start, periods.mom.end),
-      fetchReservationsForPeriod(periods.qoq.start, periods.qoq.end),
-      fetchReservationsForPeriod(periods.yoy.start, periods.yoy.end)
-    ]);
-
-    // Use database function for occupancy comparison
-    const { data: occupancyData, error: occError } = await supabase
-      .rpc('calculate_occupancy_comparison', {
-        p_periods: {
-          current: { start: sqlDate(periods.current.start), end: sqlDate(periods.current.end) },
-          mom: { start: sqlDate(periods.mom.start), end: sqlDate(periods.mom.end) },
-          qoq: { start: sqlDate(periods.qoq.start), end: sqlDate(periods.qoq.end) },
-          yoy: { start: sqlDate(periods.yoy.start), end: sqlDate(periods.yoy.end) }
-        }
-      });
-
-    if (occError) {
-      console.error('Database function error:', occError);
-      throw new Error(`Failed to calculate occupancy: ${occError.message}. Have you deployed the SQL functions?`);
-    }
-
-    if (!occupancyData) {
-      throw new Error('No occupancy data returned from database function');
-    }
-
-    // Extract occupancy metrics from database function response
-    const currentOccupancy = {
-      occupancyRate: occupancyData.current.occupancy.occupancy_rate,
-      avgLOS: occupancyData.current.occupancy.alos,
-      bookings: occupancyData.current.occupancy.bookings_count,
-      availableNights: occupancyData.current.capacity.available
-    };
+      meta.showMom ? fetchReservationsForPeriod(periods.mom.start, periods.mom.end) : Promise.resolve([]),
+      meta.showQoq ? fetchReservationsForPeriod(periods.qoq.start, periods.qoq.end) : Promise.resolve([]),
+      meta.showYoy ? fetchReservationsForPeriod(periods.yoy.start, periods.yoy.end) : Promise.resolve([]),
+    ];
     
-    const momOccupancy = {
-      occupancyRate: occupancyData.mom.occupancy.occupancy_rate,
-      avgLOS: occupancyData.mom.occupancy.alos,
-      bookings: occupancyData.mom.occupancy.bookings_count,
-      availableNights: occupancyData.mom.capacity.available
-    };
+    const [currentRes, momRes, qoqRes, yoyRes] = await Promise.all(tasks);
     
-    const qoqOccupancy = {
-      occupancyRate: occupancyData.qoq.occupancy.occupancy_rate,
-      avgLOS: occupancyData.qoq.occupancy.alos,
-      bookings: occupancyData.qoq.occupancy.bookings_count,
-      availableNights: occupancyData.qoq.capacity.available
-    };
+
+    // Calculate occupancy for all periods using JavaScript (more reliable than RPC)
+    const currentOccupancy = await calculateOccupancyMetrics(
+      currentRes,
+      periods.current.start,
+      periods.current.end
+    );
     
-    const yoyOccupancy = {
-      occupancyRate: occupancyData.yoy.occupancy.occupancy_rate,
-      avgLOS: occupancyData.yoy.occupancy.alos,
-      bookings: occupancyData.yoy.occupancy.bookings_count,
-      availableNights: occupancyData.yoy.capacity.available
-    };
+    const momOccupancy = meta.showMom
+      ? await calculateOccupancyMetrics(momRes, periods.mom.start, periods.mom.end)
+      : { occupancyRate: 0, avgLOS: 0, totalNights: 0, bookings: 0, availableNights: 0 };
+    
+    const qoqOccupancy = meta.showQoq
+      ? await calculateOccupancyMetrics(qoqRes, periods.qoq.start, periods.qoq.end)
+      : { occupancyRate: 0, avgLOS: 0, totalNights: 0, bookings: 0, availableNights: 0 };
+    
+    const yoyOccupancy = meta.showYoy
+      ? await calculateOccupancyMetrics(yoyRes, periods.yoy.start, periods.yoy.end)
+      : { occupancyRate: 0, avgLOS: 0, totalNights: 0, bookings: 0, availableNights: 0 };
+    
 
-    const currentRevenue = calculateRevenueMetrics(currentRes, currentOccupancy.availableNights, dateRange.start, dateRange.end);
-    const momRevenue = calculateRevenueMetrics(momRes, momOccupancy.availableNights, periods.momStart, periods.momEnd);
-    const qoqRevenue = calculateRevenueMetrics(qoqRes, qoqOccupancy.availableNights, periods.qoqStart, periods.qoqEnd);
-    const yoyRevenue = calculateRevenueMetrics(yoyRes, yoyOccupancy.availableNights, periods.yoyStart, periods.yoyEnd);
 
+      const currentRevenue = calculateRevenueMetrics(
+        currentRes,
+        currentOccupancy.availableNights,
+        periods.current.start,
+        periods.current.end
+      );
+      
+      const momRevenue = meta.showMom
+        ? calculateRevenueMetrics(momRes, momOccupancy.availableNights, periods.mom.start, periods.mom.end)
+        : { totalRevenue: 0, roomRevenue: 0, extrasRevenue: 0, avgBookingValue: 0, revPAR: 0, trevpar: 0, adr: 0 };
+      
+      const qoqRevenue = meta.showQoq
+        ? calculateRevenueMetrics(qoqRes, qoqOccupancy.availableNights, periods.qoq.start, periods.qoq.end)
+        : { totalRevenue: 0, roomRevenue: 0, extrasRevenue: 0, avgBookingValue: 0, revPAR: 0, trevpar: 0, adr: 0 };
+      
+      const yoyRevenue = meta.showYoy
+        ? calculateRevenueMetrics(yoyRes, yoyOccupancy.availableNights, periods.yoy.start, periods.yoy.end)
+        : { totalRevenue: 0, roomRevenue: 0, extrasRevenue: 0, avgBookingValue: 0, revPAR: 0, trevpar: 0, adr: 0 };
+      
     const currentExtras = calculateExtrasMetrics(currentRes);
     const momExtras = calculateExtrasMetrics(momRes);
     const qoqExtras = calculateExtrasMetrics(qoqRes);
@@ -754,7 +907,8 @@ export async function renderComparisonView(dateRange) {
             momOccupancy.occupancyRate,
             qoqOccupancy.occupancyRate,
             yoyOccupancy.occupancyRate,
-            (v) => `${v.toFixed(1)}%`
+            (v) => `${v.toFixed(1)}%`,
+            meta
           )}
           ${renderComparisonCard(
             'ALOS',
@@ -762,7 +916,8 @@ export async function renderComparisonView(dateRange) {
             momOccupancy.avgLOS,
             qoqOccupancy.avgLOS,
             yoyOccupancy.avgLOS,
-            (v) => `${v.toFixed(1)} nights`
+            (v) => `${v.toFixed(1)} nights`,
+            meta
           )}
           ${renderComparisonCard(
             'Total Bookings',
@@ -770,7 +925,8 @@ export async function renderComparisonView(dateRange) {
             momOccupancy.bookings,
             qoqOccupancy.bookings,
             yoyOccupancy.bookings,
-            (v) => v.toString()
+            (v) => v.toString(),
+            meta
           )}
         </div>
       </div>
@@ -818,7 +974,8 @@ export async function renderComparisonView(dateRange) {
             momRevenue.totalRevenue,
             qoqRevenue.totalRevenue,
             yoyRevenue.totalRevenue,
-            formatCurrencyCompact
+            formatCurrencyCompact,
+            meta
           )}
           ${renderComparisonCard(
             'Room Revenue',
@@ -826,7 +983,8 @@ export async function renderComparisonView(dateRange) {
             momRevenue.roomRevenue,
             qoqRevenue.roomRevenue,
             yoyRevenue.roomRevenue,
-            formatCurrencyCompact
+            formatCurrencyCompact,
+            meta
           )}
           ${renderComparisonCard(
             'Extras Revenue',
@@ -834,7 +992,8 @@ export async function renderComparisonView(dateRange) {
             momRevenue.extrasRevenue,
             qoqRevenue.extrasRevenue,
             yoyRevenue.extrasRevenue,
-            formatCurrencyCompact
+            formatCurrencyCompact,
+            meta
           )}
           ${renderComparisonCard(
             'Avg Booking Value',
@@ -842,7 +1001,8 @@ export async function renderComparisonView(dateRange) {
             momRevenue.avgBookingValue,
             qoqRevenue.avgBookingValue,
             yoyRevenue.avgBookingValue,
-            formatCurrencyCompact
+            formatCurrencyCompact,
+            meta
           )}
           ${renderComparisonCard(
             'ADR',
@@ -850,7 +1010,8 @@ export async function renderComparisonView(dateRange) {
             momRevenue.adr,
             qoqRevenue.adr,
             yoyRevenue.adr,
-            formatCurrencyCompact
+            formatCurrencyCompact,
+            meta
           )}
           ${renderComparisonCard(
             'RevPAR',
@@ -858,7 +1019,8 @@ export async function renderComparisonView(dateRange) {
             momRevenue.revPAR,
             qoqRevenue.revPAR,
             yoyRevenue.revPAR,
-            formatCurrencyCompact
+            formatCurrencyCompact,
+            meta
           )}
           ${renderComparisonCard(
             'TRevPAR',
@@ -866,7 +1028,8 @@ export async function renderComparisonView(dateRange) {
             momRevenue.trevpar,
             qoqRevenue.trevpar,
             yoyRevenue.trevpar,
-            formatCurrencyCompact
+            formatCurrencyCompact,
+            meta    
           )}
         </div>
       </div>
@@ -889,7 +1052,8 @@ export async function renderComparisonView(dateRange) {
             momExtras.attachRate,
             qoqExtras.attachRate,
             yoyExtras.attachRate,
-            (v) => `${v.toFixed(1)}%`
+            (v) => `${v.toFixed(1)}%`,
+            meta
           )}
           ${renderComparisonCard(
             'Avg Extras Per Booking',
@@ -897,7 +1061,8 @@ export async function renderComparisonView(dateRange) {
             momExtras.avgPerBooking,
             qoqExtras.avgPerBooking,
             yoyExtras.avgPerBooking,
-            (v) => v.toFixed(1)
+            (v) => v.toFixed(1),
+            meta
           )}
           ${renderComparisonCard(
             'Total Extras Revenue',
@@ -905,7 +1070,8 @@ export async function renderComparisonView(dateRange) {
             momExtras.totalExtrasRevenue,
             qoqExtras.totalExtrasRevenue,
             yoyExtras.totalExtrasRevenue,
-            formatCurrencyCompact
+            formatCurrencyCompact,
+            meta
           )}
         </div>
       </div>
@@ -913,11 +1079,22 @@ export async function renderComparisonView(dateRange) {
 
     // Generate and render comparison charts with dateRange
     const occupancyTrendData = await generateOccupancyTimeSeries(periods, 'day');
+    const allowedModes = [];
+    if (meta.showMom) allowedModes.push('mom');
+    if (meta.showQoq) allowedModes.push('qoq');
+    if (meta.showYoy) allowedModes.push('yoy');
+
+    const defaultMode = allowedModes[0] || 'yoy';
+
     renderComparisonLineChart('occupancy-trend-comparison', occupancyTrendData, { 
-      min: 0, 
-      max: 100, 
-      dateRange: { start: dateRange.start, end: dateRange.end } 
+      min: 0,
+      max: 100,
+      dateRange: { start: periods.current.start, end: periods.current.end },
+      allowedModes,
+      defaultMode,
+      defaultGranularity: 'day'
     });
+    
 
     const revenueData = await generateRevenueTimeSeries(periods, 'day');
     renderComparisonLineChart('revenue-trend-comparison', revenueData, { 

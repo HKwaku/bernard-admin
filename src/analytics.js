@@ -80,11 +80,14 @@ function formatCurrencyCompact(amount, currency = 'GHS') {
   return `${currency} ${value}${suffix}`;
 }
 
-// Date range state
+const _now = new Date();
+
 let dateRange = {
-  start: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-  end: new Date()
+  start: new Date(_now.getFullYear(), _now.getMonth(), 1),
+  // Full calendar month end (not "today")
+  end: new Date(_now.getFullYear(), _now.getMonth() + 1, 0)
 };
+
 
 function sqlDate(d) {
   return d.toISOString().split('T')[0];
@@ -146,24 +149,75 @@ view.innerHTML = `
     <!-- Date Range Selector + View Toggle -->
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; width: 100%; box-sizing: border-box;">
       <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-        <!-- Month dropdown -->
-        <select id="analytics-month" class="select" style="min-width: 118px;">
-          <option value="all">All Months</option>
-          <option value="0">January</option>
-          <option value="1">February</option>
-          <option value="2">March</option>
-          <option value="3">April</option>
-          <option value="4">May</option>
-          <option value="5">June</option>
-          <option value="6">July</option>
-          <option value="7">August</option>
-          <option value="8">September</option>
-          <option value="9">October</option>
-          <option value="10">November</option>
-          <option value="11">December</option>
-        </select>
-        <!-- Year dropdown (populated by JS) -->
-        <select id="analytics-year" class="select" style="min-width: 78px;"></select>
+        <!-- Month dropdown (checkbox multi-select) -->
+        <div id="month-dd" style="position: relative;">
+          <button id="month-dd-btn" type="button" class="select" style="min-width:118px;">
+            All Months
+          </button>
+          <div id="month-dd-menu" style="
+            display:none;
+            position:absolute;
+            z-index:50;
+            margin-top:6px;
+            background:#fff;
+            border:1px solid #e2e8f0;
+            border-radius:10px;
+            box-shadow:0 10px 25px rgba(0,0,0,0.08);
+            padding:10px;
+            width:220px;
+          ">
+            <div style="font-size:12px;color:#64748b;margin-bottom:8px;">Months</div>
+            <label style="display:flex;gap:8px;align-items:center;padding:6px 4px;cursor:pointer;">
+              <input type="checkbox" data-month="all" checked />
+              <span>All Months</span>
+            </label>
+            <div style="height:1px;background:#e2e8f0;margin:8px 0;"></div>
+
+            ${[
+              'January','February','March','April','May','June',
+              'July','August','September','October','November','December'
+            ].map((m, i) => `
+              <label style="display:flex;gap:8px;align-items:center;padding:6px 4px;cursor:pointer;">
+                <input type="checkbox" data-month="${i}" />
+                <span>${m}</span>
+              </label>
+            `).join('')}
+
+            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;">
+              <button id="month-dd-clear" type="button" class="btn btn-sm" style="background:transparent;border:1px solid #e2e8f0;color:#64748b;">Clear</button>
+              <button id="month-dd-apply" type="button" class="btn btn-sm">Apply</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Year dropdown (checkbox multi-select) -->
+        <div id="year-dd" style="position: relative;">
+          <button id="year-dd-btn" type="button" class="select" style="min-width:78px;">
+            ${new Date().getFullYear()}
+          </button>
+          <div id="year-dd-menu" style="
+            display:none;
+            position:absolute;
+            z-index:50;
+            margin-top:6px;
+            background:#fff;
+            border:1px solid #e2e8f0;
+            border-radius:10px;
+            box-shadow:0 10px 25px rgba(0,0,0,0.08);
+            padding:10px;
+            width:160px;
+          ">
+            <div style="font-size:12px;color:#64748b;margin-bottom:8px;">Years</div>
+            <div id="year-dd-options"></div>
+
+            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;">
+              <button id="year-dd-clear" type="button" class="btn btn-sm" style="background:transparent;border:1px solid #e2e8f0;color:#64748b;">Clear</button>
+              <button id="year-dd-apply" type="button" class="btn btn-sm">Apply</button>
+            </div>
+          </div>
+        </div>
+
+
         <!-- Custom range trigger -->
         <span style="color: #cbd5e1; font-size: 13px; margin: 0 2px;">|</span>
         <button id="btn-custom-range" class="btn btn-sm" style="background: transparent; border: 1px solid #e2e8f0; color: #64748b; padding: 5px 9px; font-size: 12px; border-radius: 6px; cursor: pointer;">Custom</button>
@@ -349,18 +403,19 @@ view.innerHTML = `
   </div>
 `;
 
+// Initialise month/year checkbox dropdowns (must run AFTER HTML exists)
+initMonthYearCheckboxDropdowns();
+syncCheckboxDropdownsToDateRange();
+
   // Chart granularity buttons (Revenue + Occupancy)
   document.querySelectorAll('.chart-btn[data-chart]').forEach((btn) => {
     btn.addEventListener('click', handleChartGranularityClick);
   });
 
   // Date filter – Month / Year / Custom
-  populateYearSelect();
-  syncDropdownsToDateRange();
-  document.getElementById('analytics-month')?.addEventListener('change', handleMonthYearChange);
-  document.getElementById('analytics-year')?.addEventListener('change', handleMonthYearChange);
   document.getElementById('btn-custom-range')?.addEventListener('click', openCustomRange);
   document.getElementById('apply-date-range')?.addEventListener('click', applyCustomDateRange);
+
   
 
   // View toggle handlers
@@ -616,49 +671,70 @@ async function loadAllAnalytics() {
 
 async function loadOccupancyMetrics() {
   try {
-    // Call database function for occupancy calculation
-    const { data, error } = await supabase
-      .rpc('calculate_occupancy_metrics', {
-        p_start_date: sqlDate(dateRange.start),
-        p_end_date: sqlDate(dateRange.end),
-        p_room_type_id: null
-      });
+    // Fetch reservations with overlap detection (no RPC needed!)
+    const { data: reservations, error } = await supabase
+      .from('reservations')
+      .select('check_in, check_out, nights')
+      .lte('check_in', sqlDate(dateRange.end))
+      .gte('check_out', sqlDate(dateRange.start))
+      .in('status', ['confirmed', 'checked-in', 'checked-out']);
 
-    if (error) {
-      console.error('Database function error:', error);
-      throw new Error(`Failed to load occupancy metrics: ${error.message}. Have you deployed occupancy_functions.sql?`);
-    }
+    if (error) throw error;
 
-    if (!data) {
-      throw new Error('No data returned from database function');
-    }
+    // Fetch blocked dates
+    const { data: blockedDates } = await supabase
+      .from('blocked_dates')
+      .select('blocked_date')
+      .gte('blocked_date', sqlDate(dateRange.start))
+      .lte('blocked_date', sqlDate(dateRange.end));
 
-    const capacity = data.capacity;
-    const occupancy = data.occupancy;
+    // Calculate everything in JavaScript
+    const NUM_CABINS = 3;
+    const daysInPeriod = Math.ceil((dateRange.end - dateRange.start) / (1000 * 60 * 60 * 24)) + 1;
+    const theoreticalCapacity = daysInPeriod * NUM_CABINS;
+    const blockedNights = (blockedDates || []).length;
+    const availableNights = theoreticalCapacity - blockedNights;
+
+    // Calculate occupied nights with boundary clipping
+    let occupiedNights = 0;
+    let totalNightsSold = 0;
+    (reservations || []).forEach(r => {
+      if (!r.check_in || !r.check_out) return;
+      const checkIn = new Date(r.check_in + 'T00:00:00');
+      const checkOut = new Date(r.check_out + 'T00:00:00');
+      const rangeStart = new Date(Math.max(checkIn, dateRange.start));
+      const rangeEnd = new Date(Math.min(checkOut, dateRange.end));
+      const nightsInRange = Math.max(0, Math.ceil((rangeEnd - rangeStart) / (1000 * 60 * 60 * 24)));
+      occupiedNights += nightsInRange;
+      totalNightsSold += (r.nights || 0);
+    });
+
+    const occupancyRate = availableNights > 0 ? (occupiedNights / availableNights) * 100 : 0;
+    const alos = (reservations || []).length > 0 ? totalNightsSold / (reservations || []).length : 0;
 
     const html = `
       <div class="metric-card" data-drill="occupancy">
         <div class="metric-label">Occupancy Rate</div>
-        <div class="metric-value">${occupancy.occupancy_rate}%</div>
-        <div class="metric-subtext">${occupancy.occupied_nights} of ${capacity.available} nights occupied</div>
+        <div class="metric-value">${occupancyRate.toFixed(1)}%</div>
+        <div class="metric-subtext">${occupiedNights} of ${availableNights} nights occupied</div>
       </div>
       <div class="metric-card" data-drill="occupancy">
         <div class="metric-label">Nights Sold</div>
-        <div class="metric-value">${occupancy.nights_sold}</div>
+        <div class="metric-value">${totalNightsSold}</div>
       </div>
       <div class="metric-card" data-drill="occupancy">
         <div class="metric-label">Available Nights</div>
-        <div class="metric-value">${capacity.available}</div>
-        <div class="metric-subtext">${capacity.blocked} nights blocked</div>
+        <div class="metric-value">${availableNights}</div>
+        <div class="metric-subtext">${blockedNights} nights blocked</div>
       </div>
       <div class="metric-card" data-drill="occupancy">
         <div class="metric-label">ALOS</div>
-        <div class="metric-value">${occupancy.alos}</div>
+        <div class="metric-value">${alos.toFixed(1)}</div>
         <div class="metric-subtext">Average Length of Stay</div>
       </div>
       <div class="metric-card" data-drill="occupancy">
         <div class="metric-label">Bookings in Period</div>
-        <div class="metric-value">${occupancy.bookings_count}</div>
+        <div class="metric-value">${(reservations || []).length}</div>
       </div>
     `;
 
@@ -675,8 +751,8 @@ async function loadRevenueMetrics() {
     const { data: reservations, error } = await supabase
       .from('reservations')
       .select('total, room_subtotal, extras_total, check_in, check_out, nights')
-      .gte('check_in', sqlDate(dateRange.start))
       .lte('check_in', sqlDate(dateRange.end))
+      .gte('check_out', sqlDate(dateRange.start))
       .in('status', ['confirmed', 'checked-in', 'checked-out']);
 
     if (error) throw error;
@@ -915,8 +991,8 @@ async function loadRevenueChart() {
     const { data: reservations, error } = await supabase
       .from('reservations')
       .select('total, check_in')
-      .gte('check_in', sqlDate(dateRange.start))
       .lte('check_in', sqlDate(dateRange.end))
+      .gte('check_out', sqlDate(dateRange.start))
       .in('status', ['confirmed', 'checked-in', 'checked-out'])
       .order('check_in');
 
@@ -1125,17 +1201,19 @@ async function loadExtrasMetrics() {
   try {
     const { data: reservationExtras, error } = await supabase
       .from('reservation_extras')
-      .select('*, reservations!inner(check_in)')
-      .gte('reservations.check_in', dateRange.start.toISOString().split('T')[0])
-      .lte('reservations.check_in', dateRange.end.toISOString().split('T')[0]);
+      .select('*, reservations!inner(check_in, check_out, status)')
+      .lte('reservations.check_in', dateRange.end.toISOString().split('T')[0])
+      .gte('reservations.check_out', dateRange.start.toISOString().split('T')[0])
+      .in('reservations.status', ['confirmed', 'checked-in', 'checked-out']);
+
 
     if (error) throw error;
 
     const { data: reservations } = await supabase
       .from('reservations')
       .select('id')
-      .gte('check_in', dateRange.start.toISOString().split('T')[0])
       .lte('check_in', dateRange.end.toISOString().split('T')[0])
+      .gte('check_out', dateRange.start.toISOString().split('T')[0])
       .in('status', ['confirmed', 'checked-in', 'checked-out']);
 
     const totalRevenue = reservationExtras.reduce((sum, e) => sum + (parseFloat(e.subtotal) || 0), 0);
@@ -1157,7 +1235,7 @@ async function loadExtrasMetrics() {
       </div>
       <div class="metric-card" data-drill="extras">
         <div class="metric-label">Extras Attach Rate</div>
-        <div class="metric-value">${attachRate.toFixed(0)}%</div>
+        <div class="metric-value">${attachRate.toFixed(1)}%</div>
       </div>
       <div class="metric-card" data-drill="extras">
         <div class="metric-label">Avg Per Booking</div>
@@ -1184,9 +1262,11 @@ async function loadExtrasCharts() {
   try {
     const { data: reservationExtras, error } = await supabase
       .from('reservation_extras')
-      .select('extra_name, subtotal, quantity, reservations!inner(check_in)')
-      .gte('reservations.check_in', dateRange.start.toISOString().split('T')[0])
-      .lte('reservations.check_in', dateRange.end.toISOString().split('T')[0]);
+      .select('extra_name, subtotal, quantity, reservations!inner(check_in, check_out, status)')
+      .lte('reservations.check_in', dateRange.end.toISOString().split('T')[0])
+      .gte('reservations.check_out', dateRange.start.toISOString().split('T')[0])
+      .in('reservations.status', ['confirmed', 'checked-in', 'checked-out']);
+
 
     if (error) throw error;
 
@@ -1283,8 +1363,8 @@ async function loadPairingAnalysis() {
         check_in,
         reservation_extras(extra_name)
       `)
-      .gte('check_in', sqlDate(dateRange.start))
       .lte('check_in', sqlDate(dateRange.end))
+      .gte('check_out', sqlDate(dateRange.start))
       .in('status', ['confirmed', 'checked-in', 'checked-out']);
 
     if (error) throw error;
@@ -1376,8 +1456,8 @@ async function loadPackageMetrics() {
     const { data: reservations, error } = await supabase
       .from('reservations')
       .select('package_id, total, packages(name)')
-      .gte('check_in', dateRange.start.toISOString().split('T')[0])
       .lte('check_in', dateRange.end.toISOString().split('T')[0])
+      .gte('check_out', dateRange.start.toISOString().split('T')[0])
       .in('status', ['confirmed', 'checked-in', 'checked-out']);
 
     if (error) throw error;
@@ -1426,8 +1506,8 @@ async function loadPackageCharts() {
     const { data: reservations, error } = await supabase
       .from('reservations')
       .select('package_id, total, packages(name)')
-      .gte('check_in', dateRange.start.toISOString().split('T')[0])
       .lte('check_in', dateRange.end.toISOString().split('T')[0])
+      .gte('check_out', dateRange.start.toISOString().split('T')[0])
       .in('status', ['confirmed', 'checked-in', 'checked-out']);
 
     if (error) throw error;
@@ -1509,10 +1589,10 @@ async function loadCouponMetrics() {
     const { data: reservations, error: resError } = await supabase
       .from('reservations')
       .select(
-        'coupon_code, coupon_discount, discount_amount, room_discount, extras_discount, total, extras_total, check_in'
+        'coupon_code, coupon_discount, discount_amount, room_discount, extras_discount, total, extras_total, check_in, check_out'
       )
-      .gte('check_in', sqlDate(dateRange.start))
       .lte('check_in', sqlDate(dateRange.end))
+      .gte('check_out', sqlDate(dateRange.start))
       .in('status', ['confirmed', 'checked-in', 'checked-out']);
 
     if (couponsError || resError) throw (couponsError || resError);
@@ -1845,13 +1925,21 @@ function handleChartGranularityClick(e) {
 function populateYearSelect() {
   const sel = document.getElementById('analytics-year');
   if (!sel) return;
+
   const now = new Date();
+  const nowYear = String(now.getFullYear());
+
   sel.innerHTML = '';
   for (let y = now.getFullYear(); y >= 2023; y--) {
     sel.innerHTML += `<option value="${y}">${y}</option>`;
   }
-  sel.value = String(now.getFullYear());
+
+  // Default: select current year
+  Array.from(sel.options).forEach((opt) => {
+    opt.selected = opt.value === nowYear;
+  });
 }
+
 
 // Read the current dateRange and set the two dropdowns to match.
 // If dateRange is exactly one calendar month  → select that month + year.
@@ -1862,48 +1950,60 @@ function syncDropdownsToDateRange() {
   if (!monthSel || !yearSel) return;
 
   const s = dateRange.start, e = dateRange.end;
-  const sameMonth   = s.getFullYear() === e.getFullYear() && s.getMonth() === e.getMonth();
+  const sameMonth = s.getFullYear() === e.getFullYear() && s.getMonth() === e.getMonth();
   const startsFirst = s.getDate() === 1;
 
+  // Clear selections first
+  Array.from(monthSel.options).forEach(o => (o.selected = false));
+  Array.from(yearSel.options).forEach(o => (o.selected = false));
+
+  // Month selection
   if (sameMonth && startsFirst) {
-    monthSel.value = String(s.getMonth());
+    const targetMonth = String(s.getMonth());
+    const opt = Array.from(monthSel.options).find(o => o.value === targetMonth);
+    if (opt) opt.selected = true;
   } else {
-    monthSel.value = 'all';
+    const allOpt = Array.from(monthSel.options).find(o => o.value === 'all');
+    if (allOpt) allOpt.selected = true;
   }
-  yearSel.value = String(s.getFullYear());
+
+  // Year selection (select start year)
+  const targetYear = String(s.getFullYear());
+  const yearOpt = Array.from(yearSel.options).find(o => o.value === targetYear);
+  if (yearOpt) yearOpt.selected = true;
 }
+
 
 // Either dropdown changed → compute new dateRange and reload
 function handleMonthYearChange() {
-  // Dismiss the custom picker row whenever the user touches a dropdown
-  document.getElementById('custom-date-range').style.display = 'none';
+  const monthSel = document.getElementById('analytics-month');
+  const yearSel  = document.getElementById('analytics-year');
 
-  const monthVal = document.getElementById('analytics-month').value; // 'all' | '0'..'11'
-  const year     = parseInt(document.getElementById('analytics-year').value, 10);
-  const now      = new Date();
+  const months = Array.from(monthSel.selectedOptions).map(o => o.value); // 'all' or '0'..'11'
+  const years  = Array.from(yearSel.selectedOptions).map(o => parseInt(o.value, 10)).filter(Boolean);
 
-  if (monthVal === 'all') {
-    // Full year: Jan 1 … Dec 31   (or today if it is the current year)
-    dateRange.start = new Date(year, 0, 1);
-    dateRange.end   = (year === now.getFullYear())
-      ? new Date(year, now.getMonth(), now.getDate())
-      : new Date(year, 11, 31);
+  if (!years.length) return;
+
+  const minYear = Math.min(...years);
+  const maxYear = Math.max(...years);
+
+  // If any "all" selected, treat as full-year selection over chosen year(s)
+  if (months.includes('all') || months.length === 0) {
+    dateRange.start = new Date(minYear, 0, 1);
+    dateRange.end   = new Date(maxYear, 11, 31);
   } else {
-    const month = parseInt(monthVal, 10);
-    dateRange.start = new Date(year, month, 1);
+    const monthNums = months.map(m => parseInt(m, 10)).filter(m => !Number.isNaN(m));
+    const minMonth = Math.min(...monthNums);
+    const maxMonth = Math.max(...monthNums);
 
-    // End = today if it's the current month/year, otherwise the last day of that month
-    if (year === now.getFullYear() && month === now.getMonth()) {
-      dateRange.end = new Date(year, month, now.getDate());
-    } else {
-      // day 0 of the *next* month = last day of this month
-      dateRange.end = new Date(year, month + 1, 0);
-    }
+    dateRange.start = new Date(minYear, minMonth, 1);
+    dateRange.end   = new Date(maxYear, maxMonth + 1, 0);
   }
 
-  autoSetGranularityFromRange();
-  refreshView();
+  autoSetGranularityFromRange?.();
+  refreshView?.();
 }
+
 
 // "Custom" button clicked → show the date pickers pre-filled with current range
 function openCustomRange() {
@@ -1921,12 +2021,188 @@ function applyCustomDateRange() {
     dateRange.start = new Date(start + 'T00:00:00');
     dateRange.end   = new Date(end   + 'T00:00:00');
     autoSetGranularityFromRange();
-    syncDropdownsToDateRange();   // update dropdowns to reflect the applied range
+    syncCheckboxDropdownsToDateRange();
     refreshView();
   } else {
     toast('Please select both start and end dates');
   }
 }
+
+function initMonthYearCheckboxDropdowns() {
+  const monthBtn = document.getElementById('month-dd-btn');
+  const monthMenu = document.getElementById('month-dd-menu');
+  const yearBtn = document.getElementById('year-dd-btn');
+  const yearMenu = document.getElementById('year-dd-menu');
+  const yearOptionsWrap = document.getElementById('year-dd-options');
+
+  if (!monthBtn || !monthMenu || !yearBtn || !yearMenu || !yearOptionsWrap) return;
+
+  // --- populate years ---
+  const now = new Date();
+  const years = [];
+  for (let y = now.getFullYear(); y >= 2023; y--) years.push(y);
+
+  yearOptionsWrap.innerHTML = years.map(y => `
+    <label style="display:flex;gap:8px;align-items:center;padding:6px 4px;cursor:pointer;">
+      <input type="checkbox" data-year="${y}" />
+      <span>${y}</span>
+    </label>
+  `).join('');
+
+  // default: current year checked
+  const currentYear = now.getFullYear();
+  yearOptionsWrap.querySelectorAll('input[data-year]').forEach(inp => {
+    inp.checked = parseInt(inp.getAttribute('data-year'), 10) === currentYear;
+  });
+
+  // --- dropdown open/close ---
+  const toggle = (menu) => { menu.style.display = (menu.style.display === 'none' || !menu.style.display) ? 'block' : 'none'; };
+  monthBtn.addEventListener('click', (e) => { e.preventDefault(); toggle(monthMenu); yearMenu.style.display = 'none'; });
+  yearBtn.addEventListener('click', (e) => { e.preventDefault(); toggle(yearMenu); monthMenu.style.display = 'none'; });
+
+  document.addEventListener('click', (e) => {
+    const t = e.target;
+    if (!document.getElementById('month-dd')?.contains(t)) monthMenu.style.display = 'none';
+    if (!document.getElementById('year-dd')?.contains(t)) yearMenu.style.display = 'none';
+  });
+
+  // --- month behaviour: "All Months" is exclusive ---
+  monthMenu.querySelectorAll('input[data-month]').forEach(inp => {
+    inp.addEventListener('change', () => {
+      const v = inp.getAttribute('data-month');
+
+      if (v === 'all' && inp.checked) {
+        // uncheck all specific months
+        monthMenu.querySelectorAll('input[data-month]').forEach(x => {
+          if (x.getAttribute('data-month') !== 'all') x.checked = false;
+        });
+      } else if (v !== 'all' && inp.checked) {
+        // uncheck "all"
+        const all = monthMenu.querySelector('input[data-month="all"]');
+        if (all) all.checked = false;
+      }
+    });
+  });
+
+  // clear/apply buttons
+  document.getElementById('month-dd-clear')?.addEventListener('click', () => {
+    monthMenu.querySelectorAll('input[data-month]').forEach(x => x.checked = false);
+    const all = monthMenu.querySelector('input[data-month="all"]');
+    if (all) all.checked = true;
+  });
+
+  document.getElementById('year-dd-clear')?.addEventListener('click', () => {
+    yearOptionsWrap.querySelectorAll('input[data-year]').forEach(x => x.checked = false);
+  });
+
+  document.getElementById('month-dd-apply')?.addEventListener('click', () => {
+    monthMenu.style.display = 'none';
+    applyMonthYearFromCheckboxes();
+  });
+
+  document.getElementById('year-dd-apply')?.addEventListener('click', () => {
+    yearMenu.style.display = 'none';
+    applyMonthYearFromCheckboxes();
+  });
+
+  // set initial button labels
+  updateMonthYearDropdownLabels();
+}
+
+function getSelectedMonthsFromUI() {
+  const menu = document.getElementById('month-dd-menu');
+  if (!menu) return ['all'];
+  const checked = Array.from(menu.querySelectorAll('input[data-month]:checked')).map(i => i.getAttribute('data-month'));
+  return checked.length ? checked : ['all'];
+}
+
+function getSelectedYearsFromUI() {
+  const wrap = document.getElementById('year-dd-options');
+  if (!wrap) return [new Date().getFullYear()];
+  const years = Array.from(wrap.querySelectorAll('input[data-year]:checked'))
+    .map(i => parseInt(i.getAttribute('data-year'), 10))
+    .filter(Boolean);
+  return years.length ? years : [new Date().getFullYear()];
+}
+
+function applyMonthYearFromCheckboxes() {
+  const months = getSelectedMonthsFromUI(); // 'all' or '0'..'11'
+  const years  = getSelectedYearsFromUI();  // numbers
+
+  const minYear = Math.min(...years);
+  const maxYear = Math.max(...years);
+
+  if (months.includes('all') || months.length === 0) {
+    dateRange.start = new Date(minYear, 0, 1);
+    dateRange.end   = new Date(maxYear, 11, 31);
+  } else {
+    const monthNums = months.map(m => parseInt(m, 10)).filter(m => !Number.isNaN(m));
+    const minMonth = Math.min(...monthNums);
+    const maxMonth = Math.max(...monthNums);
+
+    dateRange.start = new Date(minYear, minMonth, 1);
+    dateRange.end   = new Date(maxYear, maxMonth + 1, 0);
+  }
+
+  updateMonthYearDropdownLabels();
+  autoSetGranularityFromRange?.();
+  refreshView?.();
+}
+
+function updateMonthYearDropdownLabels() {
+  const monthBtn = document.getElementById('month-dd-btn');
+  const yearBtn  = document.getElementById('year-dd-btn');
+  if (!monthBtn || !yearBtn) return;
+
+  const months = getSelectedMonthsFromUI();
+  const years  = getSelectedYearsFromUI();
+
+  // Month label
+  if (months.includes('all')) {
+    monthBtn.textContent = 'All Months';
+  } else if (months.length === 1) {
+    const idx = parseInt(months[0], 10);
+    const names = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    monthBtn.textContent = names[idx] || 'Months';
+  } else {
+    monthBtn.textContent = `${months.length} months`;
+  }
+
+  // Year label
+  if (years.length === 1) yearBtn.textContent = String(years[0]);
+  else yearBtn.textContent = `${years.length} years`;
+}
+
+function syncCheckboxDropdownsToDateRange() {
+  const monthMenu = document.getElementById('month-dd-menu');
+  const yearWrap  = document.getElementById('year-dd-options');
+  if (!monthMenu || !yearWrap) return;
+
+  // Clear
+  monthMenu.querySelectorAll('input[data-month]').forEach(x => x.checked = false);
+  yearWrap.querySelectorAll('input[data-year]').forEach(x => x.checked = false);
+
+  const s = dateRange.start;
+  const e = dateRange.end;
+
+  const sameMonth = s.getFullYear() === e.getFullYear() && s.getMonth() === e.getMonth();
+  const isCalendarMonth = sameMonth && s.getDate() === 1 && e.getDate() === new Date(e.getFullYear(), e.getMonth() + 1, 0).getDate();
+
+  if (isCalendarMonth) {
+    const m = monthMenu.querySelector(`input[data-month="${s.getMonth()}"]`);
+    if (m) m.checked = true;
+  } else {
+    const all = monthMenu.querySelector('input[data-month="all"]');
+    if (all) all.checked = true;
+  }
+
+  // select start year (simple + consistent with previous behavior)
+  const y = yearWrap.querySelector(`input[data-year="${s.getFullYear()}"]`);
+  if (y) y.checked = true;
+
+  updateMonthYearDropdownLabels();
+}
+
 
 // Shared helper – dispatches to whichever view is currently active
 function refreshView() {
@@ -2003,8 +2279,8 @@ async function handleDrillClick(type) {
       const { data, error } = await supabase
         .from('reservation_extras')
         .select('reservation_id, extra_name, subtotal, quantity, reservations!inner(confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total)')
-        .gte('reservations.check_in', sqlDate(dateRange.start))
-        .lte('reservations.check_in', sqlDate(dateRange.end));
+        .lte('reservations.check_in', dateRange.end.toISOString().split('T')[0])
+      .gte('reservations.check_out', dateRange.start.toISOString().split('T')[0]);
       if (error) throw error;
 
       // Group by reservation
@@ -2021,8 +2297,8 @@ async function handleDrillClick(type) {
       const { data, error } = await supabase
         .from('reservations')
         .select('confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total, packages(name)')
-        .gte('check_in', sqlDate(dateRange.start))
         .lte('check_in', sqlDate(dateRange.end))
+      .gte('check_out', sqlDate(dateRange.start))
         .in('status', ['confirmed', 'checked-in', 'checked-out'])
         .not('package_id', 'is', null);
       if (error) throw error;
@@ -2031,8 +2307,8 @@ async function handleDrillClick(type) {
       const { data, error } = await supabase
         .from('reservations')
         .select('confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total, nights, status, coupon_code, coupon_discount, discount_amount, room_discount, extras_discount')
-        .gte('check_in', sqlDate(dateRange.start))
         .lte('check_in', sqlDate(dateRange.end))
+      .gte('check_out', sqlDate(dateRange.start))
         .in('status', ['confirmed', 'checked-in', 'checked-out'])
         .not('coupon_code', 'is', null)
         .order('check_in', { ascending: false });
@@ -2043,8 +2319,8 @@ async function handleDrillClick(type) {
       const { data, error } = await supabase
         .from('reservations')
         .select('confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total, nights, status')
-        .gte('check_in', sqlDate(dateRange.start))
         .lte('check_in', sqlDate(dateRange.end))
+      .gte('check_out', sqlDate(dateRange.start))
         .in('status', ['confirmed', 'checked-in', 'checked-out'])
         .order('check_in', { ascending: false });
       if (error) throw error;
@@ -2086,8 +2362,8 @@ async function handleBarDrillClick(barKey) {
       const { data, error } = await supabase
         .from('reservations')
         .select('confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total, nights, status, coupon_code, coupon_discount, discount_amount, room_discount, extras_discount')
-        .gte('check_in', sqlDate(dateRange.start))
         .lte('check_in', sqlDate(dateRange.end))
+      .gte('check_out', sqlDate(dateRange.start))
         .in('status', ['confirmed', 'checked-in', 'checked-out'])
         .eq('coupon_code', value)
         .order('check_in', { ascending: false });
@@ -2099,8 +2375,8 @@ async function handleBarDrillClick(barKey) {
       const { data, error } = await supabase
         .from('reservation_extras')
         .select('reservation_id, extra_name, subtotal, quantity, reservations!inner(confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total)')
-        .gte('reservations.check_in', sqlDate(dateRange.start))
-        .lte('reservations.check_in', sqlDate(dateRange.end))
+        .lte('reservations.check_in', dateRange.end.toISOString().split('T')[0])
+      .gte('reservations.check_out', dateRange.start.toISOString().split('T')[0])
         .eq('extra_name', value);
       if (error) throw error;
       // Group by reservation (same pattern as extras drill)
@@ -2119,8 +2395,8 @@ async function handleBarDrillClick(barKey) {
         const { data, error } = await supabase
           .from('reservations')
           .select('confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total, nights, status')
-          .gte('check_in', sqlDate(dateRange.start))
           .lte('check_in', sqlDate(dateRange.end))
+      .gte('check_out', sqlDate(dateRange.start))
           .in('status', ['confirmed', 'checked-in', 'checked-out'])
           .is('package_id', null)
           .order('check_in', { ascending: false });
@@ -2131,8 +2407,8 @@ async function handleBarDrillClick(barKey) {
         const { data, error } = await supabase
           .from('reservations')
           .select('confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total, packages(name)')
-          .gte('check_in', sqlDate(dateRange.start))
           .lte('check_in', sqlDate(dateRange.end))
+      .gte('check_out', sqlDate(dateRange.start))
           .in('status', ['confirmed', 'checked-in', 'checked-out'])
           .not('package_id', 'is', null)
           .eq('packages.name', value);
@@ -2145,8 +2421,8 @@ async function handleBarDrillClick(barKey) {
       const { data, error } = await supabase
         .from('reservations')
         .select('confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total, nights, status')
-        .gte('check_in', sqlDate(dateRange.start))
         .lte('check_in', sqlDate(dateRange.end))
+      .gte('check_out', sqlDate(dateRange.start))
         .in('status', ['confirmed', 'checked-in', 'checked-out'])
         .eq('room_type_code', value)
         .order('check_in', { ascending: false });
@@ -2160,8 +2436,8 @@ async function handleBarDrillClick(barKey) {
       const { data: allExtras, error: extErr } = await supabase
         .from('reservation_extras')
         .select('reservation_id, extra_name, subtotal, quantity, reservations!inner(confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total)')
-        .gte('reservations.check_in', sqlDate(dateRange.start))
-        .lte('reservations.check_in', sqlDate(dateRange.end));
+        .lte('reservations.check_in', dateRange.end.toISOString().split('T')[0])
+      .gte('reservations.check_out', dateRange.start.toISOString().split('T')[0]);
       if (extErr) throw extErr;
       const grouped = {};
       (allExtras || []).forEach(row => {
@@ -2178,8 +2454,8 @@ async function handleBarDrillClick(barKey) {
       const { data: allRes, error: resErr } = await supabase
         .from('reservations')
         .select('confirmation_code, guest_first_name, guest_last_name, check_in, check_out, room_type_code, total, nights, status, reservation_extras(extra_name, subtotal, quantity)')
-        .gte('check_in', sqlDate(dateRange.start))
         .lte('check_in', sqlDate(dateRange.end))
+      .gte('check_out', sqlDate(dateRange.start))
         .in('status', ['confirmed', 'checked-in', 'checked-out']);
       if (resErr) throw resErr;
       const target = parseInt(value, 10);
