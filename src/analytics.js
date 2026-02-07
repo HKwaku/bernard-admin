@@ -143,11 +143,12 @@ function daysInRange(start, end) {
 }
 
 // Auto-pick D / W / M based on current dateRange
+// < 1 month → daily, 1–3 months → weekly, > 3 months → monthly
 function autoSetGranularityFromRange() {
   const days = daysInRange(dateRange.start, dateRange.end);
 
   let mode = 'day';
-  if (days > 31 && days <= 90) {
+  if (days >= 30 && days <= 90) {
     mode = 'week';
   } else if (days > 90) {
     mode = 'month';
@@ -342,7 +343,7 @@ view.innerHTML = `
 
         <div
           id="occupancy-trend-chart"
-          style="height: 280px; display: flex; align-items: center; justify-content: center; color: #64748b;"
+          style="display: flex; align-items: center; justify-content: center; color: #64748b;"
         >
           Loading chart...
         </div>
@@ -384,7 +385,7 @@ view.innerHTML = `
           </div>
 
         </div>
-        <div id="revenue-chart" style="height: 280px; display: flex; align-items: center; justify-content: center; color: #64748b;">
+        <div id="revenue-chart" style="display: flex; align-items: center; justify-content: center; color: #64748b;">
           Loading chart...
         </div>
       </div>
@@ -604,7 +605,7 @@ function renderStandardViewContent() {
 
         <div
           id="occupancy-trend-chart"
-          style="height: 280px; display: flex; align-items: center; justify-content: center; color: #64748b;"
+          style="display: flex; align-items: center; justify-content: center; color: #64748b;"
         >
           Loading chart...
         </div>
@@ -646,7 +647,7 @@ function renderStandardViewContent() {
           </div>
 
         </div>
-        <div id="revenue-chart" style="height: 280px; display: flex; align-items: center; justify-content: center; color: #64748b;">
+        <div id="revenue-chart" style="display: flex; align-items: center; justify-content: center; color: #64748b;">
           Loading chart...
         </div>
       </div>
@@ -977,22 +978,23 @@ function renderLineChart(containerId, points, options = {}) {
 
   const values = points.map((p) => p.value);
   const minValue = options.min != null ? options.min : Math.min(...values, 0);
-  const maxValue =
-    options.max != null ? options.max : Math.max(...values, minValue || 0);
+  const rawMax = options.max != null ? options.max : Math.max(...values, minValue || 0);
+  const maxValue = rawMax === minValue ? minValue + 1 : rawMax;
 
-  const width = 100;
-  const height = 40;
-  const padX = 6;
-  const padY = 6;
-  const innerW = width - padX * 2;
-  const innerH = height - padY * 2;
+  const width = 500;
+  const height = 200;
+  const padL = 45;  // left padding for Y-axis labels
+  const padR = 12;
+  const padT = 16;
+  const padB = 8;
+  const innerW = width - padL - padR;
+  const innerH = height - padT - padB;
 
   const stepX = points.length === 1 ? 0 : innerW / (points.length - 1);
 
   const normalizeY = (v) => {
-    if (maxValue === minValue) return padY + innerH / 2;
     const ratio = (v - minValue) / (maxValue - minValue);
-    return padY + innerH - ratio * innerH;
+    return padT + innerH - ratio * innerH;
   };
 
   const decimals = options.decimals ?? 0;
@@ -1008,33 +1010,77 @@ function renderLineChart(containerId, points, options = {}) {
       return title ? `${title}: ${main} (${label})` : `${label}: ${main}`;
     });
 
-  const pathD = points
-    .map((p, i) => {
-      const x = padX + stepX * i;
-      const y = normalizeY(p.value);
-      return `${i === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)}`;
-    })
-    .join(' ');
+  // Build smooth bezier curve path
+  const pts = points.map((p, i) => ({
+    x: padL + stepX * i,
+    y: normalizeY(p.value),
+  }));
 
+  let pathD = '';
+  if (pts.length === 1) {
+    pathD = `M${pts[0].x},${pts[0].y}`;
+  } else {
+    pathD = `M${pts[0].x.toFixed(2)},${pts[0].y.toFixed(2)}`;
+    for (let i = 1; i < pts.length; i++) {
+      const prev = pts[i - 1];
+      const curr = pts[i];
+      const tension = 0.3;
+      const cp1x = prev.x + (curr.x - prev.x) * tension;
+      const cp2x = curr.x - (curr.x - prev.x) * tension;
+      pathD += ` C${cp1x.toFixed(2)},${prev.y.toFixed(2)} ${cp2x.toFixed(2)},${curr.y.toFixed(2)} ${curr.x.toFixed(2)},${curr.y.toFixed(2)}`;
+    }
+  }
+
+  // Area fill path (close to bottom)
+  const areaD = pathD +
+    ` L${pts[pts.length - 1].x.toFixed(2)},${(padT + innerH).toFixed(2)}` +
+    ` L${pts[0].x.toFixed(2)},${(padT + innerH).toFixed(2)} Z`;
+
+  // Circle data points with data attributes
+  const pointRadius = points.length > 40 ? 2 : points.length > 20 ? 2.5 : 3;
   const circles = points
     .map((p, i) => {
-      const x = padX + stepX * i;
-      const y = normalizeY(p.value);
+      const x = pts[i].x;
+      const y = pts[i].y;
       return `<circle class="chart-point"
                 cx="${x.toFixed(2)}"
                 cy="${y.toFixed(2)}"
-                r="0.5"
+                r="${pointRadius}"
+                data-label="${p.label}"
+                data-value="${p.value}"
                 stroke="#3B82F6"
-                fill="#ffffff">
+                fill="#ffffff"
+                stroke-width="1.5">
               </circle>`;
     })
     .join('');
 
+  // Horizontal grid lines + Y-axis labels (4 lines)
+  const gridLines = 4;
+  let gridSvg = '';
+  for (let g = 0; g <= gridLines; g++) {
+    const ratio = g / gridLines;
+    const yPos = padT + innerH - ratio * innerH;
+    const val = minValue + ratio * (maxValue - minValue);
+    // Format Y-axis value
+    let yLabel;
+    if (maxValue >= 10000) yLabel = (val / 1000).toFixed(0) + 'k';
+    else if (maxValue >= 1000) yLabel = (val / 1000).toFixed(1) + 'k';
+    else if (maxValue <= 1) yLabel = (val * 100).toFixed(0) + '%';
+    else yLabel = val.toFixed(0);
+
+    gridSvg += `<line x1="${padL}" y1="${yPos.toFixed(1)}" x2="${width - padR}" y2="${yPos.toFixed(1)}" stroke="#e2e8f0" stroke-width="0.5" stroke-dasharray="4 3"/>`;
+    gridSvg += `<text x="${padL - 6}" y="${(yPos + 1).toFixed(1)}" text-anchor="end" fill="#94a3b8" font-size="10" font-family="inherit">${yLabel}</text>`;
+  }
+
+  // Auto-thin labels: show every Nth label
+  const maxLabels = window.innerWidth <= 768 ? 6 : 12;
+  const labelStep = points.length > maxLabels ? Math.ceil(points.length / maxLabels) : 1;
   const labels = points
-    .map(
-      (p) =>
-        `<div class="chart-x-label">${p.label}</div>`
-    )
+    .map((p, i) => {
+      const show = (i % labelStep === 0) || (i === points.length - 1);
+      return `<div class="chart-x-label" style="${show ? '' : 'visibility:hidden'}">${p.label}</div>`;
+    })
     .join('');
 
   const gradientId = `${containerId}-gradient`;
@@ -1045,21 +1091,22 @@ function renderLineChart(containerId, points, options = {}) {
       <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" class="chart-line-svg">
         <defs>
           <linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#3B82F6" stop-opacity="0.25"></stop>
-            <stop offset="100%" stop-color="#3B82F6" stop-opacity="0"></stop>
+            <stop offset="0%" stop-color="#3B82F6" stop-opacity="0.15"/>
+            <stop offset="100%" stop-color="#3B82F6" stop-opacity="0.01"/>
           </linearGradient>
         </defs>
+        ${gridSvg}
+        <path d="${areaD}" fill="url(#${gradientId})" />
         <path d="${pathD}"
             fill="none"
-            stroke="#3B82F6"      <!-- soft blue -->
-            stroke-width="0.5"
+            stroke="#3B82F6"
+            stroke-width="2"
             stroke-linejoin="round"
             stroke-linecap="round"
-        ></path>
-    
+        />
         ${circles}
       </svg>
-      <div class="chart-line-labels">
+      <div class="chart-line-labels" style="padding-left:${(padL/width*100).toFixed(1)}%;padding-right:${(padR/width*100).toFixed(1)}%;">
         ${labels}
       </div>
     </div>
@@ -1089,10 +1136,16 @@ function renderLineChart(containerId, points, options = {}) {
 
       tooltip.style.left = `${relativeX}px`;
       tooltip.style.opacity = '1';
+
+      // Highlight point
+      e.target.setAttribute('r', String(pointRadius + 2));
+      e.target.style.filter = 'drop-shadow(0 0 4px rgba(59,130,246,0.5))';
     });
 
-    pt.addEventListener('mouseleave', () => {
+    pt.addEventListener('mouseleave', (e) => {
       tooltip.style.opacity = '0';
+      e.target.setAttribute('r', String(pointRadius));
+      e.target.style.filter = '';
     });
   });
 }
@@ -1195,39 +1248,144 @@ async function loadRevenueChart() {
 }
 
 
+// Client-side occupancy trend calculation for any granularity
+async function calculateOccupancyTrendLocal(start, end, granularity) {
+  const NUM_CABINS = 3;
+  const msPerDay = 1000 * 60 * 60 * 24;
+
+  // Fetch reservations overlapping the period
+  const { data: reservations } = await supabase
+    .from('reservations')
+    .select('check_in, check_out')
+    .lte('check_in', sqlDate(end))
+    .gte('check_out', sqlDate(start))
+    .in('status', ['confirmed', 'completed', 'checked-in', 'checked-out']);
+
+  // Fetch blocked dates in the period
+  const { data: blockedDates } = await supabase
+    .from('blocked_dates')
+    .select('blocked_date')
+    .gte('blocked_date', sqlDate(start))
+    .lte('blocked_date', sqlDate(end));
+
+  const blockedSet = new Set((blockedDates || []).map(b => b.blocked_date));
+
+  // Build daily occupancy map
+  const dailyOccupied = {};
+  const periodStart = new Date(start);
+  periodStart.setHours(0, 0, 0, 0);
+  const periodEnd = new Date(end);
+  periodEnd.setHours(0, 0, 0, 0);
+
+  // Count occupied cabins per day
+  (reservations || []).forEach(r => {
+    if (!r.check_in || !r.check_out) return;
+    const ci = new Date(r.check_in + 'T00:00:00');
+    const co = new Date(r.check_out + 'T00:00:00');
+    const dayStart = new Date(Math.max(ci.getTime(), periodStart.getTime()));
+    const dayEnd = new Date(Math.min(co.getTime(), periodEnd.getTime()));
+    let d = new Date(dayStart);
+    while (d <= dayEnd) {
+      const key = d.toISOString().split('T')[0];
+      dailyOccupied[key] = (dailyOccupied[key] || 0) + 1;
+      d = new Date(d.getTime() + msPerDay);
+    }
+  });
+
+  // Build points based on granularity
+  if (granularity === 'day') {
+    const points = [];
+    let d = new Date(periodStart);
+    while (d <= periodEnd) {
+      const key = d.toISOString().split('T')[0];
+      const isBlocked = blockedSet.has(key);
+      const available = isBlocked ? 0 : NUM_CABINS;
+      const occupied = Math.min(dailyOccupied[key] || 0, available || NUM_CABINS);
+      const rate = available > 0 ? (occupied / available) * 100 : 0;
+      points.push({ date: new Date(d), value: rate });
+      d = new Date(d.getTime() + msPerDay);
+    }
+    return points;
+  }
+
+  if (granularity === 'week') {
+    const weekBuckets = {};
+    let d = new Date(periodStart);
+    while (d <= periodEnd) {
+      const key = d.toISOString().split('T')[0];
+      // Get Monday of this week
+      const weekStart = new Date(d);
+      const dow = weekStart.getDay();
+      const diff = (dow + 6) % 7;
+      weekStart.setDate(weekStart.getDate() - diff);
+      const weekKey = weekStart.toISOString().split('T')[0];
+
+      if (!weekBuckets[weekKey]) {
+        weekBuckets[weekKey] = { date: new Date(weekStart), totalAvailable: 0, totalOccupied: 0 };
+      }
+      const isBlocked = blockedSet.has(key);
+      const available = isBlocked ? 0 : NUM_CABINS;
+      weekBuckets[weekKey].totalAvailable += available;
+      weekBuckets[weekKey].totalOccupied += Math.min(dailyOccupied[key] || 0, available || NUM_CABINS);
+
+      d = new Date(d.getTime() + msPerDay);
+    }
+    return Object.values(weekBuckets)
+      .sort((a, b) => a.date - b.date)
+      .map(b => ({
+        date: b.date,
+        value: b.totalAvailable > 0 ? (b.totalOccupied / b.totalAvailable) * 100 : 0
+      }));
+  }
+
+  // month granularity
+  const monthBuckets = {};
+  let d = new Date(periodStart);
+  while (d <= periodEnd) {
+    const key = d.toISOString().split('T')[0];
+    const monthKey = `${d.getFullYear()}-${d.getMonth()}`;
+    if (!monthBuckets[monthKey]) {
+      monthBuckets[monthKey] = {
+        date: new Date(d.getFullYear(), d.getMonth(), 1),
+        totalAvailable: 0,
+        totalOccupied: 0
+      };
+    }
+    const isBlocked = blockedSet.has(key);
+    const available = isBlocked ? 0 : NUM_CABINS;
+    monthBuckets[monthKey].totalAvailable += available;
+    monthBuckets[monthKey].totalOccupied += Math.min(dailyOccupied[key] || 0, available || NUM_CABINS);
+
+    d = new Date(d.getTime() + msPerDay);
+  }
+  return Object.values(monthBuckets)
+    .sort((a, b) => a.date - b.date)
+    .map(b => ({
+      date: b.date,
+      value: b.totalAvailable > 0 ? (b.totalOccupied / b.totalAvailable) * 100 : 0
+    }));
+}
+
 async function loadOccupancyTrendChart() {
   try {
     const mode = chartGranularity.occupancy || 'day';
-    
-    // Call database function for occupancy trend
-    const { data, error } = await supabase
-      .rpc('calculate_occupancy_trend', {
-        p_start_date: sqlDate(dateRange.start),
-        p_end_date: sqlDate(dateRange.end),
-        p_granularity: mode
-      });
-
-    if (error) {
-      console.error('Database function error:', error);
-      throw new Error(`Failed to load occupancy trend: ${error.message}`);
-    }
-
-    // Transform database result into chart points
     const isMobile = window.innerWidth <= 768;
-    const points = (data || []).map(item => {
-      const d = new Date(item.date + 'T00:00:00');
+
+    // Calculate occupancy trend client-side for all granularities
+    const trendData = await calculateOccupancyTrendLocal(dateRange.start, dateRange.end, mode);
+
+    const points = trendData.map(item => {
       let label;
       if (mode === 'month') {
-        label = d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+        label = item.date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
       } else if (mode === 'week') {
-        label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        label = item.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
       } else {
-        // day mode
         label = isMobile
-          ? d.toLocaleDateString('en-US', { day: 'numeric' })
-          : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          ? item.date.toLocaleDateString('en-US', { day: 'numeric' })
+          : item.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
       }
-      return { label, value: item.occupancy_rate };
+      return { label, value: item.value };
     });
 
     renderLineChart('occupancy-trend-chart', points, {

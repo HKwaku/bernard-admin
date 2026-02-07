@@ -56,8 +56,8 @@ async function sendMessage() {
 
   showTyping();
 
-  // Status bubble with simpler message
-  const statusBubble = appendStatusBubble("🧠 Thinking...");
+  // Status bubble with routing indicator
+  const statusBubble = appendStatusBubble("🔀 Routing to specialist...");
 
   try {
     // Push user message into Bernard history
@@ -80,15 +80,20 @@ async function sendMessage() {
     }
 
     const reply = data?.reply;
+    const agent = data?.agent;
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.log(`Bernard response time: ${elapsed}s`);
+    console.log(`Bernard response time: ${elapsed}s (via ${agent || 'router'})`);
 
     hideTyping();
     $("#status-indicator")?.remove();
 
     const finalReply = reply || "Done.";
-    addMessage(wrapChatTables(finalReply));
 
+    // Show agent badge before the reply if a specialist handled it
+    const agentBadge = agent
+      ? `<div style="display:inline-block;font-size:0.7rem;padding:2px 8px;margin-bottom:6px;border-radius:10px;background:#f0f4ff;color:#3b5998;font-weight:600;letter-spacing:0.3px;">🤖 ${agent}</div><br/>`
+      : '';
+    addMessage(agentBadge + wrapChatTables(finalReply));
 
     // Push assistant reply into Bernard history
     bernardHistory.push({ role: "assistant", content: finalReply });

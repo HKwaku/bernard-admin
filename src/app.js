@@ -372,41 +372,6 @@ export function initApp() {
       });
     });
 
-        // Handle menu actions
-    mDrawer.querySelectorAll('button[data-view]').forEach((b) => {
-      b.addEventListener('click', async () => {
-        const view = b.getAttribute('data-view');
-        close();
-
-        if (view === 'newbooking') {
-          document.getElementById('new-booking-btn')?.click();
-          return;
-        }
-
-        // Update page title
-        const titles = {
-          chat: 'Chat',
-          reservations: 'Reservations',
-          rooms: 'Room Types',
-          extras: 'Extras',
-          coupons: 'Coupons',
-          packages: 'Packages',
-          analytics: 'Analytics',
-        };
-        $('#section-title').textContent = titles[view] || 'Dashboard';
-
-        // Hide stats cards when switching to other views
-        const statsCard = document.getElementById('quick-stats-card');
-        const recentCard = document.getElementById('recent-bookings-card');
-        if (statsCard) statsCard.style.display = 'none';
-        if (recentCard) recentCard.style.display = 'none';
-
-        // Delegate to the existing tab button (Reservations / Rooms / Extras / Coupons / Packages)
-        const tab = document.querySelector(`#tabs .tab[data-view="${view}"]`);
-        tab?.dispatchEvent(new Event('click', { bubbles: true }));
-      });
-    });
-
     // ---- Mobile booking buttons stay in the menu, but open the same modals ----
     const mobileCustomBookingBtn = $('#mobile-custom-booking-btn');
     if (mobileCustomBookingBtn && !mobileCustomBookingBtn.dataset._wired) {
@@ -522,4 +487,4 @@ export function closeSharedModal(id) {
   if (el) el.remove();
 }
 
-// ========== END OF FILE =========="
+// ========== END OF FILE ==========

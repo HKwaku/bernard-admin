@@ -68,16 +68,20 @@ export default async function handler(req, res) {
 
     console.log('✅ Valid request, calling Bernard agent...');
 
-    // Import and run Bernard
+    // Import and run Bernard (multi-agent orchestrator)
     const { runBernardAgent } = await import('../src/bernardAgent.js');
-    const reply = await runBernardAgent(
+    const result = await runBernardAgent(
       messages, 
       threadId || `thread-${Date.now()}`
     );
 
-    console.log('✅ Bernard replied successfully');
+    // result is { reply, agent } from the orchestrator
+    const reply = typeof result === 'string' ? result : result.reply;
+    const agent = typeof result === 'string' ? null : result.agent;
 
-    return res.status(200).json({ reply });
+    console.log(`✅ Bernard replied via ${agent || 'router'}`);
+
+    return res.status(200).json({ reply, agent });
 
   } catch (error) {
     console.error('💥 Bernard agent error:', error);

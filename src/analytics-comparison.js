@@ -471,33 +471,129 @@ async function getWeekdayWeekendComparison(start, end) {
   return { weekdayOccupancy, weekendOccupancy };
 }
 
+// Client-side occupancy trend calculation (works for all granularities)
+async function calculateOccupancyTrendForPeriod(start, end, granularity) {
+  const NUM_CABINS = 3;
+  const msPerDay = 1000 * 60 * 60 * 24;
+
+  const periodStart = new Date(start);
+  periodStart.setHours(0, 0, 0, 0);
+  const periodEnd = new Date(end);
+  periodEnd.setHours(0, 0, 0, 0);
+
+  // Fetch reservations overlapping the period
+  const { data: reservations } = await supabase
+    .from('reservations')
+    .select('check_in, check_out')
+    .lte('check_in', sqlDate(periodEnd))
+    .gte('check_out', sqlDate(periodStart))
+    .in('status', ['confirmed', 'completed', 'checked-in', 'checked-out']);
+
+  // Fetch blocked dates
+  const { data: blockedDates } = await supabase
+    .from('blocked_dates')
+    .select('blocked_date')
+    .gte('blocked_date', sqlDate(periodStart))
+    .lte('blocked_date', sqlDate(periodEnd));
+
+  const blockedSet = new Set((blockedDates || []).map(b => b.blocked_date));
+
+  // Build daily occupied count
+  const dailyOccupied = {};
+  (reservations || []).forEach(r => {
+    if (!r.check_in || !r.check_out) return;
+    const ci = new Date(r.check_in + 'T00:00:00');
+    const co = new Date(r.check_out + 'T00:00:00');
+    const dayStart = new Date(Math.max(ci.getTime(), periodStart.getTime()));
+    const dayEnd = new Date(Math.min(co.getTime(), periodEnd.getTime()));
+    let d = new Date(dayStart);
+    while (d <= dayEnd) {
+      const key = d.toISOString().split('T')[0];
+      dailyOccupied[key] = (dailyOccupied[key] || 0) + 1;
+      d = new Date(d.getTime() + msPerDay);
+    }
+  });
+
+  if (granularity === 'day') {
+    const points = [];
+    let d = new Date(periodStart);
+    while (d <= periodEnd) {
+      const key = d.toISOString().split('T')[0];
+      const available = blockedSet.has(key) ? 0 : NUM_CABINS;
+      const occupied = Math.min(dailyOccupied[key] || 0, available || NUM_CABINS);
+      const rate = available > 0 ? (occupied / available) * 100 : 0;
+      points.push({ date: new Date(d), value: rate });
+      d = new Date(d.getTime() + msPerDay);
+    }
+    return points;
+  }
+
+  if (granularity === 'week') {
+    const weekBuckets = {};
+    let d = new Date(periodStart);
+    while (d <= periodEnd) {
+      const key = d.toISOString().split('T')[0];
+      const weekStart = new Date(d);
+      const dow = weekStart.getDay();
+      weekStart.setDate(weekStart.getDate() - ((dow + 6) % 7));
+      const weekKey = weekStart.toISOString().split('T')[0];
+      if (!weekBuckets[weekKey]) {
+        weekBuckets[weekKey] = { date: new Date(weekStart), totalAvailable: 0, totalOccupied: 0 };
+      }
+      const available = blockedSet.has(key) ? 0 : NUM_CABINS;
+      weekBuckets[weekKey].totalAvailable += available;
+      weekBuckets[weekKey].totalOccupied += Math.min(dailyOccupied[key] || 0, available || NUM_CABINS);
+      d = new Date(d.getTime() + msPerDay);
+    }
+    return Object.values(weekBuckets)
+      .sort((a, b) => a.date - b.date)
+      .map(b => ({ date: b.date, value: b.totalAvailable > 0 ? (b.totalOccupied / b.totalAvailable) * 100 : 0 }));
+  }
+
+  // month granularity
+  const monthBuckets = {};
+  let d = new Date(periodStart);
+  while (d <= periodEnd) {
+    const key = d.toISOString().split('T')[0];
+    const monthKey = `${d.getFullYear()}-${d.getMonth()}`;
+    if (!monthBuckets[monthKey]) {
+      monthBuckets[monthKey] = { date: new Date(d.getFullYear(), d.getMonth(), 1), totalAvailable: 0, totalOccupied: 0 };
+    }
+    const available = blockedSet.has(key) ? 0 : NUM_CABINS;
+    monthBuckets[monthKey].totalAvailable += available;
+    monthBuckets[monthKey].totalOccupied += Math.min(dailyOccupied[key] || 0, available || NUM_CABINS);
+    d = new Date(d.getTime() + msPerDay);
+  }
+  return Object.values(monthBuckets)
+    .sort((a, b) => a.date - b.date)
+    .map(b => ({ date: b.date, value: b.totalAvailable > 0 ? (b.totalOccupied / b.totalAvailable) * 100 : 0 }));
+}
+
 // Generate time series for occupancy comparison with granularity support
 async function generateOccupancyTimeSeries(periods, granularity = 'day') {
   const datasets = [];
 
   for (const [label, period] of Object.entries(periods)) {
-    // Use database function for occupancy trend
-    const { data, error } = await supabase
-      .rpc('calculate_occupancy_trend', {
-        p_start_date: sqlDate(period.start),
-        p_end_date: sqlDate(period.end),
-        p_granularity: granularity
+    try {
+      const trendData = await calculateOccupancyTrendForPeriod(period.start, period.end, granularity);
+
+      const points = trendData.map(item => {
+        let lbl;
+        if (granularity === 'month') {
+          lbl = item.date.toLocaleDateString('en-US', { month: 'short' });
+        } else if (granularity === 'week') {
+          lbl = item.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        } else {
+          lbl = item.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }
+        return { label: lbl, value: item.value };
       });
 
-    if (error) {
-      console.error('Error generating occupancy time series:', error);
-      throw new Error(`Database function error: ${error.message}. Have you deployed occupancy_functions.sql?`);
+      datasets.push({ label, points });
+    } catch (err) {
+      console.error(`Occupancy trend error for ${label}:`, err);
+      datasets.push({ label, points: [] });
     }
-
-    // Transform database result into chart points
-    const points = (data || []).map(item => ({
-      label: granularity === 'month'
-        ? new Date(item.date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
-        : new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      value: item.occupancy_rate
-    }));
-    
-    datasets.push({ label, points });
   }
 
   return datasets;
@@ -788,7 +884,25 @@ function renderComparisonLineChartContent(containerId, datasets, mode, options =
     return;
   }
 
-  const displayDatasets = [currentDataset, comparisonDataset];
+  // Normalize comparison dataset to match current period length
+  // (months have different day counts, so trim/pad to align "day 1 vs day 1")
+  const numCurrentPoints = currentDataset.points.length;
+  const normalizedComparison = {
+    ...comparisonDataset,
+    points: comparisonDataset.points.slice(0, numCurrentPoints)
+  };
+  // If comparison has fewer points, pad with last known value
+  while (normalizedComparison.points.length < numCurrentPoints) {
+    const lastVal = normalizedComparison.points.length > 0
+      ? normalizedComparison.points[normalizedComparison.points.length - 1].value
+      : 0;
+    normalizedComparison.points.push({
+      label: currentDataset.points[normalizedComparison.points.length]?.label || '',
+      value: lastVal
+    });
+  }
+
+  const displayDatasets = [currentDataset, normalizedComparison];
 
   // Find min/max across selected datasets
   let allValues = [];
@@ -799,54 +913,86 @@ function renderComparisonLineChartContent(containerId, datasets, mode, options =
   const minValue = options.min != null ? options.min : Math.min(...allValues, 0);
   const maxValue = options.max != null ? options.max : Math.max(...allValues, minValue || 0);
 
-  const width = 100;
-  const height = 40;
-  const padX = 6;
-  const padY = 6;
-  const innerW = width - padX * 2;
-  const innerH = height - padY * 2;
+  const adjMax = maxValue === minValue ? minValue + 1 : maxValue;
+
+  const width = 500;
+  const height = 200;
+  const padL = 45;
+  const padR = 12;
+  const padT = 16;
+  const padB = 8;
+  const innerW = width - padL - padR;
+  const innerH = height - padT - padB;
 
   const normalizeY = (val) => {
-    if (maxValue === minValue) return padY + innerH / 2;
-    return padY + innerH - ((val - minValue) / (maxValue - minValue)) * innerH;
+    const ratio = (val - minValue) / (adjMax - minValue);
+    return padT + innerH - ratio * innerH;
   };
 
   const colors = ['#3B82F6', '#10b981']; // Blue for current, Green for comparison
-  const labels = ['Current Period', comparisonLabel];
+  const colorLabels = ['Current Period', comparisonLabel];
 
   // Use the first dataset's length for x-axis spacing
   const numPoints = currentDataset.points.length;
   const stepX = innerW / Math.max(numPoints - 1, 1);
 
-  // Generate paths for each dataset
+  // Horizontal grid lines + Y-axis labels
+  const gridLines = 4;
+  let gridSvg = '';
+  for (let g = 0; g <= gridLines; g++) {
+    const ratio = g / gridLines;
+    const yPos = padT + innerH - ratio * innerH;
+    const val = minValue + ratio * (adjMax - minValue);
+    let yLabel;
+    if (adjMax >= 10000) yLabel = (val / 1000).toFixed(0) + 'k';
+    else if (adjMax >= 1000) yLabel = (val / 1000).toFixed(1) + 'k';
+    else if (adjMax <= 1) yLabel = (val * 100).toFixed(0) + '%';
+    else yLabel = val.toFixed(0);
+    gridSvg += `<line x1="${padL}" y1="${yPos.toFixed(1)}" x2="${width - padR}" y2="${yPos.toFixed(1)}" stroke="#e2e8f0" stroke-width="0.5" stroke-dasharray="4 3"/>`;
+    gridSvg += `<text x="${padL - 6}" y="${(yPos + 1).toFixed(1)}" text-anchor="end" fill="#94a3b8" font-size="10" font-family="inherit">${yLabel}</text>`;
+  }
+
+  // Generate smooth bezier paths for each dataset
   let paths = '';
   displayDatasets.forEach((ds, idx) => {
     const color = colors[idx];
-    const pathD = ds.points
-      .map((p, i) => {
-        const x = padX + stepX * i;
-        const y = normalizeY(p.value);
-        return `${i === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)}`;
-      })
-      .join(' ');
-    
-    paths += `<path class="chart-line-path" d="${pathD}" style="stroke: ${color};" />`;
+    const pts = ds.points.map((p, i) => ({
+      x: padL + stepX * i,
+      y: normalizeY(p.value),
+    }));
+
+    let pathD = `M${pts[0].x.toFixed(2)},${pts[0].y.toFixed(2)}`;
+    for (let i = 1; i < pts.length; i++) {
+      const prev = pts[i - 1];
+      const curr = pts[i];
+      const tension = 0.3;
+      const cp1x = prev.x + (curr.x - prev.x) * tension;
+      const cp2x = curr.x - (curr.x - prev.x) * tension;
+      pathD += ` C${cp1x.toFixed(2)},${prev.y.toFixed(2)} ${cp2x.toFixed(2)},${curr.y.toFixed(2)} ${curr.x.toFixed(2)},${curr.y.toFixed(2)}`;
+    }
+
+    paths += `<path class="chart-line-path" d="${pathD}" style="stroke: ${color}; stroke-width: 2;" />`;
   });
 
-  // Use current dataset's labels for x-axis
+  // Auto-thin labels
+  const maxLabelsCount = window.innerWidth <= 768 ? 6 : 12;
+  const labelStep = numPoints > maxLabelsCount ? Math.ceil(numPoints / maxLabelsCount) : 1;
   const xLabels = currentDataset.points
-    .map(p => `<div class="chart-x-label">${p.label}</div>`)
+    .map((p, i) => {
+      const show = (i % labelStep === 0) || (i === numPoints - 1);
+      return `<div class="chart-x-label" style="${show ? '' : 'visibility:hidden'}">${p.label}</div>`;
+    })
     .join('');
 
   // Create legend
   const legend = displayDatasets
     .map((ds, idx) => {
       const color = colors[idx];
-      const label = labels[idx];
+      const label = colorLabels[idx];
       return `
         <div style="display: flex; align-items: center; gap: 6px;">
-          <div style="width: 12px; height: 3px; background: ${color}; border-radius: 2px;"></div>
-          <span style="font-size: 11px; color: #64748b;">${label}</span>
+          <div style="width: 14px; height: 3px; background: ${color}; border-radius: 2px;"></div>
+          <span style="font-size: 11px; color: #64748b; font-weight: 500;">${label}</span>
         </div>
       `;
     })
@@ -858,9 +1004,10 @@ function renderComparisonLineChartContent(containerId, datasets, mode, options =
         ${legend}
       </div>
       <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" class="chart-line-svg">
+        ${gridSvg}
         ${paths}
       </svg>
-      <div class="chart-line-labels">
+      <div class="chart-line-labels" style="padding-left:${(padL/width*100).toFixed(1)}%;padding-right:${(padR/width*100).toFixed(1)}%;">
         ${xLabels}
       </div>
     </div>
@@ -975,7 +1122,7 @@ export async function renderComparisonView(dateRange) {
       <div class="analytics-section">
         <h2 class="analytics-section-title">Occupancy Trend Comparison</h2>
         <div class="chart-card">
-          <div id="occupancy-trend-comparison" style="height: 280px;">Loading chart...</div>
+          <div id="occupancy-trend-comparison">Loading chart...</div>
         </div>
       </div>
 
@@ -1078,7 +1225,7 @@ export async function renderComparisonView(dateRange) {
       <div class="analytics-section">
         <h2 class="analytics-section-title">Revenue Trend Comparison</h2>
         <div class="chart-card">
-          <div id="revenue-trend-comparison" style="height: 280px;">Loading chart...</div>
+          <div id="revenue-trend-comparison">Loading chart...</div>
         </div>
       </div>
 
@@ -1117,8 +1264,13 @@ export async function renderComparisonView(dateRange) {
       </div>
     `;
 
+    // Auto-detect best granularity based on the selected date range
+    // < 1 month → daily, 1–3 months → weekly, > 3 months → monthly
+    const rangeDays = Math.round((periods.current.end - periods.current.start) / (1000 * 60 * 60 * 24));
+    const autoGranularity = rangeDays > 90 ? 'month' : rangeDays >= 30 ? 'week' : 'day';
+
     // Generate and render comparison charts with dateRange
-    const occupancyTrendData = await generateOccupancyTimeSeries(periods, 'day');
+    const occupancyTrendData = await generateOccupancyTimeSeries(periods, autoGranularity);
     const allowedModes = [];
     if (meta.showMom) allowedModes.push('mom');
     if (meta.showQoq) allowedModes.push('qoq');
@@ -1132,17 +1284,17 @@ export async function renderComparisonView(dateRange) {
       dateRange: { start: periods.current.start, end: periods.current.end },
       allowedModes,
       defaultMode,
-      defaultGranularity: 'day'
+      defaultGranularity: autoGranularity
     });
     
 
-    const revenueData = await generateRevenueTimeSeries(periods, 'day');
+    const revenueData = await generateRevenueTimeSeries(periods, autoGranularity);
     renderComparisonLineChart('revenue-trend-comparison', revenueData, { 
       min: 0,
       dateRange: { start: periods.current.start, end: periods.current.end },
       allowedModes,
       defaultMode,
-      defaultGranularity: 'day'
+      defaultGranularity: autoGranularity
     });
 
   } catch (error) {

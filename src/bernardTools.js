@@ -139,8 +139,8 @@ export const listRoomsTool = tool({
         Code: r.code,
         Name: r.name,
         "Max Adults": r.max_adults || 2,
-        "Weekday Price": `${r.currency || 'GBP'} ${r.base_price_per_night_weekday}`,
-        "Weekend Price": `${r.currency || 'GBP'} ${r.base_price_per_night_weekend}`,
+        "Weekday Price": `${r.currency || 'GHS'} ${r.base_price_per_night_weekday}`,
+        "Weekend Price": `${r.currency || 'GHS'} ${r.base_price_per_night_weekend}`,
         Active: r.is_active ? "✓" : "✗",
         Image: r.image_url ? "Yes" : "No"
       })),
@@ -177,8 +177,8 @@ export const getRoomDetailsTool = tool({
 - **Status**: ${data.is_active ? 'Active ✓' : 'Inactive ✗'}
 - **Capacity**: Sleeps up to ${data.max_adults || 2} adults
 - **Pricing**: 
-  - Weekday: ${data.currency || 'GBP'} ${data.base_price_per_night_weekday}
-  - Weekend: ${data.currency || 'GBP'} ${data.base_price_per_night_weekend}
+  - Weekday: ${data.currency || 'GHS'} ${data.base_price_per_night_weekday}
+  - Weekend: ${data.currency || 'GHS'} ${data.base_price_per_night_weekend}
 - **Description**: ${data.description || 'N/A'}
 - **Image**: ${data.image_url || 'No image set'}
 - **Room ID**: ${data.id}
@@ -322,7 +322,7 @@ export const listExtrasTool = tool({
       data.map(e => ({
         Name: e.name,
         Category: e.category || "N/A",
-        Price: `${e.currency || 'GBP'} ${e.price}`,
+        Price: `${e.currency || 'GHS'} ${e.price}`,
         "Unit Type": e.unit_type?.replace(/_/g, ' ') || 'per booking',
         Active: e.is_active ? "✓" : "✗",
       })),
@@ -357,7 +357,7 @@ export const getExtraDetailsTool = tool({
     return `
 **${extra.name}**
 - **Category**: ${extra.category || 'N/A'}
-- **Price**: ${extra.currency || 'GBP'} ${extra.price} ${extra.unit_type?.replace(/_/g, ' ') || 'per booking'}
+- **Price**: ${extra.currency || 'GHS'} ${extra.price} ${extra.unit_type?.replace(/_/g, ' ') || 'per booking'}
 - **Status**: ${extra.is_active ? 'Active ✓' : 'Inactive ✗'}
 - **Description**: ${extra.description || 'N/A'}
 - **Extra ID**: ${extra.id}
@@ -477,25 +477,41 @@ export const deleteExtraTool = tool({
 
 export const listPackagesTool = tool({
   name: "list_packages",
-  description: "List all packages (active and inactive) with their pricing and minimum nights.",
+  description: "List all packages (active and inactive) with their pricing, nights, and validity.",
   schema: z.object({}),
   async func(_input) {
     const { data, error } = await supabase
       .from("packages")
       .select("*")
-      .order("name", { ascending: true });
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: false });
 
     if (error) return `Error: ${error.message}`;
     if (!data?.length) return "No packages found.";
 
+    // Fetch room associations from junction table
+    const packageIds = data.map(p => p.id);
+    const { data: pkgRooms } = await supabase
+      .from("packages_rooms")
+      .select("package_id, room_type_id, room_types(name, code)")
+      .in("package_id", packageIds);
+
+    // Build room map per package
+    const roomMap = {};
+    (pkgRooms || []).forEach(pr => {
+      if (!roomMap[pr.package_id]) roomMap[pr.package_id] = [];
+      if (pr.room_types) roomMap[pr.package_id].push(pr.room_types.name || pr.room_types.code);
+    });
+
     return formatTable(
       data.map(p => ({
+        Code: (p.code || '').toUpperCase(),
         Name: p.name,
-        "Min Nights": p.nights || 'N/A',
-        "Package Price": `${p.currency || 'GHS'} ${p.package_price || 'N/A'}`,
-        "Valid From": formatDate(p.valid_from) || 'N/A',
-        "Valid Until": formatDate(p.valid_until) || 'N/A',
-        "Cabin": p.room_name || 'N/A',
+        Nights: p.nights || 'N/A',
+        Price: `${p.currency || 'GHS'} ${p.package_price || 'N/A'}`,
+        "Valid From": formatDate(p.valid_from) || '–',
+        "Valid Until": formatDate(p.valid_until) || '–',
+        Rooms: roomMap[p.id]?.join(', ') || 'All',
         Active: p.is_active ? "✓" : "✗",
         Featured: p.is_featured ? "⭐" : "",
       })),
@@ -506,7 +522,7 @@ export const listPackagesTool = tool({
 
 export const getPackageDetailsTool = tool({
   name: "get_package_details",
-  description: "Get full details of a specific package including included extras.",
+  description: "Get full details of a specific package including included extras and room associations.",
   schema: z.object({
     identifier: z.string().describe("Package name or ID")
   }),
@@ -532,12 +548,28 @@ export const getPackageDetailsTool = tool({
 
     const pkg = data[0];
 
+    // Fetch room associations from junction table
+    let roomNames = [];
+    try {
+      const { data: pkgRooms } = await supabase
+        .from("packages_rooms")
+        .select("room_type_id, room_types(name, code)")
+        .eq("package_id", pkg.id);
+      roomNames = (pkgRooms || []).filter(pr => pr.room_types).map(pr => `${pr.room_types.name} (${pr.room_types.code})`);
+    } catch (e) {
+      // packages_rooms table may not exist
+    }
+
     let response = `
 **${pkg.name}**
+- **Code**: ${(pkg.code || '').toUpperCase()}
 - **Status**: ${pkg.is_active ? 'Active ✓' : 'Inactive ✗'}
 - **Featured**: ${pkg.is_featured ? 'Yes ⭐' : 'No'}
 - **Minimum Nights**: ${pkg.nights || 'N/A'}
 - **Package Price**: ${pkg.currency || 'GHS'} ${pkg.package_price || 'N/A'}
+- **Valid From**: ${formatDate(pkg.valid_from) || '–'}
+- **Valid Until**: ${formatDate(pkg.valid_until) || '–'}
+- **Rooms**: ${roomNames.length ? roomNames.join(', ') : 'All cabins'}
 - **Description**: ${pkg.description || 'N/A'}
 - **Package ID**: ${pkg.id}
 `;
@@ -546,7 +578,7 @@ export const getPackageDetailsTool = tool({
       response += `\n**Included Extras**:\n`;
       pkg.package_extras.forEach(pe => {
         if (pe.extras) {
-          response += `- ${pe.extras.name} (Qty: ${pe.quantity || 1})\n`;
+          response += `- ${pe.extras.name} (Qty: ${pe.quantity || 1}) — ${pe.extras.currency || 'GHS'} ${pe.extras.price} ${pe.extras.unit_type?.replace(/_/g, ' ') || ''}\n`;
         }
       });
     }
@@ -691,7 +723,7 @@ export const listCouponsTool = tool({
         return {
           Code: c.code,
           Type: c.discount_type,
-          Value: c.discount_type === 'percentage' ? `${c.discount_value}%` : `${c.currency || 'GBP'} ${c.discount_value}`,
+          Value: c.discount_type === 'percentage' ? `${c.discount_value}%` : `${c.currency || 'GHS'} ${c.discount_value}`,
           "Valid Until": formatDate(c.valid_until) || 'No expiry',
           Active: c.is_active ? "✓" : "✗",
           Status: isValid ? "Valid ✓" : "Expired/Inactive",
@@ -729,7 +761,7 @@ export const getCouponDetailsTool = tool({
 
     return `
 **${data.code}**
-- **Discount**: ${data.discount_type === 'percentage' ? `${data.discount_value}%` : `${data.currency || 'GBP'} ${data.discount_value}`}
+- **Discount**: ${data.discount_type === 'percentage' ? `${data.discount_value}%` : `${data.currency || 'GHS'} ${data.discount_value}`}
 - **Type**: ${data.discount_type}
 - **Valid From**: ${formatDate(data.valid_from) || 'N/A'}
 - **Valid Until**: ${formatDate(data.valid_until) || 'No expiry'}
@@ -906,9 +938,9 @@ export const validateCouponTool = tool({
 
     return `✓ Coupon '${code}' is valid!
 - Discount: ${c.discount_type === 'percentage' ? `${c.discount_value}%` : `${c.currency} ${c.discount_value}`}
-- Original Total: ${c.currency || 'GBP'} ${booking_total.toFixed(2)}
-- Discount Amount: ${c.currency || 'GBP'} ${discount.toFixed(2)}
-- Final Total: ${c.currency || 'GBP'} ${final_total.toFixed(2)}
+- Original Total: ${c.currency || 'GHS'} ${booking_total.toFixed(2)}
+- Discount Amount: ${c.currency || 'GHS'} ${discount.toFixed(2)}
+- Final Total: ${c.currency || 'GHS'} ${final_total.toFixed(2)}
 - Uses Remaining: ${c.usage_limit ? `${c.usage_limit - c.usage_count}` : 'Unlimited'}`;
   },
 });
@@ -919,13 +951,15 @@ export const validateCouponTool = tool({
 
 export const searchReservationsTool = tool({
   name: "search_reservations",
-  description: "Search for reservations by guest name (first, last, or full name like 'John Smith'), email, confirmation code, or status. When user provides a full name, search using it.",
+  description: "Search for reservations by guest name, email, confirmation code, status, or date range. Use start_date/end_date to find reservations in a specific period (e.g., 'February reservations' → start_date=2026-02-01, end_date=2026-02-28). Overlap detection: any reservation whose stay overlaps the date range will be included.",
   schema: z.object({
-    query: z.string().optional().describe("Search term - can be first name, last name, full name (e.g., 'John Smith'), email, or confirmation code"),
-    status: z.string().optional().describe("Filter by status (e.g., 'confirmed', 'cancelled')"),
-    limit: z.number().default(10).describe("Maximum number of results"),
+    query: z.string().optional().describe("Search term - guest name, email, or confirmation code"),
+    status: z.string().optional().describe("Filter by status (e.g., 'confirmed', 'cancelled', 'checked-in', 'checked-out', 'completed')"),
+    start_date: z.string().optional().describe("Start of date range (YYYY-MM-DD). Finds reservations whose stay overlaps this range."),
+    end_date: z.string().optional().describe("End of date range (YYYY-MM-DD). Finds reservations whose stay overlaps this range."),
+    limit: z.number().default(20).describe("Maximum number of results"),
   }),
-  async func({ query, status, limit }) {
+  async func({ query, status, start_date, end_date, limit }) {
     let dbQuery = supabase
       .from("reservations")
       .select(`
@@ -936,24 +970,30 @@ export const searchReservationsTool = tool({
         guest_email,
         check_in,
         check_out,
+        nights,
         status,
         total,
         currency,
         room_types (name, code)
       `)
-      .order("created_at", { ascending: false })
+      .order("check_in", { ascending: true })
       .limit(limit);
 
+    // Date range filter — overlap detection (check_in <= end AND check_out >= start)
+    if (start_date) {
+      dbQuery = dbQuery.gte("check_out", start_date);
+    }
+    if (end_date) {
+      dbQuery = dbQuery.lte("check_in", end_date);
+    }
+
     if (query) {
-      // Check if query looks like a full name (has a space)
       if (query.includes(' ')) {
         const parts = query.trim().split(/\s+/);
         const firstName = parts[0];
         const lastName = parts.slice(1).join(' ');
-        // Search for first AND last name match
         dbQuery = dbQuery.or(`and(guest_first_name.ilike.%${firstName}%,guest_last_name.ilike.%${lastName}%),guest_email.ilike.%${query}%,confirmation_code.ilike.%${query}%`);
       } else {
-        // Single word - search first name, last name, email, or code
         dbQuery = dbQuery.or(`guest_first_name.ilike.%${query}%,guest_last_name.ilike.%${query}%,guest_email.ilike.%${query}%,confirmation_code.ilike.%${query}%`);
       }
     }
@@ -965,18 +1005,21 @@ export const searchReservationsTool = tool({
     const { data, error } = await dbQuery;
 
     if (error) return `Error: ${error.message}`;
-    if (!data?.length) return "No reservations found matching the criteria.";
+    if (!data?.length) {
+      const period = start_date || end_date ? ` for ${start_date || '...'} to ${end_date || '...'}` : '';
+      return `No reservations found${period}${query ? ` matching "${query}"` : ''}${status ? ` with status "${status}"` : ''}.`;
+    }
 
-    return formatTable(
+    return `Found ${data.length} reservation(s):\n\n` + formatTable(
       data.map(r => ({
         Code: r.confirmation_code,
         Guest: `${r.guest_first_name || ''} ${r.guest_last_name || ''}`.trim(),
-        Email: r.guest_email,
         Room: r.room_types?.name || 'N/A',
         "Check-in": formatDate(r.check_in),
         "Check-out": formatDate(r.check_out),
+        Nights: r.nights || '–',
         Status: r.status,
-        Total: `${r.currency || 'GBP'} ${r.total || 0}`,
+        Total: `${r.currency || 'GHS'} ${r.total || 0}`,
       })),
       { minWidth: "480px" }
     );
@@ -1027,10 +1070,10 @@ export const getReservationDetailsTool = tool({
 - Status: ${r.status}
 
 **Pricing:**
-- Room Subtotal: ${r.currency || 'GBP'} ${r.room_subtotal || 0}
-- Extras Subtotal: ${r.currency || 'GBP'} ${r.extras_total || 0}
-- Discount: ${r.currency || 'GBP'} ${r.discount_amount || 0}
-- Total: ${r.currency || 'GBP'} ${r.total || 0}
+- Room Subtotal: ${r.currency || 'GHS'} ${r.room_subtotal || 0}
+- Extras Subtotal: ${r.currency || 'GHS'} ${r.extras_total || 0}
+- Discount: ${r.currency || 'GHS'} ${r.discount_amount || 0}
+- Total: ${r.currency || 'GHS'} ${r.total || 0}
 
 **Other:**
 - Special Requests: ${r.notes || 'None'}
@@ -1155,6 +1198,264 @@ ${conflicts.map(c => `- ${c.confirmation_code}: ${formatDate(c.check_in)} to ${f
 });
 
 // ============================================================================
+// CREATE RESERVATION TOOL
+// ============================================================================
+
+export const createReservationTool = tool({
+  name: "create_reservation",
+  description: "Create a new reservation. MUST check availability first using check_availability. Requires: room_code, check_in, check_out, guest_first_name, guest_last_name, guest_email. Optional: guest_phone, adults, children, notes, extras, coupon_code. The tool handles pricing calculation automatically.",
+  schema: z.object({
+    room_code: z.string().describe("Room code (e.g., 'SAND', 'PALM', 'COCO')"),
+    check_in: z.string().describe("Check-in date (YYYY-MM-DD)"),
+    check_out: z.string().describe("Check-out date (YYYY-MM-DD)"),
+    guest_first_name: z.string().describe("Guest first name"),
+    guest_last_name: z.string().describe("Guest last name"),
+    guest_email: z.string().describe("Guest email address"),
+    guest_phone: z.string().optional().describe("Guest phone number"),
+    country_code: z.string().optional().describe("Country dialling code (e.g., '+233')"),
+    adults: z.number().default(2).describe("Number of adults (default 2)"),
+    children: z.number().default(0).describe("Number of children"),
+    notes: z.string().optional().describe("Special requests or notes"),
+    extras: z.string().optional().describe("JSON array of extras by name and quantity, e.g. [{\"name\": \"Airport Transfer\", \"quantity\": 1}, {\"name\": \"Breakfast\", \"quantity\": 2}]"),
+    coupon_code: z.string().optional().describe("Coupon code to apply"),
+  }),
+  async func(input) {
+    const { room_code, check_in, check_out, guest_first_name, guest_last_name,
+            guest_email, guest_phone, country_code, adults, children, notes,
+            extras, coupon_code } = input;
+
+    // --- Validate dates ---
+    const ci = new Date(check_in + 'T00:00:00');
+    const co = new Date(check_out + 'T00:00:00');
+    if (isNaN(ci.getTime()) || isNaN(co.getTime())) return "✗ Invalid date format. Use YYYY-MM-DD.";
+    if (co <= ci) return "✗ Check-out date must be after check-in date.";
+
+    const msPerDay = 1000 * 60 * 60 * 24;
+    const nightsCount = Math.round((co - ci) / msPerDay);
+
+    // --- Get room type ---
+    const { data: room, error: roomErr } = await supabase
+      .from("room_types")
+      .select("id, code, name, base_price_per_night_weekday, base_price_per_night_weekend, currency, max_adults")
+      .eq("code", room_code.toUpperCase())
+      .single();
+
+    if (roomErr || !room) return `✗ Room '${room_code}' not found.`;
+
+    // --- Check capacity ---
+    if (adults > (room.max_adults || 4)) {
+      return `✗ ${room.name} supports max ${room.max_adults || 4} adults. You specified ${adults}.`;
+    }
+
+    // --- Availability check ---
+    const { data: conflicts } = await supabase
+      .from("reservations")
+      .select("confirmation_code, check_in, check_out")
+      .eq("room_type_id", room.id)
+      .in("status", ["confirmed", "checked-in"])
+      .or(`and(check_in.lt.${check_out},check_out.gt.${check_in})`);
+
+    if (conflicts?.length) {
+      return `✗ ${room.name} is NOT available for ${formatDate(check_in)} – ${formatDate(check_out)}. Conflicting booking: ${conflicts[0].confirmation_code} (${formatDate(conflicts[0].check_in)} – ${formatDate(conflicts[0].check_out)}).`;
+    }
+
+    // --- Check blocked dates ---
+    const { data: blocked } = await supabase
+      .from("blocked_dates")
+      .select("blocked_date")
+      .eq("room_type_id", room.id)
+      .gte("blocked_date", check_in)
+      .lt("blocked_date", check_out);
+
+    if (blocked?.length) {
+      return `✗ ${room.name} has blocked dates in that range (${blocked.map(b => formatDate(b.blocked_date)).join(', ')}). Cannot book.`;
+    }
+
+    // --- Calculate pricing ---
+    let roomSubtotal = 0;
+
+    // Try dynamic pricing first
+    try {
+      const { data: pricingData } = await supabase.rpc('calculate_dynamic_price', {
+        p_room_type_id: room.id,
+        p_check_in: check_in,
+        p_check_out: check_out,
+        p_pricing_model_id: null
+      });
+
+      if (pricingData && pricingData.total) {
+        roomSubtotal = parseFloat(pricingData.total);
+      }
+    } catch (e) {
+      // Dynamic pricing not available, fallback below
+    }
+
+    // Fallback to base prices
+    if (roomSubtotal === 0) {
+      const wkdPrice = Number(room.base_price_per_night_weekday || 0);
+      const wkePrice = Number(room.base_price_per_night_weekend || 0);
+      for (let d = new Date(ci); d < co; d.setDate(d.getDate() + 1)) {
+        const dow = d.getDay();
+        roomSubtotal += (dow === 5 || dow === 6) ? wkePrice : wkdPrice;
+      }
+    }
+
+    // --- Calculate extras ---
+    let extrasTotal = 0;
+    let selectedExtras = [];
+    if (extras) {
+      try {
+        const extrasList = typeof extras === 'string' ? JSON.parse(extras) : extras;
+        for (const item of extrasList) {
+          const { data: extra } = await supabase
+            .from("extras")
+            .select("id, name, code, price, currency, unit_type")
+            .eq("id", item.extra_id)
+            .single();
+
+          if (extra) {
+            const qty = item.quantity || 1;
+            extrasTotal += Number(extra.price || 0) * qty;
+            selectedExtras.push({
+              extra_id: extra.id,
+              extra_code: extra.code || '',
+              extra_name: extra.name || '',
+              price: Number(extra.price || 0),
+              quantity: qty,
+              subtotal: Number(extra.price || 0) * qty,
+              discount_amount: 0,
+            });
+          }
+        }
+      } catch (e) {
+        // Invalid extras JSON, ignore
+      }
+    }
+
+    // --- Apply coupon ---
+    let discountAmount = 0;
+    let appliedCouponCode = null;
+    if (coupon_code) {
+      const { data: coupon } = await supabase
+        .from("coupons")
+        .select("*")
+        .eq("code", coupon_code.toUpperCase())
+        .eq("is_active", true)
+        .single();
+
+      if (coupon) {
+        const today = new Date().toISOString().split('T')[0];
+        const isValid = (!coupon.valid_from || coupon.valid_from <= today) &&
+                       (!coupon.valid_until || coupon.valid_until >= today) &&
+                       (!coupon.usage_limit || coupon.usage_count < coupon.usage_limit);
+
+        if (isValid) {
+          const base = coupon.applies_to === 'rooms' ? roomSubtotal
+                     : coupon.applies_to === 'extras' ? extrasTotal
+                     : roomSubtotal + extrasTotal;
+
+          discountAmount = coupon.discount_type === 'percentage'
+            ? (base * coupon.discount_value) / 100
+            : Math.min(coupon.discount_value, base);
+
+          appliedCouponCode = coupon.code;
+
+          // Update coupon usage
+          await supabase
+            .from("coupons")
+            .update({ usage_count: (coupon.usage_count || 0) + 1 })
+            .eq("id", coupon.id);
+        }
+      }
+    }
+
+    const total = Math.max(0, roomSubtotal + extrasTotal - discountAmount);
+    const currency = room.currency || 'GHS';
+
+    // --- Generate confirmation code ---
+    const confirmationCode = ('B' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4)).toUpperCase();
+
+    // --- Insert reservation ---
+    const payload = {
+      confirmation_code: confirmationCode,
+      room_type_id: room.id,
+      room_type_code: room.code,
+      room_name: room.name,
+      check_in,
+      check_out,
+      nights: nightsCount,
+      guest_first_name: guest_first_name || null,
+      guest_last_name: guest_last_name || null,
+      guest_email: guest_email || null,
+      guest_phone: guest_phone || null,
+      country_code: country_code || null,
+      adults: adults || 2,
+      children: children || 0,
+      room_subtotal: roomSubtotal,
+      extras_total: extrasTotal,
+      discount_amount: discountAmount,
+      coupon_code: appliedCouponCode,
+      total,
+      currency,
+      status: 'confirmed',
+      payment_status: 'unpaid',
+      is_influencer: false,
+      notes: notes || null,
+    };
+
+    const { data: reservation, error: insertErr } = await supabase
+      .from("reservations")
+      .insert(payload)
+      .select()
+      .single();
+
+    if (insertErr) return `✗ Failed to create reservation: ${insertErr.message}`;
+
+    // --- Insert extras ---
+    if (selectedExtras.length > 0 && reservation) {
+      const extrasPayload = selectedExtras.map(e => ({
+        reservation_id: reservation.id,
+        extra_code: e.extra_code,
+        extra_name: e.extra_name,
+        price: e.price,
+        quantity: e.quantity,
+        subtotal: e.subtotal,
+        discount_amount: e.discount_amount,
+      }));
+
+      await supabase.from("reservation_extras").insert(extrasPayload);
+    }
+
+    // --- Return success ---
+    let response = `✓ **Reservation Created Successfully!**
+
+- **Confirmation Code**: ${confirmationCode}
+- **Cabin**: ${room.name} (${room.code})
+- **Guest**: ${guest_first_name} ${guest_last_name}
+- **Email**: ${guest_email}
+- **Check-in**: ${formatDate(check_in)}
+- **Check-out**: ${formatDate(check_out)}
+- **Nights**: ${nightsCount}
+- **Adults**: ${adults || 2} | **Children**: ${children || 0}
+- **Room Cost**: ${currency} ${roomSubtotal.toFixed(2)}`;
+
+    if (extrasTotal > 0) {
+      response += `\n- **Extras**: ${currency} ${extrasTotal.toFixed(2)}`;
+    }
+    if (discountAmount > 0) {
+      response += `\n- **Discount** (${appliedCouponCode}): -${currency} ${discountAmount.toFixed(2)}`;
+    }
+
+    response += `\n- **Total**: ${currency} ${total.toFixed(2)}`;
+    response += `\n- **Status**: Confirmed | **Payment**: Unpaid`;
+
+    if (notes) response += `\n- **Notes**: ${notes}`;
+
+    return response;
+  },
+});
+
+// ============================================================================
 // ANALYTICS TOOLS
 // ============================================================================
 
@@ -1168,84 +1469,96 @@ export const getOccupancyStatsTool = tool({
     room_code: z.string().optional().describe("Optional: specific room code to filter by"),
   }),
   async func({ start_date, end_date, room_code }) {
-    // Defaults: current month (start = 1st of month, end = 1st of next month)
+    // Defaults: current month
     const now = new Date();
-    const defaultStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-    const defaultEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+    const defaultStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const defaultEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0); // last day of month
 
-    const start_date_safe = start_date || defaultStart.toISOString().slice(0, 10);
-    const end_date_safe = end_date || defaultEnd.toISOString().slice(0, 10);
+    const startStr = start_date || defaultStart.toISOString().split('T')[0];
+    const endStr = end_date || defaultEnd.toISOString().split('T')[0];
+    const start = new Date(startStr + 'T00:00:00');
+    const end = new Date(endStr + 'T00:00:00');
+
+    const NUM_CABINS = 3;
+    const msPerDay = 1000 * 60 * 60 * 24;
+    const daysInPeriod = Math.ceil((end - start) / msPerDay) + 1;
 
     // Get all room types or specific room
     let roomQuery = supabase.from("room_types").select("id, code, name");
-    if (room_code) {
-      roomQuery = roomQuery.eq("code", room_code.toUpperCase());
-    }
+    if (room_code) roomQuery = roomQuery.eq("code", room_code.toUpperCase());
     const { data: rooms } = await roomQuery;
-    
     if (!rooms?.length) return `No rooms found${room_code ? ` with code ${room_code}` : ''}.`;
 
-    // Calculate days in range
-    const start = new Date(start_date);
-    const end = new Date(end_date);
-    const totalDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+    // Fetch reservations that OVERLAP with the period (same logic as analytics dashboard)
+    const { data: reservations } = await supabase
+      .from("reservations")
+      .select("check_in, check_out, room_type_id")
+      .lte("check_in", endStr)
+      .gte("check_out", startStr)
+      .in("status", ["confirmed", "completed", "checked-in", "checked-out"]);
+
+    // Fetch blocked dates
+    const { data: blockedDates } = await supabase
+      .from("blocked_dates")
+      .select("blocked_date, room_type_id")
+      .gte("blocked_date", startStr)
+      .lte("blocked_date", endStr);
+
+    const blockedNights = (blockedDates || []).length;
+    const theoreticalCapacity = daysInPeriod * NUM_CABINS;
+    const availableNights = theoreticalCapacity - blockedNights;
 
     let results = [];
 
     for (const room of rooms) {
-      // Get reservations for this room in date range
-      const { data: reservations } = await supabase
-        .from("reservations")
-        .select("check_in, check_out")
-        .eq("room_type_id", room.id)
-        .in("status", ["confirmed", "checked-in", "checked-out"])
-        .not("is_influencer", "eq", true);
-
-      // Count occupied nights
+      const roomReservations = (reservations || []).filter(r => r.room_type_id === room.id);
       let occupiedNights = 0;
-      
-      if (reservations) {
-        for (const res of reservations) {
-          const checkIn = new Date(res.check_in);
-          const checkOut = new Date(res.check_out);
-          
-          // Calculate overlap with date range
-          const overlapStart = checkIn > start ? checkIn : start;
-          const overlapEnd = checkOut < end ? checkOut : end;
-          
-          if (overlapStart < overlapEnd) {
-            occupiedNights += Math.ceil((overlapEnd - overlapStart) / (1000 * 60 * 60 * 24));
-          }
-        }
-      }
 
-      const occupancyRate = totalDays > 0 ? (occupiedNights / totalDays) * 100 : 0;
+      roomReservations.forEach(r => {
+        if (!r.check_in || !r.check_out) return;
+        const ci = new Date(r.check_in + 'T00:00:00');
+        const co = new Date(r.check_out + 'T00:00:00');
+        // Clip to period boundaries
+        const overlapStart = new Date(Math.max(ci.getTime(), start.getTime()));
+        const overlapEnd = new Date(Math.min(co.getTime(), end.getTime() + msPerDay));
+        const nights = Math.max(0, (overlapEnd - overlapStart) / msPerDay);
+        occupiedNights += nights;
+      });
+
+      occupiedNights = Math.round(occupiedNights);
+      const roomAvail = daysInPeriod;
+      const occupancyRate = roomAvail > 0 ? (occupiedNights / roomAvail) * 100 : 0;
 
       results.push({
         Room: `${room.name} (${room.code})`,
         "Occupied Nights": occupiedNights,
-        "Total Nights": totalDays,
+        "Available Nights": roomAvail,
         "Occupancy %": occupancyRate.toFixed(1) + "%",
       });
     }
 
     if (results.length === 0) return "No data available for the specified period.";
 
-    // Calculate overall if multiple rooms
-    if (results.length > 1) {
-      const totalOccupied = results.reduce((sum, r) => sum + parseInt(r["Occupied Nights"]), 0);
-      const totalAvailable = results.reduce((sum, r) => sum + parseInt(r["Total Nights"]), 0);
-      const overallRate = (totalOccupied / totalAvailable) * 100;
+    // Overall summary
+    const totalOccupied = results.reduce((sum, r) => sum + r["Occupied Nights"], 0);
+    const overallRate = availableNights > 0 ? (totalOccupied / availableNights) * 100 : 0;
+    const alos = (reservations || []).length > 0 ? totalOccupied / (reservations || []).length : 0;
 
+    if (results.length > 1) {
       results.push({
         Room: "**OVERALL**",
         "Occupied Nights": totalOccupied,
-        "Total Nights": totalAvailable,
+        "Available Nights": availableNights,
         "Occupancy %": overallRate.toFixed(1) + "%",
       });
     }
 
-    return `**Occupancy Report: ${start_date} to ${end_date}**\n\n${formatTable(results, { minWidth: "500px" })}`;
+    return `**Occupancy Report: ${formatDate(startStr)} – ${formatDate(endStr)}**
+- Bookings in period: ${(reservations || []).length}
+- Blocked nights: ${blockedNights}
+- ALOS: ${alos.toFixed(1)} nights
+
+${formatTable(results, { minWidth: "500px" })}`;
   },
 });
 
@@ -1257,46 +1570,68 @@ export const getRevenueStatsTool = tool({
     end_date: z.string().describe("End date (YYYY-MM-DD)"),
   }),
   async func({ start_date, end_date }) {
+    // Defaults: current month
+    const now = new Date();
+    const defaultStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const defaultEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+    const startStr = start_date || defaultStart.toISOString().split('T')[0];
+    const endStr = end_date || defaultEnd.toISOString().split('T')[0];
+    const start = new Date(startStr + 'T00:00:00');
+    const end = new Date(endStr + 'T00:00:00');
+
+    // Overlap detection: reservations whose stay overlaps the period
     const { data: reservations, error } = await supabase
       .from("reservations")
-      .select(`
-        room_subtotal,
-        extras_total,
-        discount_amount,
-        total,
-        currency,
-        package_id,
-        packages (name)
-      `)
-      .gte("check_in", start_date)
-      .lte("check_in", end_date)
-      .in("status", ["confirmed", "checked-in", "checked-out"])
-      .not("is_influencer", "eq", true);
+      .select("room_subtotal, extras_total, discount_amount, total, currency, package_id, check_in, check_out")
+      .lte("check_in", endStr)
+      .gte("check_out", startStr)
+      .in("status", ["confirmed", "completed", "checked-in", "checked-out"]);
 
     if (error) return `Error: ${error.message}`;
-    if (!reservations?.length) return "No reservations found in the specified period.";
+    if (!reservations?.length) return `No reservations found for ${formatDate(startStr)} – ${formatDate(endStr)}.`;
 
-    // Aggregate data
-    let roomRevenue = 0;
-    let extrasRevenue = 0;
-    let totalDiscount = 0;
-    let packageBookings = 0;
-    let customBookings = 0;
-    const currency = reservations[0]?.currency || "GBP";
+    // Fetch blocked dates for available nights
+    const { data: blockedDates } = await supabase
+      .from("blocked_dates")
+      .select("blocked_date")
+      .gte("blocked_date", startStr)
+      .lte("blocked_date", endStr);
+
+    const NUM_CABINS = 3;
+    const msPerDay = 1000 * 60 * 60 * 24;
+    const daysInPeriod = Math.ceil((end - start) / msPerDay) + 1;
+    const blockedNights = (blockedDates || []).length;
+    const availableNights = (daysInPeriod * NUM_CABINS) - blockedNights;
+
+    let roomRevenue = 0, extrasRevenue = 0, totalDiscount = 0;
+    let packageBookings = 0, customBookings = 0;
+    let occupiedNights = 0;
+    const currency = reservations[0]?.currency || "GHS";
 
     reservations.forEach(r => {
       roomRevenue += parseFloat(r.room_subtotal || 0);
       extrasRevenue += parseFloat(r.extras_total || 0);
       totalDiscount += parseFloat(r.discount_amount || 0);
-      
-      if (r.package_id) packageBookings++;
-      else customBookings++;
+      if (r.package_id) packageBookings++; else customBookings++;
+
+      // Calculate occupied nights within period
+      if (r.check_in && r.check_out) {
+        const ci = new Date(r.check_in + 'T00:00:00');
+        const co = new Date(r.check_out + 'T00:00:00');
+        const overlapStart = new Date(Math.max(ci.getTime(), start.getTime()));
+        const overlapEnd = new Date(Math.min(co.getTime(), end.getTime() + msPerDay));
+        occupiedNights += Math.max(0, Math.ceil((overlapEnd - overlapStart) / msPerDay));
+      }
     });
 
     const totalRevenue = roomRevenue + extrasRevenue - totalDiscount;
-    const avgBookingValue = totalRevenue / reservations.length;
+    const avgBookingValue = reservations.length > 0 ? totalRevenue / reservations.length : 0;
+    const adr = occupiedNights > 0 ? roomRevenue / occupiedNights : 0;
+    const revPAR = availableNights > 0 ? roomRevenue / availableNights : 0;
+    const trevpar = availableNights > 0 ? totalRevenue / availableNights : 0;
 
-    return `**Revenue Report: ${start_date} to ${end_date}**
+    return `**Revenue Report: ${formatDate(startStr)} – ${formatDate(endStr)}**
 
 **Summary:**
 - Total Revenue: ${currency} ${totalRevenue.toFixed(2)}
@@ -1310,9 +1645,11 @@ export const getRevenueStatsTool = tool({
 - Custom Bookings: ${customBookings}
 - Average Booking Value: ${currency} ${avgBookingValue.toFixed(2)}
 
-**Revenue Mix:**
-- Rooms: ${((roomRevenue / totalRevenue) * 100).toFixed(1)}%
-- Extras: ${((extrasRevenue / totalRevenue) * 100).toFixed(1)}%
+**Performance Metrics:**
+- ADR (Average Daily Rate): ${currency} ${adr.toFixed(2)}
+- RevPAR: ${currency} ${revPAR.toFixed(2)}
+- TRevPAR: ${currency} ${trevpar.toFixed(2)}
+- Revenue Mix — Rooms: ${totalRevenue > 0 ? ((roomRevenue / totalRevenue) * 100).toFixed(1) : 0}% | Extras: ${totalRevenue > 0 ? ((extrasRevenue / totalRevenue) * 100).toFixed(1) : 0}%
 `;
   },
 });
@@ -1328,11 +1665,11 @@ export const getClientAnalyticsTool = tool({
   async func({ start_date, end_date, limit }) {
     let query = supabase
       .from("reservations")
-      .select("guest_first_name, guest_last_name, guest_email, total, currency, created_at")
-      .in("status", ["confirmed", "checked-in", "checked-out"])
-      .not("is_influencer", "eq", true);
+      .select("guest_first_name, guest_last_name, guest_email, total, currency, check_in, check_out, created_at")
+      .in("status", ["confirmed", "completed", "checked-in", "checked-out"]);
 
-    if (start_date) query = query.gte("check_in", start_date);
+    // Overlap detection: check_in <= end AND check_out >= start
+    if (start_date) query = query.gte("check_out", start_date);
     if (end_date) query = query.lte("check_in", end_date);
 
     const { data: reservations, error } = await query;
@@ -1352,7 +1689,7 @@ export const getClientAnalyticsTool = tool({
           name: `${r.guest_first_name || ''} ${r.guest_last_name || ''}`.trim(),
           bookings: 0,
           totalSpent: 0,
-          currency: r.currency || "GBP",
+          currency: r.currency || "GHS",
         };
       }
 
@@ -1543,7 +1880,7 @@ export const simulatePricingTool = tool({
 
     const nights = data.nights || 0;
     const total = data.total || 0;
-    const currency = data.currency || room.currency || "GBP";
+    const currency = data.currency || room.currency || "GHS";
     const nightlyRates = data.nightly_rates || [];
 
     let response = `**Dynamic Pricing Simulation**
@@ -1607,7 +1944,7 @@ export const getSeasonalPricingTool = tool({
         Room: sp.room_types?.name || 'N/A',
         "Start Date": sp.start_date,
         "End Date": sp.end_date,
-        "Price per Night": `GBP ${sp.price_per_night}`,
+        "Price per Night": `GHS ${sp.price_per_night}`,
       })),
       { minWidth: "480px" }
     );
@@ -1628,26 +1965,34 @@ export const comparePeriodsAnalyticsTool = tool({
     period2_end: z.string().describe("Period 2 end date (YYYY-MM-DD)"),
   }),
   async func({ period1_start, period1_end, period2_start, period2_end }) {
-    // Helper function to get metrics for a period
-    async function getPeriodMetrics(start, end) {
+    const msPerDay = 1000 * 60 * 60 * 24;
+    const NUM_CABINS = 3;
+
+    // Helper: get metrics for a period using overlap detection (matches analytics dashboard)
+    async function getPeriodMetrics(startStr, endStr) {
+      const start = new Date(startStr + 'T00:00:00');
+      const end = new Date(endStr + 'T00:00:00');
+      const daysInPeriod = Math.ceil((end - start) / msPerDay) + 1;
+
+      // Overlap detection: check_in <= end AND check_out >= start
       const { data: reservations } = await supabase
         .from("reservations")
-        .select(`
-          check_in,
-          check_out,
-          total,
-          room_subtotal,
-          extras_total,
-          currency,
-          room_type_id
-        `)
-        .gte("check_in", start)
-        .lte("check_in", end)
-        .in("status", ["confirmed", "checked-in", "checked-out"])
-        .not("is_influencer", "eq", true);
+        .select("check_in, check_out, total, room_subtotal, extras_total, currency")
+        .lte("check_in", endStr)
+        .gte("check_out", startStr)
+        .in("status", ["confirmed", "completed", "checked-in", "checked-out"]);
+
+      const { data: blockedDates } = await supabase
+        .from("blocked_dates")
+        .select("blocked_date")
+        .gte("blocked_date", startStr)
+        .lte("blocked_date", endStr);
+
+      const blockedNights = (blockedDates || []).length;
+      const availableNights = (daysInPeriod * NUM_CABINS) - blockedNights;
 
       if (!reservations?.length) {
-        return { bookings: 0, revenue: 0, roomRevenue: 0, extrasRevenue: 0, occupiedNights: 0 };
+        return { bookings: 0, revenue: 0, roomRevenue: 0, extrasRevenue: 0, occupiedNights: 0, availableNights, occupancyRate: 0, currency: "GHS" };
       }
 
       const bookings = reservations.length;
@@ -1655,65 +2000,47 @@ export const comparePeriodsAnalyticsTool = tool({
       const roomRevenue = reservations.reduce((sum, r) => sum + parseFloat(r.room_subtotal || 0), 0);
       const extrasRevenue = reservations.reduce((sum, r) => sum + parseFloat(r.extras_total || 0), 0);
 
-      // Calculate occupied nights
       let occupiedNights = 0;
-      const startDate = new Date(start);
-      const endDate = new Date(end);
-
       reservations.forEach(r => {
-        const checkIn = new Date(r.check_in);
-        const checkOut = new Date(r.check_out);
-        const overlapStart = checkIn > startDate ? checkIn : startDate;
-        const overlapEnd = checkOut < endDate ? checkOut : endDate;
-        
-        if (overlapStart < overlapEnd) {
-          occupiedNights += Math.ceil((overlapEnd - overlapStart) / (1000 * 60 * 60 * 24));
-        }
+        if (!r.check_in || !r.check_out) return;
+        const ci = new Date(r.check_in + 'T00:00:00');
+        const co = new Date(r.check_out + 'T00:00:00');
+        const overlapStart = new Date(Math.max(ci.getTime(), start.getTime()));
+        const overlapEnd = new Date(Math.min(co.getTime(), end.getTime() + msPerDay));
+        occupiedNights += Math.max(0, (overlapEnd - overlapStart) / msPerDay);
       });
+      occupiedNights = Math.round(occupiedNights);
+
+      const occupancyRate = availableNights > 0 ? (occupiedNights / availableNights) * 100 : 0;
+      const adr = occupiedNights > 0 ? roomRevenue / occupiedNights : 0;
+      const revPAR = availableNights > 0 ? roomRevenue / availableNights : 0;
 
       return {
-        bookings,
-        revenue,
-        roomRevenue,
-        extrasRevenue,
-        occupiedNights,
-        currency: reservations[0]?.currency || "GBP",
+        bookings, revenue, roomRevenue, extrasRevenue, occupiedNights, availableNights,
+        occupancyRate, adr, revPAR,
+        currency: reservations[0]?.currency || "GHS",
       };
     }
 
-    const period1 = await getPeriodMetrics(period1_start, period1_end);
-    const period2 = await getPeriodMetrics(period2_start, period2_end);
+    const p1 = await getPeriodMetrics(period1_start, period1_end);
+    const p2 = await getPeriodMetrics(period2_start, period2_end);
 
-    // Calculate changes
-    const bookingsChange = period1.bookings > 0 ? ((period2.bookings - period1.bookings) / period1.bookings * 100) : 0;
-    const revenueChange = period1.revenue > 0 ? ((period2.revenue - period1.revenue) / period1.revenue * 100) : 0;
-    const nightsChange = period1.occupiedNights > 0 ? ((period2.occupiedNights - period1.occupiedNights) / period1.occupiedNights * 100) : 0;
-
-    const formatChange = (val) => {
-      const sign = val >= 0 ? '+' : '';
-      return `${sign}${val.toFixed(1)}%`;
-    };
+    const fmtChg = (v) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`;
+    const chg = (a, b) => a > 0 ? ((b - a) / a * 100) : 0;
+    const cur = p1.currency || p2.currency || "GHS";
 
     return `**Period Comparison**
 
-**Period 1:** ${period1_start} to ${period1_end}
-- Bookings: ${period1.bookings}
-- Revenue: ${period1.currency} ${period1.revenue.toFixed(2)}
-- Room Revenue: ${period1.currency} ${period1.roomRevenue.toFixed(2)}
-- Extras Revenue: ${period1.currency} ${period1.extrasRevenue.toFixed(2)}
-- Occupied Nights: ${period1.occupiedNights}
-
-**Period 2:** ${period2_start} to ${period2_end}
-- Bookings: ${period2.bookings}
-- Revenue: ${period2.currency} ${period2.revenue.toFixed(2)}
-- Room Revenue: ${period2.currency} ${period2.roomRevenue.toFixed(2)}
-- Extras Revenue: ${period2.currency} ${period2.extrasRevenue.toFixed(2)}
-- Occupied Nights: ${period2.occupiedNights}
-
-**Change:**
-- Bookings: ${formatChange(bookingsChange)}
-- Revenue: ${formatChange(revenueChange)}
-- Occupied Nights: ${formatChange(nightsChange)}
+| Metric | ${formatDate(period1_start)} – ${formatDate(period1_end)} | ${formatDate(period2_start)} – ${formatDate(period2_end)} | Change |
+|--------|--------|--------|--------|
+| Bookings | ${p1.bookings} | ${p2.bookings} | ${fmtChg(chg(p1.bookings, p2.bookings))} |
+| Total Revenue | ${cur} ${p1.revenue.toFixed(2)} | ${cur} ${p2.revenue.toFixed(2)} | ${fmtChg(chg(p1.revenue, p2.revenue))} |
+| Room Revenue | ${cur} ${p1.roomRevenue.toFixed(2)} | ${cur} ${p2.roomRevenue.toFixed(2)} | ${fmtChg(chg(p1.roomRevenue, p2.roomRevenue))} |
+| Extras Revenue | ${cur} ${p1.extrasRevenue.toFixed(2)} | ${cur} ${p2.extrasRevenue.toFixed(2)} | ${fmtChg(chg(p1.extrasRevenue, p2.extrasRevenue))} |
+| Occupied Nights | ${p1.occupiedNights} | ${p2.occupiedNights} | ${fmtChg(chg(p1.occupiedNights, p2.occupiedNights))} |
+| Occupancy Rate | ${p1.occupancyRate.toFixed(1)}% | ${p2.occupancyRate.toFixed(1)}% | ${fmtChg(p2.occupancyRate - p1.occupancyRate)} |
+| ADR | ${cur} ${(p1.adr||0).toFixed(2)} | ${cur} ${(p2.adr||0).toFixed(2)} | ${fmtChg(chg(p1.adr||0, p2.adr||0))} |
+| RevPAR | ${cur} ${(p1.revPAR||0).toFixed(2)} | ${cur} ${(p2.revPAR||0).toFixed(2)} | ${fmtChg(chg(p1.revPAR||0, p2.revPAR||0))} |
 `;
   },
 });
@@ -1868,6 +2195,7 @@ export const allTools = [
   // Reservations
   searchReservationsTool,
   getReservationDetailsTool,
+  createReservationTool,
   updateReservationStatusTool,
   updateReservationDetailsTool,
   cancelReservationTool,

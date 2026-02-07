@@ -1860,7 +1860,6 @@ async function renderOverrides(modelId, roomTypes) {
   const { data, error } = await supabase
     .from('pricing_overrides')
     .select('*')
-    .eq('pricing_model_id', modelId)
     .order('start_date', { ascending: false });
   
   if (error) {
@@ -1925,6 +1924,7 @@ async function renderOverrides(modelId, roomTypes) {
                     <tr style="background:#fafbfc">
                       <th style="padding:12px 20px;text-align:left;font-weight:600;color:#64748b;font-size:13px">Start Date</th>
                       <th style="padding:12px 20px;text-align:left;font-weight:600;color:#64748b;font-size:13px">End Date</th>
+                      <th style="padding:12px 20px;text-align:left;font-weight:600;color:#64748b;font-size:13px">Days</th>
                       <th style="padding:12px 20px;text-align:left;font-weight:600;color:#64748b;font-size:13px">Type</th>
                       <th style="padding:12px 20px;text-align:left;font-weight:600;color:#64748b;font-size:13px">Value</th>
                       <th style="padding:12px 20px;text-align:left;font-weight:600;color:#64748b;font-size:13px">Reason</th>
@@ -1934,10 +1934,12 @@ async function renderOverrides(modelId, roomTypes) {
                   <tbody>
                     ${roomRows.map(row => {
                       const value = row.override_type === 'fixed_price' ? `GHS ${row.fixed_price}` : `${row.multiplier}x`;
+                      const dayTypeLabel = row.day_type === 'weekday' ? '📅 Weekdays' : row.day_type === 'weekend' ? '🌙 Weekends' : '📆 All Days';
                       return `
                         <tr style="border-bottom:1px solid #f1f5f9">
                           <td style="padding:12px 20px;color:#334155">${row.start_date}</td>
                           <td style="padding:12px 20px;color:#334155">${row.end_date}</td>
+                          <td style="padding:12px 20px;color:#334155">${dayTypeLabel}</td>
                           <td style="padding:12px 20px;color:#334155">${row.override_type === 'fixed_price' ? 'Fixed Price' : 'Multiplier'}</td>
                           <td style="padding:12px 20px;color:#334155">${value}</td>
                           <td style="padding:12px 20px;color:#334155">${row.reason || '—'}</td>
@@ -2001,6 +2003,15 @@ function openOverrideModal(modelId, roomTypes, override) {
             </div>
           </div>
           <div class="form-group">
+            <label style="display:block;margin-bottom:6px;font-weight:600;color:#334155;font-size:13px;">Day Type *</label>
+            <select id="override-day-type" required style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;transition:all 0.2s;" onfocus="this.style.borderColor=\'#667eea\'" onblur="this.style.borderColor=\'#e2e8f0\'">
+              <option value="all" ${!override?.day_type || override?.day_type === 'all' ? 'selected' : ''}>All Days</option>
+              <option value="weekday" ${override?.day_type === 'weekday' ? 'selected' : ''}>Weekdays Only</option>
+              <option value="weekend" ${override?.day_type === 'weekend' ? 'selected' : ''}>Weekends Only</option>
+            </select>
+            <small style="color:#64748b">Choose which days within the date range this override applies to</small>
+          </div>
+          <div class="form-group">
             <label style="display:block;margin-bottom:6px;font-weight:600;color:#334155;font-size:13px;">Override Type *</label>
             <select id="override-type" required style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;transition:all 0.2s;" onfocus="this.style.borderColor=\'#667eea\'" onblur="this.style.borderColor=\'#e2e8f0\'">
               <option value="fixed_price" ${override?.override_type === 'fixed_price' ? 'selected' : ''}>Fixed Price</option>
@@ -2048,7 +2059,11 @@ function openOverrideModal(modelId, roomTypes, override) {
     }
   });
   
-  el('override-save')?.addEventListener('click', async () => {
+  const saveBtn = el('override-save');
+  console.log('🔍 Override save button found:', !!saveBtn);
+  
+  saveBtn?.addEventListener('click', async () => {
+    console.log('🔍 Override save clicked');
     try {
       const roomValue = el('override-room').value;
       const overrideType = el('override-type').value;
@@ -2060,6 +2075,7 @@ function openOverrideModal(modelId, roomTypes, override) {
         room_type_id: roomValue ? roomValue : null,
         start_date: el('override-start').value,
         end_date: el('override-end').value,
+        day_type: el('override-day-type')?.value || 'all',
         override_type: overrideType,
         fixed_price: overrideType === 'fixed_price' && fixedPrice ? parseFloat(fixedPrice) : null,
         multiplier: overrideType === 'multiplier' && multiplier ? parseFloat(multiplier) : null,
@@ -2068,19 +2084,31 @@ function openOverrideModal(modelId, roomTypes, override) {
         is_active: el('override-active').checked
       };
       
+      console.log('🔍 Override data to save:', JSON.stringify(data, null, 2));
+      
       if (!data.start_date || !data.end_date) throw new Error('Start and end dates are required');
       if (overrideType === 'fixed_price' && !data.fixed_price) throw new Error('Fixed price is required');
       if (overrideType === 'multiplier' && !data.multiplier) throw new Error('Multiplier is required');
       
       if (isEdit) {
-        await supabase.from('pricing_overrides').update(data).eq('id', override.id);
+        const { error } = await supabase.from('pricing_overrides').update(data).eq('id', override.id);
+        if (error) {
+          console.error('❌ Override update error:', error);
+          throw new Error(error.message);
+        }
       } else {
-        await supabase.from('pricing_overrides').insert(data);
+        const { error } = await supabase.from('pricing_overrides').insert(data);
+        if (error) {
+          console.error('❌ Override insert error:', error);
+          throw new Error(error.message);
+        }
       }
       
+      console.log('✅ Override saved successfully');
       wrap.remove();
       renderOverrides(modelId, roomTypes);
     } catch (e) {
+      console.error('❌ Override save failed:', e);
       showError('override-error', e);
     }
   });
@@ -2116,31 +2144,27 @@ function downloadTargetsTemplate(roomTypes) {
     ['- Each row represents one pricing target rule'],
     ['- room_code: Leave blank for "all rooms", or enter SAND/SEA/SUN for specific room'],
     ['- month: Enter month number (1-12)'],
-    ['- lead_window: Choose from: last_minute, walk_in, short_term, medium_term, long_term'],
     ['- target_occupancy: Target occupancy as decimal (0.75 = 75%)'],
     ['- target_revpan: Target revenue per available night (optional)'],
-    ['- occ_sensitivity: How sensitive to occupancy gaps (default 0.25)'],
-    ['- rev_sensitivity: How sensitive to revenue gaps (default 0.15)'],
-    ['- pace_sensitivity: How sensitive to pace gaps (default 0.25)'],
+    ['- sensitivity_up: Price increase sensitivity when above targets (0-1, default 0.25)'],
+    ['- sensitivity_down: Price decrease sensitivity when below targets (0-1, default 0.25)'],
     [],
-    ['room_code', 'month', 'lead_window', 'target_occupancy', 'target_revpan', 'occ_sensitivity', 'rev_sensitivity', 'pace_sensitivity'],
-    ['', 1, 'long_term', 0.60, 2500, 0.25, 0.15, 0.25],
-    ['', 1, 'medium_term', 0.70, 2700, 0.25, 0.15, 0.25],
-    ['', 1, 'short_term', 0.80, 3000, 0.30, 0.15, 0.25],
-    ['SAND', 7, 'walk_in', 0.85, 3200, 0.35, 0.20, 0.30],
-    ['', 7, 'last_minute', 0.90, 3500, 0.40, 0.20, 0.35],
+    ['room_code', 'month', 'target_occupancy', 'target_revpan', 'sensitivity_up', 'sensitivity_down'],
+    ['', 1, 0.60, 2500, 0.25, 0.25],
+    ['', 1, 0.70, 2700, 0.25, 0.25],
+    ['', 1, 0.80, 3000, 0.30, 0.25],
+    ['SAND', 7, 0.85, 3200, 0.35, 0.30],
+    ['', 7, 0.90, 3500, 0.40, 0.35],
   ];
 
   const targetsWS = XLSX.utils.aoa_to_sheet(targetsData);
   targetsWS['!cols'] = [
     { wch: 12 }, // room_code
     { wch: 8 },  // month
-    { wch: 15 }, // lead_window
     { wch: 18 }, // target_occupancy
     { wch: 15 }, // target_revpan
-    { wch: 16 }, // occ_sensitivity
-    { wch: 16 }, // rev_sensitivity
-    { wch: 16 }  // pace_sensitivity
+    { wch: 16 }, // sensitivity_up
+    { wch: 16 }  // sensitivity_down
   ];
 
   XLSX.utils.book_append_sheet(workbook, targetsWS, 'Targets');
@@ -2155,19 +2179,21 @@ function downloadTargetsTemplate(roomTypes) {
     ['- month: Enter month number (1-12)'],
     ['- lead_window: Choose from: last_minute, walk_in, short_term, medium_term, long_term'],
     ['- expected_otb_occ: Expected on-the-books occupancy at this lead time (0.40 = 40%)'],
+    ['- pace_sensitivity_up: Price increase sensitivity when ahead of pace (0-1, default 0.25)'],
+    ['- pace_sensitivity_down: Price decrease sensitivity when behind pace (0-1, default 0.25)'],
     ['- You need one row per room/month/window combination'],
     [],
-    ['room_code', 'month', 'lead_window', 'expected_otb_occ'],
-    ['SAND', 1, 'long_term', 0.30],
-    ['SAND', 1, 'medium_term', 0.45],
-    ['SAND', 1, 'short_term', 0.60],
-    ['SAND', 1, 'walk_in', 0.75],
-    ['SAND', 1, 'last_minute', 0.85],
-    ['SEA', 7, 'long_term', 0.50],
-    ['SEA', 7, 'medium_term', 0.65],
-    ['SEA', 7, 'short_term', 0.75],
-    ['SEA', 7, 'walk_in', 0.85],
-    ['SEA', 7, 'last_minute', 0.90],
+    ['room_code', 'month', 'lead_window', 'expected_otb_occ', 'pace_sensitivity_up', 'pace_sensitivity_down'],
+    ['SAND', 1, 'long_term', 0.30, 0.25, 0.25],
+    ['SAND', 1, 'medium_term', 0.45, 0.25, 0.25],
+    ['SAND', 1, 'short_term', 0.60, 0.25, 0.25],
+    ['SAND', 1, 'walk_in', 0.75, 0.25, 0.25],
+    ['SAND', 1, 'last_minute', 0.85, 0.25, 0.25],
+    ['SEA', 7, 'long_term', 0.50, 0.25, 0.25],
+    ['SEA', 7, 'medium_term', 0.65, 0.25, 0.25],
+    ['SEA', 7, 'short_term', 0.75, 0.25, 0.25],
+    ['SEA', 7, 'walk_in', 0.85, 0.25, 0.25],
+    ['SEA', 7, 'last_minute', 0.90, 0.25, 0.25],
   ];
 
   const paceWS = XLSX.utils.aoa_to_sheet(paceData);
@@ -2175,7 +2201,9 @@ function downloadTargetsTemplate(roomTypes) {
     { wch: 12 }, // room_code
     { wch: 8 },  // month
     { wch: 15 }, // lead_window
-    { wch: 18 }  // expected_otb_occ
+    { wch: 18 }, // expected_otb_occ
+    { wch: 20 }, // pace_sensitivity_up
+    { wch: 20 }  // pace_sensitivity_down
   ];
 
   XLSX.utils.book_append_sheet(workbook, paceWS, 'Pace Curves');
@@ -2207,14 +2235,19 @@ async function processTargetsUpload(modelId, roomTypes) {
     let paceSuccess = 0;
     let paceErrors = [];
 
+    const hasTargetsSheet = workbook.SheetNames.includes('Targets');
+    const hasPaceSheet = workbook.SheetNames.includes('Pace Curves');
+
     // Process Targets Sheet
-    if (workbook.SheetNames.includes('Targets')) {
+    if (hasTargetsSheet) {
       const targetsSheet = workbook.Sheets['Targets'];
       const targetsJson = XLSX.utils.sheet_to_json(targetsSheet);
 
+      // Parse and validate all rows first
+      const validTargets = [];
       for (const row of targetsJson) {
         // Skip instruction rows
-        if (!row.month || !row.lead_window) continue;
+        if (!row.month) continue;
 
         // Find room type ID
         let roomTypeId = null;
@@ -2232,21 +2265,12 @@ async function processTargetsUpload(modelId, roomTypes) {
           pricing_model_id: modelId,
           room_type_id: roomTypeId,
           month: parseInt(row.month),
-          lead_window: row.lead_window?.toString().trim().toLowerCase(),
           target_occupancy: parseFloat(row.target_occupancy),
           target_revpan: row.target_revpan ? parseFloat(row.target_revpan) : null,
-          occ_sensitivity: parseFloat(row.occ_sensitivity || 0.25),
-          rev_sensitivity: parseFloat(row.rev_sensitivity || 0.15),
-          pace_sensitivity: parseFloat(row.pace_sensitivity || 0.25),
+          sensitivity_up: parseFloat(row.sensitivity_up || 0.25),
+          sensitivity_down: parseFloat(row.sensitivity_down || 0.25),
           is_active: true
         };
-
-        // Validate lead_window
-        const validWindows = ['last_minute', 'walk_in', 'short_term', 'medium_term', 'long_term'];
-        if (!validWindows.includes(targetData.lead_window)) {
-          targetsErrors.push(`Invalid lead_window: "${row.lead_window}". Must be one of: ${validWindows.join(', ')}`);
-          continue;
-        }
 
         // Validate month
         if (targetData.month < 1 || targetData.month > 12) {
@@ -2260,22 +2284,39 @@ async function processTargetsUpload(modelId, roomTypes) {
           continue;
         }
 
-        // Insert into database
-        const { error } = await supabase.from('pricing_targets').insert(targetData);
-        
-        if (error) {
-          targetsErrors.push(`Row ${targetsJson.indexOf(row) + 1}: ${error.message}`);
+        validTargets.push(targetData);
+      }
+
+      // Delete existing targets for this model, then insert new ones
+      if (validTargets.length > 0) {
+        const { error: deleteError } = await supabase
+          .from('pricing_targets')
+          .delete()
+          .eq('pricing_model_id', modelId);
+
+        if (deleteError) {
+          targetsErrors.push(`Failed to clear existing targets: ${deleteError.message}`);
         } else {
-          targetsSuccess++;
+          const { error: insertError } = await supabase
+            .from('pricing_targets')
+            .insert(validTargets);
+
+          if (insertError) {
+            targetsErrors.push(`Failed to insert targets: ${insertError.message}`);
+          } else {
+            targetsSuccess = validTargets.length;
+          }
         }
       }
     }
 
     // Process Pace Curves Sheet
-    if (workbook.SheetNames.includes('Pace Curves')) {
+    if (hasPaceSheet) {
       const paceSheet = workbook.Sheets['Pace Curves'];
       const paceJson = XLSX.utils.sheet_to_json(paceSheet);
 
+      // Parse and validate all rows first
+      const validPaceCurves = [];
       for (const row of paceJson) {
         // Skip instruction rows
         if (!row.room_code || !row.month || !row.lead_window) continue;
@@ -2294,6 +2335,8 @@ async function processTargetsUpload(modelId, roomTypes) {
           month: parseInt(row.month),
           lead_window: row.lead_window?.toString().trim().toLowerCase(),
           expected_otb_occ: parseFloat(row.expected_otb_occ),
+          pace_sensitivity_up: parseFloat(row.pace_sensitivity_up || 0.25),
+          pace_sensitivity_down: parseFloat(row.pace_sensitivity_down || 0.25),
           is_active: true
         };
 
@@ -2316,13 +2359,28 @@ async function processTargetsUpload(modelId, roomTypes) {
           continue;
         }
 
-        // Insert into database
-        const { error } = await supabase.from('pricing_pace_curves').insert(paceData);
-        
-        if (error) {
-          paceErrors.push(`Row ${paceJson.indexOf(row) + 1}: ${error.message}`);
+        validPaceCurves.push(paceData);
+      }
+
+      // Delete existing pace curves for this model, then insert new ones
+      if (validPaceCurves.length > 0) {
+        const { error: deleteError } = await supabase
+          .from('pricing_pace_curves')
+          .delete()
+          .eq('pricing_model_id', modelId);
+
+        if (deleteError) {
+          paceErrors.push(`Failed to clear existing pace curves: ${deleteError.message}`);
         } else {
-          paceSuccess++;
+          const { error: insertError } = await supabase
+            .from('pricing_pace_curves')
+            .insert(validPaceCurves);
+
+          if (insertError) {
+            paceErrors.push(`Failed to insert pace curves: ${insertError.message}`);
+          } else {
+            paceSuccess = validPaceCurves.length;
+          }
         }
       }
     }
@@ -2370,10 +2428,11 @@ async function processTargetsUpload(modelId, roomTypes) {
     fileInput.value = '';
     el('process-targets-upload').style.display = 'none';
 
-    // Refresh the targets display
+    // Refresh the displays
     if (targetsSuccess > 0 || paceSuccess > 0) {
       setTimeout(() => {
-        renderTargets(modelId, roomTypes);
+        if (targetsSuccess > 0) renderTargets(modelId, roomTypes);
+        if (paceSuccess > 0) renderPaceCurves(modelId, roomTypes);
       }, 2000);
     }
 
