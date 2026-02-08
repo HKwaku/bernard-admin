@@ -81,6 +81,12 @@ function markdownToHtml(text) {
     result = result.replace(`__HTML_BLOCK_${i}__`, block);
   });
 
+  // Clean up <br> tags adjacent to block-level HTML elements (tables, divs, uls)
+  result = result.replace(/(<br\s*\/?>)+\s*(<table|<div|<ul)/gi, '$2');
+  result = result.replace(/(<\/table>|<\/div>|<\/ul>)\s*(<br\s*\/?>)+/gi, '$1');
+  // Collapse multiple consecutive <br> into max 2
+  result = result.replace(/(<br\s*\/?>){3,}/gi, '<br><br>');
+
   return result;
 }
 
