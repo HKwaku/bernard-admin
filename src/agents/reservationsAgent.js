@@ -15,6 +15,7 @@ import {
   checkAvailabilityTool,
   listExtrasTool,
   sendBookingEmailTool,
+  listRoomsTool,
 } from "../bernardTools.js";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY });
@@ -32,6 +33,7 @@ const toolMap = {
   check_availability: checkAvailabilityTool,
   list_extras: listExtrasTool,
   send_booking_email: sendBookingEmailTool,
+  list_room_types: listRoomsTool,
 };
 
 const tools = [
@@ -75,7 +77,7 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
-          room_code: { type: "string", description: "Room code: SAND, PALM, or COCO" },
+          room_code: { type: "string", description: "Room code as returned by list_room_types (e.g., 'SAND')" },
           check_in: { type: "string", description: "Check-in date (YYYY-MM-DD)" },
           check_out: { type: "string", description: "Check-out date (YYYY-MM-DD)" }
         },
@@ -113,7 +115,7 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
-          room_code: { type: "string", description: "Room code: SAND, PALM, or COCO" },
+          room_code: { type: "string", description: "Room code as returned by list_room_types (e.g., 'SAND')" },
           check_in: { type: "string", description: "Check-in date (YYYY-MM-DD)" },
           check_out: { type: "string", description: "Check-out date (YYYY-MM-DD)" },
           guest_first_name: { type: "string", description: "Guest first name" },
@@ -218,6 +220,14 @@ const tools = [
       parameters: { type: "object", properties: {}, required: [] }
     }
   },
+  {
+    type: "function",
+    function: {
+      name: "list_room_types",
+      description: "List all available rooms/cabins with their codes, names, pricing, and capacity. Call this when you need to know what rooms exist or to show the user the available options.",
+      parameters: { type: "object", properties: {}, required: [] }
+    }
+  },
 ];
 
 const MUTATING = new Set([
@@ -245,7 +255,8 @@ const SYSTEM_PROMPT = `You are the Reservations Agent for Sojourn Cabins admin d
 You specialize in managing guest reservations, check-ins, check-outs, room availability, and creating new bookings.
 
 Today's date is: ${today}
-The property has 3 cabins: Sand Cabin (SAND), Palm Cabin (PALM), Coconut Cabin (COCO).
+
+IMPORTANT: Do NOT assume or hardcode room/cabin names. ALWAYS call list_room_types to get the actual available rooms from the database when you need to present options to the user.
 
 === VIEWING RESERVATIONS ===
 - When user asks for reservations in a period (e.g., "February reservations"), use start_date and end_date parameters
@@ -257,9 +268,9 @@ The property has 3 cabins: Sand Cabin (SAND), Palm Cabin (PALM), Coconut Cabin (
 When a user wants to book/reserve a cabin, guide them step-by-step. Do NOT ask for everything at once.
 
 **Step 1 — Cabin & Dates:**
-If user provides a cabin and dates (e.g., "book Sand for Dec 1"), immediately check availability first.
-If they only say "make a booking", ask: "Which cabin (Sand, Palm, or Coconut) and what dates?"
-If user provides a name that doesn't match exactly (e.g., "SUN" instead of "SAND"), try to match it to the closest cabin. If unsure, ask for clarification listing the exact cabin names: Sand Cabin (SAND), Palm Cabin (PALM), Coconut Cabin (COCO).
+If user provides a cabin and dates, first call list_room_types to verify the room exists, then check availability.
+If user only says "make a booking", call list_room_types to get the actual rooms from the database, then ask which one and what dates.
+If user provides a room name that doesn't match any room code exactly, call list_room_types to find the closest match. If unsure, show the user the actual available rooms from the database.
 
 **Step 2 — Check Availability:**
 ALWAYS call check_availability before proceeding. If not available, suggest alternative dates or cabins.
@@ -293,13 +304,13 @@ IMPORTANT: Remember information the user provides across messages. Build up the 
 - When showing a booking summary, use a clear structured format like:
 
 **Booking Confirmation**
-- **Confirmation Code**: B3FZ00M5QAQ
-- **Cabin**: Sand Cabin (SAND)
+- **Confirmation Code**: [code]
+- **Cabin**: [room name from database]
 - **Check-in**: 07 Dec 2026
 - **Check-out**: 09 Dec 2026
-- **Guest**: Sheila Ohene
-- **Email**: guest@email.com
-- **Total**: GHS 7,550.00
+- **Guest**: [name]
+- **Email**: [email]
+- **Total**: GHS [amount]
 
 - Show HTML tables returned by tools directly — do NOT reformat or rewrite them as text
 - When tool returns an HTML table, include it as-is in your response

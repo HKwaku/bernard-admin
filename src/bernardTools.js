@@ -153,7 +153,7 @@ export const getRoomDetailsTool = tool({
   name: "get_room_type_details",
   description: "Get full details of a specific room type by code or ID.",
   schema: z.object({
-    identifier: z.string().describe("Room code (e.g., 'SAND') or room ID")
+    identifier: z.string().describe("Room code or room ID")
   }),
   async func({ identifier }) {
     // Try by code first, then by ID
@@ -1206,7 +1206,7 @@ export const createReservationTool = tool({
   name: "create_reservation",
   description: "Create a new reservation. MUST check availability first using check_availability. Requires: room_code, check_in, check_out, guest_first_name, guest_last_name, guest_email. Optional: guest_phone, adults, children, notes, extras, coupon_code. The tool handles pricing calculation automatically.",
   schema: z.object({
-    room_code: z.string().describe("Room code (e.g., 'SAND', 'PALM', 'COCO')"),
+    room_code: z.string().describe("Room code as found in the room_types table"),
     check_in: z.string().describe("Check-in date (YYYY-MM-DD)"),
     check_out: z.string().describe("Check-out date (YYYY-MM-DD)"),
     guest_first_name: z.string().describe("Guest first name"),

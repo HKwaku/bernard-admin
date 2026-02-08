@@ -51,12 +51,12 @@ FORMATTING:
 - Use bullet lists (- item) for breakdowns
 - When showing pricing, use a structured format like:
 
-**Price Simulation — Sand Cabin**
-- **Check-in**: 07 Dec 2026
-- **Check-out**: 09 Dec 2026 (2 nights)
-- **Weekday Rate**: GHS 2,500.00
-- **Weekend Rate**: GHS 3,000.00
-- **Total**: GHS 5,500.00
+**Price Simulation — [Room Name]**
+- **Check-in**: [date]
+- **Check-out**: [date] ([n] nights)
+- **Weekday Rate**: GHS [amount]
+- **Weekend Rate**: GHS [amount]
+- **Total**: GHS [amount]
 
 - Show HTML tables returned by tools directly — do NOT reformat them
 - When tool returns an HTML table, include it as-is in your response

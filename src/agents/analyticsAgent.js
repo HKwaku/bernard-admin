@@ -29,7 +29,7 @@ const tools = [
         properties: {
           start_date: { type: "string", description: "Start date (YYYY-MM-DD). Defaults to 1st of current month." },
           end_date: { type: "string", description: "End date (YYYY-MM-DD). Defaults to last day of current month." },
-          room_code: { type: "string", description: "Optional: specific room code (e.g., SAND, PALM, COCO)" }
+          room_code: { type: "string", description: "Optional: specific room code from the database" }
         },
         required: []
       }
@@ -107,7 +107,7 @@ You specialize in occupancy analysis, revenue reporting, client analytics, and p
 Today's date is: ${today}
 Current month range: ${currentMonthStart} to ${currentMonthEnd}
 
-The property has 3 cabins: Sand (SAND), Palm (PALM), Coconut (COCO).
+IMPORTANT: Do NOT assume or hardcode room/cabin names. The actual rooms are in the database. Use room_code parameter when a specific room is requested.
 
 CAPABILITIES:
 - Occupancy statistics: rate, nights sold, available nights, blocked nights, ALOS, per-room breakdown
@@ -118,7 +118,7 @@ CAPABILITIES:
 HOW THE CALCULATIONS WORK (for accurate context when explaining results):
 - Occupancy uses OVERLAP DETECTION: reservations whose stay period touches the date range are counted
 - Occupied nights are clipped to the period boundaries (a 5-night stay spanning a month boundary only counts nights within the range)
-- Available nights = (days in period × 3 cabins) minus blocked nights
+- Available nights = (days in period × number of rooms) minus blocked nights
 - Occupancy Rate = occupied nights / available nights × 100
 - ADR = room revenue / occupied nights
 - RevPAR = room revenue / available nights
