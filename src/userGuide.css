@@ -125,6 +125,7 @@
   white-space: nowrap;
   transition: all 0.15s;
   font-family: inherit;
+  flex-shrink: 0;
 }
 
 .guide-nav-btn:hover {
