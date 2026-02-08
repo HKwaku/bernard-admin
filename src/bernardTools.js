@@ -321,10 +321,12 @@ export const listExtrasTool = tool({
     return formatTable(
       data.map(e => ({
         ID: e.id,
+        Code: e.code || '—',
         Name: e.name,
         Category: e.category || "N/A",
         Price: `${e.currency || 'GHS'} ${e.price}`,
         "Unit Type": e.unit_type?.replace(/_/g, ' ') || 'per booking',
+        "Needs Selection": e.needs_selection ? "✓" : "✗",
         Active: e.is_active ? "✓" : "✗",
       })),
       { minWidth: "480px" }
@@ -356,9 +358,11 @@ export const getExtraDetailsTool = tool({
     const extra = data[0];
 
     return `
-**${extra.name}**
+**${extra.name}** (${extra.code || '—'})
+- **Code**: ${extra.code || '—'}
 - **Category**: ${extra.category || 'N/A'}
 - **Price**: ${extra.currency || 'GHS'} ${extra.price} ${extra.unit_type?.replace(/_/g, ' ') || 'per booking'}
+- **Needs Selection**: ${extra.needs_selection ? 'Yes ✓' : 'No'}
 - **Status**: ${extra.is_active ? 'Active ✓' : 'Inactive ✗'}
 - **Description**: ${extra.description || 'N/A'}
 - **Extra ID**: ${extra.id}
@@ -371,29 +375,34 @@ export const createExtraTool = tool({
   description: "Create a new extra/add-on. Requires explicit user confirmation before executing.",
   schema: z.object({
     name: z.string().describe("Extra name (e.g., 'Airport Transfer')"),
+    code: z.string().describe("Unique code for the extra (e.g., 'AIRPORT_TRANSFER')"),
     category: z.string().optional().describe("Category (e.g., 'Transport', 'Food', 'Activity')"),
     description: z.string().optional().describe("Description"),
     price: z.number().describe("Price amount"),
-    currency: z.string().default("GBP").describe("Currency code"),
+    currency: z.string().default("GHS").describe("Currency code"),
     unit_type: z.enum(["per_booking", "per_night", "per_person", "per_person_per_night"]).default("per_booking"),
     is_active: z.boolean().default(true),
+    needs_selection: z.boolean().default(false).describe("Whether the guest needs to make a selection for this extra (e.g., choosing a date/time)"),
   }),
   async func(input) {
     const { error } = await supabase.from("extras").insert({
       name: input.name,
+      code: input.code.toUpperCase(),
       category: input.category || null,
       description: input.description || null,
       price: input.price,
       currency: input.currency,
       unit_type: input.unit_type,
       is_active: input.is_active,
+      needs_selection: input.needs_selection,
     });
 
     if (error) return `Error creating extra: ${error.message}`;
 
-    return `✓ Extra "${input.name}" created successfully!
+    return `✓ Extra "${input.name}" (${input.code.toUpperCase()}) created successfully!
 - Price: ${input.currency} ${input.price} ${input.unit_type.replace(/_/g, ' ')}
 - Category: ${input.category || 'N/A'}
+- Needs Selection: ${input.needs_selection ? 'Yes' : 'No'}
 - Status: ${input.is_active ? 'Active' : 'Inactive'}`;
   },
 });
@@ -405,23 +414,27 @@ export const updateExtraTool = tool({
     identifier: z.string().describe("Extra name or ID"),
     updates: z.object({
       name: z.string().optional(),
+      code: z.string().optional().describe("Unique code for the extra"),
       category: z.string().optional(),
       description: z.string().optional(),
       price: z.number().optional(),
       currency: z.string().optional(),
       unit_type: z.enum(["per_booking", "per_night", "per_person", "per_person_per_night"]).optional(),
       is_active: z.boolean().optional(),
+      needs_selection: z.boolean().optional().describe("Whether the guest needs to make a selection for this extra"),
     }),
   }),
   async func({ identifier, updates }) {
     const payload = {};
     if (updates.name) payload.name = updates.name;
+    if (updates.code) payload.code = updates.code.toUpperCase();
     if (updates.category !== undefined) payload.category = updates.category;
     if (updates.description !== undefined) payload.description = updates.description;
     if (updates.price) payload.price = updates.price;
     if (updates.currency) payload.currency = updates.currency;
     if (updates.unit_type) payload.unit_type = updates.unit_type;
     if (updates.is_active !== undefined) payload.is_active = updates.is_active;
+    if (updates.needs_selection !== undefined) payload.needs_selection = updates.needs_selection;
 
     let query = supabase.from("extras").update(payload);
     
@@ -1483,11 +1496,12 @@ const SOJOURN_API_BASE_URL = 'https://sojourn-cabins.vercel.app';
 
 export const sendBookingEmailTool = tool({
   name: "send_booking_email",
-  description: "Send a booking confirmation email to the guest. Requires the reservation confirmation code. Fetches all reservation details from the database and sends via the Sojourn email API.",
+  description: "Send booking emails to the guest. Can send: 'confirmation' (booking confirmation), 'extras' (extras selection email), or 'both'. Defaults to 'both'.",
   schema: z.object({
-    confirmation_code: z.string().describe("The reservation confirmation code (e.g., 'B3FZ00M5QAQ')"),
+    confirmation_code: z.string().describe("The reservation confirmation code"),
+    email_type: z.enum(["confirmation", "extras", "both"]).default("both").describe("Which email to send: 'confirmation', 'extras', or 'both' (default)"),
   }),
-  async func({ confirmation_code }) {
+  async func({ confirmation_code, email_type = "both" }) {
     // Fetch reservation
     const { data: res, error } = await supabase
       .from("reservations")
@@ -1559,43 +1573,54 @@ export const sendBookingEmailTool = tool({
       },
     };
 
-    // Send confirmation email
-    try {
-      const emailResp = await fetch(`${SOJOURN_API_BASE_URL}/api/send-booking-email`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(emailData),
-      });
-
-      if (!emailResp.ok) {
-        const errText = await emailResp.text().catch(() => '');
-        return `✗ Failed to send confirmation email (${emailResp.status}): ${errText}`;
-      }
-    } catch (err) {
-      return `✗ Failed to send confirmation email: ${err.message}`;
-    }
-
-    // Send extras selection email if applicable
+    const results = [];
     const hasExtrasNeedingSelection = extras.some(e => e.needs_selection);
-    if (hasExtrasNeedingSelection) {
+
+    // Send confirmation email
+    if (email_type === "confirmation" || email_type === "both") {
       try {
-        const extrasLink = `${SOJOURN_API_BASE_URL}/extra-selections?code=${encodeURIComponent(confirmation_code)}`;
-        await fetch(`${SOJOURN_API_BASE_URL}/api/send-extra-selections-email`, {
+        const emailResp = await fetch(`${SOJOURN_API_BASE_URL}/api/send-booking-email`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ booking: emailData.booking, extrasLink }),
+          body: JSON.stringify(emailData),
         });
+
+        if (!emailResp.ok) {
+          const errText = await emailResp.text().catch(() => '');
+          return `✗ Failed to send confirmation email (${emailResp.status}): ${errText}`;
+        }
+        results.push(`✓ Confirmation email sent to ${res.guest_email} for booking ${confirmation_code}.`);
       } catch (err) {
-        // Non-critical, log but don't fail
-        console.error('Failed to send extras selection email:', err);
+        return `✗ Failed to send confirmation email: ${err.message}`;
       }
     }
 
-    let result = `✓ Confirmation email sent to ${res.guest_email} for booking ${confirmation_code}.`;
-    if (hasExtrasNeedingSelection) {
-      result += `\n✓ Extras selection email also sent.`;
+    // Send extras selection email
+    if (email_type === "extras" || email_type === "both") {
+      if (!hasExtrasNeedingSelection && email_type === "extras") {
+        results.push(`⚠ No extras requiring guest selection found on this booking.`);
+      } else if (hasExtrasNeedingSelection) {
+        try {
+          const extrasLink = `${SOJOURN_API_BASE_URL}/extra-selections?code=${encodeURIComponent(confirmation_code)}`;
+          const extrasResp = await fetch(`${SOJOURN_API_BASE_URL}/api/send-extra-selections-email`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ booking: emailData.booking, extrasLink }),
+          });
+
+          if (!extrasResp.ok) {
+            const errText = await extrasResp.text().catch(() => '');
+            results.push(`✗ Failed to send extras selection email (${extrasResp.status}): ${errText}`);
+          } else {
+            results.push(`✓ Extras selection email sent to ${res.guest_email}.`);
+          }
+        } catch (err) {
+          results.push(`✗ Failed to send extras selection email: ${err.message}`);
+        }
+      }
     }
-    return result;
+
+    return results.join('\n');
   },
 });
 

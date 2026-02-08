@@ -34,7 +34,7 @@ export async function initExtras() {
       <div class="item">
         <div class="row" style="align-items:flex-start;gap:12px">
           <div style="flex:1">
-            <div class="title">${x.name || ''}</div>
+            <div class="title">${x.name || ''} <span style="font-size:0.75rem;color:#6b7280;font-weight:400">(${x.code || '—'})</span></div>
             <div class="meta">${x.category || ''}</div>
             ${x.description ? `<div class="meta" style="margin-top:6px;color:#6b7280">${x.description}</div>` : ''}
             <div class="meta" style="margin-top:8px">
@@ -88,8 +88,22 @@ function openExtraModal(id = null) {
             <input id="e-name" required />
           </div>
           <div class="form-group">
+            <label>Code *</label>
+            <input id="e-code" required placeholder="e.g., AIRPORT_TRANSFER" style="text-transform:uppercase" />
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
             <label>Category</label>
             <input id="e-category" placeholder="e.g., Food, Activity, Service" />
+          </div>
+          <div class="form-group">
+            <label>Needs Guest Selection</label>
+            <select id="e-needs-selection">
+              <option value="false" selected>No</option>
+              <option value="true">Yes</option>
+            </select>
           </div>
         </div>
 
@@ -106,10 +120,10 @@ function openExtraModal(id = null) {
           <div class="form-group">
             <label>Currency</label>
             <select id="e-currency">
+              <option value="GHS">GHS (₵)</option>
               <option value="GBP">GBP (£)</option>
               <option value="USD">USD ($)</option>
               <option value="EUR">EUR (€)</option>
-              <option value="GHS">GHS (₵)</option>
             </select>
           </div>
         </div>
@@ -176,24 +190,28 @@ function openExtraModal(id = null) {
 function collectExtraForm() {
   const root = document.getElementById('extra-modal') || document;
   const name = root.querySelector('#e-name').value.trim();
+  const code = root.querySelector('#e-code').value.trim().toUpperCase();
   const category = root.querySelector('#e-category').value.trim() || null;
   const description = root.querySelector('#e-desc').value.trim() || null;
   const price = parseFloat(root.querySelector('#e-price').value);
   const currency = root.querySelector('#e-currency').value;
   const unit_type = root.querySelector('#e-unit-type').value;
   const active = root.querySelector('#e-active').value === 'true';
+  const needs_selection = root.querySelector('#e-needs-selection').value === 'true';
 
-  if (!name || Number.isNaN(price)) {
-    throw new Error('Name and Price are required.');
+  if (!name || !code || Number.isNaN(price)) {
+    throw new Error('Name, Code, and Price are required.');
   }
   return {
     name,
+    code,
     category,
     description,
     price,
     currency,
     unit_type,
-    is_active: active     // map local `active` to DB column
+    is_active: active,
+    needs_selection
   };
 }
 
@@ -207,12 +225,14 @@ async function fillExtraForm(id) {
   const e = data;
   const root = document.getElementById('extra-modal') || document;
   root.querySelector('#e-name').value = e.name || '';
+  root.querySelector('#e-code').value = e.code || '';
   root.querySelector('#e-category').value = e.category || '';
   root.querySelector('#e-desc').value = e.description || '';
   root.querySelector('#e-price').value = e.price ?? '';
-  root.querySelector('#e-currency').value = e.currency || 'GBP';
+  root.querySelector('#e-currency').value = e.currency || 'GHS';
   root.querySelector('#e-unit-type').value = e.unit_type || 'per_booking';
   root.querySelector('#e-active').value = (e.is_active !== false) ? 'true' : 'false';
+  root.querySelector('#e-needs-selection').value = e.needs_selection ? 'true' : 'false';
 }
 
 async function toggleExtraStatus(id, currentStatus) {

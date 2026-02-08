@@ -97,11 +97,12 @@ const tools = [
     type: "function",
     function: {
       name: "send_booking_email",
-      description: "Send a booking confirmation email (and extras selection email if applicable) to the guest. Call this after a reservation is created, or when the user asks to send/resend a confirmation email.",
+      description: "Send booking emails to the guest. Can send confirmation email, extras selection email, or both. Use email_type='extras' when the user specifically asks to send the extras selection email.",
       parameters: {
         type: "object",
         properties: {
-          confirmation_code: { type: "string", description: "The reservation confirmation code" }
+          confirmation_code: { type: "string", description: "The reservation confirmation code" },
+          email_type: { type: "string", enum: ["confirmation", "extras", "both"], description: "Which email to send: 'confirmation' for booking confirmation only, 'extras' for extras selection email only, 'both' for both (default)" }
         },
         required: ["confirmation_code"]
       }
@@ -290,10 +291,14 @@ Ask: "How many adults and children? Any special requests or notes?"
 **Step 7 — Confirm & Create:**
 Summarize the booking details and ask: "Shall I create this reservation?" When they confirm, call create_reservation with all collected information.
 
-**Step 8 — Send Confirmation Email:**
+**Step 8 — Send Emails:**
 After a reservation is created successfully, ask: "Would you like me to send a confirmation email to the guest?"
-If the user says yes, call send_booking_email with the confirmation_code from the reservation.
+If the user says yes, call send_booking_email with the confirmation_code and email_type="both".
+- For just the booking confirmation: email_type="confirmation"
+- For just the extras selection email: email_type="extras"
+- For both: email_type="both" (default)
 You can also send/resend emails for existing reservations when asked — just use the confirmation code.
+When user specifically asks to "send extras selection email" or "send extras email", use email_type="extras".
 
 IMPORTANT: Remember information the user provides across messages. Build up the booking details progressively. You have access to the full conversation history.
 
