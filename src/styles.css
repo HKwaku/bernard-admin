@@ -615,8 +615,8 @@ label {
 }
 
 .msg.bot .bubble ul {
-  list-style: disc;
-  padding-left: 20px;
+  list-style: disc inside;
+  padding-left: 8px;
   margin: 6px 0;
 }
 
