@@ -15,7 +15,7 @@ function markdownToHtml(text) {
   if (!text || typeof text !== "string") return text;
 
   // Don't process if it's already mostly HTML (has table tags, div tags, etc.)
-  const htmlTagCount = (text.match(/<\/?(?:table|div|span|strong|br|ul|ol|li|h[1-6])\b/gi) || []).length;
+  const htmlTagCount = (text.match(/<\/?(?:table|thead|tbody|tr|th|td|div|span|strong|br|ul|ol|li|h[1-6])\b/gi) || []).length;
   const mdMarkerCount = (text.match(/\*\*|^- |^#{1,3} /gm) || []).length;
 
   // If it already has lots of HTML and few markdown markers, skip conversion
