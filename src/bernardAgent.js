@@ -81,7 +81,7 @@ AGENT DOMAINS:
 
 ROUTING RULES:
 - "show rooms" / "create a package" / "update extra" / "list coupons" → inventory
-- "find reservation" / "book a cabin" / "make a booking" / "reserve sand" / "check-ins today" / "cancel booking" / "is SAND available" → reservations
+- "find reservation" / "book a cabin" / "make a booking" / "reserve sand" / "check-ins today" / "cancel booking" / "is SAND available" / "send confirmation email" / "send booking email" / "resend email" → reservations
 - "occupancy this month" / "revenue stats" / "top clients" / "compare Q1 vs Q2" → analytics
 - "show pricing models" / "simulate price" / "seasonal rates" → pricing
 

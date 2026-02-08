@@ -7,8 +7,88 @@ import { $, addMessage, showTyping, hideTyping } from './utils/helpers.js';
    UI HELPERS
 ----------------------------*/
 
+/**
+ * Convert markdown-like text from agent responses into readable HTML.
+ * Handles: **bold**, headers, lists, line breaks, and preserves existing HTML.
+ */
+function markdownToHtml(text) {
+  if (!text || typeof text !== "string") return text;
+
+  // Don't process if it's already mostly HTML (has table tags, div tags, etc.)
+  const htmlTagCount = (text.match(/<\/?(?:table|div|span|strong|br|ul|ol|li|h[1-6])\b/gi) || []).length;
+  const mdMarkerCount = (text.match(/\*\*|^- |^#{1,3} /gm) || []).length;
+
+  // If it already has lots of HTML and few markdown markers, skip conversion
+  if (htmlTagCount > 5 && mdMarkerCount < 3) return text;
+
+  let result = text;
+
+  // Protect existing HTML tags from being broken
+  const htmlBlocks = [];
+  result = result.replace(/<[^>]+>[\s\S]*?<\/[^>]+>/g, (match) => {
+    htmlBlocks.push(match);
+    return `__HTML_BLOCK_${htmlBlocks.length - 1}__`;
+  });
+  // Also protect self-closing / void tags
+  result = result.replace(/<[^>]+\/?>(?![\s\S]*<\/)/g, (match) => {
+    htmlBlocks.push(match);
+    return `__HTML_BLOCK_${htmlBlocks.length - 1}__`;
+  });
+
+  // Headers: ## Header → <strong style="...">Header</strong>
+  result = result.replace(/^### (.+)$/gm, '<strong style="font-size:0.95em;display:block;margin:12px 0 4px">$1</strong>');
+  result = result.replace(/^## (.+)$/gm, '<strong style="font-size:1.05em;display:block;margin:14px 0 6px">$1</strong>');
+
+  // Bold: **text** → <strong>text</strong>
+  result = result.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+  // Italic: *text* → <em>text</em> (but not inside HTML attributes)
+  result = result.replace(/(?<!\w)\*([^*]+)\*(?!\w)/g, '<em>$1</em>');
+
+  // Bullet lists: lines starting with "- " → <li>
+  // Group consecutive list items into <ul>
+  result = result.replace(/((?:^- .+\n?)+)/gm, (block) => {
+    const items = block.trim().split('\n')
+      .filter(line => line.trim().startsWith('- '))
+      .map(line => `<li style="margin:2px 0;padding-left:4px">${line.replace(/^- /, '').trim()}</li>`)
+      .join('');
+    return `<ul style="list-style:disc;padding-left:20px;margin:6px 0">${items}</ul>`;
+  });
+
+  // Indented sub-items: "  - text" → nested items (already handled above, but let's clean up)
+  result = result.replace(/<li([^>]*)>\s*<ul/g, '<li$1 style="margin:0"><ul');
+
+  // Markdown tables: | col | col | → HTML table
+  const tableRegex = /(?:^|\n)(\|.+\|)\n(\|[-| :]+\|)\n((?:\|.+\|\n?)+)/g;
+  result = result.replace(tableRegex, (match, headerRow, separatorRow, bodyRows) => {
+    const headers = headerRow.split('|').filter(c => c.trim()).map(c => `<th style="padding:6px 10px;text-align:left;border-bottom:2px solid #e5e7eb;font-weight:600;font-size:0.8rem">${c.trim()}</th>`).join('');
+    const rows = bodyRows.trim().split('\n').map(row => {
+      const cells = row.split('|').filter(c => c.trim()).map(c => `<td style="padding:5px 10px;border-bottom:1px solid #f0f0f0;font-size:0.8rem">${c.trim()}</td>`).join('');
+      return `<tr>${cells}</tr>`;
+    }).join('');
+    return `<table style="border-collapse:collapse;width:100%;margin:8px 0;font-size:0.85rem"><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>`;
+  });
+
+  // Line breaks: \n → <br> (but not inside <ul> or <table>)
+  result = result.replace(/\n/g, '<br>');
+  // Clean up excess <br> after block elements
+  result = result.replace(/(<\/ul>)<br>/g, '$1');
+  result = result.replace(/(<\/table>)<br>/g, '$1');
+  result = result.replace(/<br>(<ul|<table)/g, '$1');
+
+  // Restore protected HTML blocks
+  htmlBlocks.forEach((block, i) => {
+    result = result.replace(`__HTML_BLOCK_${i}__`, block);
+  });
+
+  return result;
+}
+
 function wrapChatTables(html) {
   if (!html || typeof html !== "string") return html;
+
+  // Convert markdown to HTML first
+  html = markdownToHtml(html);
 
   // Wrap any rendered HTML tables in a scroll container
   return html.replace(

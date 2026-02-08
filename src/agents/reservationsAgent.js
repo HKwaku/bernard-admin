@@ -14,6 +14,7 @@ import {
   getTodayCheckOutsTool,
   checkAvailabilityTool,
   listExtrasTool,
+  sendBookingEmailTool,
 } from "../bernardTools.js";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY });
@@ -30,6 +31,7 @@ const toolMap = {
   get_today_checkouts: getTodayCheckOutsTool,
   check_availability: checkAvailabilityTool,
   list_extras: listExtrasTool,
+  send_booking_email: sendBookingEmailTool,
 };
 
 const tools = [
@@ -87,6 +89,20 @@ const tools = [
       name: "list_extras",
       description: "List all available extras/add-ons that can be added to a reservation. Call this when asking the guest about extras.",
       parameters: { type: "object", properties: {}, required: [] }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "send_booking_email",
+      description: "Send a booking confirmation email (and extras selection email if applicable) to the guest. Call this after a reservation is created, or when the user asks to send/resend a confirmation email.",
+      parameters: {
+        type: "object",
+        properties: {
+          confirmation_code: { type: "string", description: "The reservation confirmation code" }
+        },
+        required: ["confirmation_code"]
+      }
     }
   },
   {
@@ -262,13 +278,34 @@ Ask: "How many adults and children? Any special requests or notes?"
 **Step 7 — Confirm & Create:**
 Summarize the booking details and ask: "Shall I create this reservation?" When they confirm, call create_reservation with all collected information.
 
+**Step 8 — Send Confirmation Email:**
+After a reservation is created successfully, ask: "Would you like me to send a confirmation email to the guest?"
+If the user says yes, call send_booking_email with the confirmation_code from the reservation.
+You can also send/resend emails for existing reservations when asked — just use the confirmation code.
+
 IMPORTANT: Remember information the user provides across messages. Build up the booking details progressively. You have access to the full conversation history.
+
+=== FORMATTING ===
+- Format ALL responses in clean, readable markdown
+- Use **bold** for labels and headings
+- Use bullet lists (- item) for details
+- When showing a booking summary, use a clear structured format like:
+
+**Booking Confirmation**
+- **Confirmation Code**: B3FZ00M5QAQ
+- **Cabin**: Sand Cabin (SAND)
+- **Check-in**: 07 Dec 2026
+- **Check-out**: 09 Dec 2026
+- **Guest**: Sheila Ohene
+- **Email**: guest@email.com
+- **Total**: GHS 7,550.00
+
+- Show HTML tables returned by tools directly — do NOT reformat or rewrite them as text
+- When tool returns an HTML table, include it as-is in your response
 
 === RULES ===
 - ALWAYS ask user to confirm before updating/cancelling/deleting
 - Currency is GHS (Ghanaian Cedi)
-- Show HTML tables returned by tools directly — do NOT reformat or rewrite them as text
-- When tool returns an HTML table, include it as-is in your response
 - Be conversational but concise
 - NO filler phrases
 - Format dates as: 15 Jan 2025

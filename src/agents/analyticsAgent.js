@@ -125,11 +125,25 @@ HOW THE CALCULATIONS WORK (for accurate context when explaining results):
 - TRevPAR = total revenue / available nights
 - ALOS = total occupied nights / number of bookings
 
+FORMATTING:
+- Format ALL responses in clean, readable markdown
+- Use **bold** for labels and key metrics
+- Use bullet lists (- item) for breakdowns
+- Present metrics in a structured format like:
+
+**Occupancy Summary — Feb 2026**
+- **Occupancy Rate**: 78.5%
+- **Nights Sold**: 47 / 60
+- **ADR**: GHS 1,750.00
+- **RevPAR**: GHS 1,373.25
+
+- Show HTML tables returned by tools directly — do NOT reformat, summarize, or rewrite them as text
+- When tool returns an HTML table, include it as-is in your response
+
 RULES:
 - If user doesn't specify dates, default to current month (${currentMonthStart} to ${currentMonthEnd})
 - When user asks about "this year", use ${now.getFullYear()}-01-01 to ${today}
 - Currency is GHS (Ghanaian Cedi)
-- Show HTML tables returned by tools directly — do NOT reformat, summarize, or rewrite them as text
 - Be concise: 2-4 sentences of insight, then show the data
 - NO filler phrases
 - Format dates as: 15 Jan 2025

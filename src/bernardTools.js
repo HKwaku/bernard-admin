@@ -1476,6 +1476,130 @@ export const createReservationTool = tool({
 });
 
 // ============================================================================
+// EMAIL TOOLS
+// ============================================================================
+
+const SOJOURN_API_BASE_URL = 'https://sojourn-cabins.vercel.app';
+
+export const sendBookingEmailTool = tool({
+  name: "send_booking_email",
+  description: "Send a booking confirmation email to the guest. Requires the reservation confirmation code. Fetches all reservation details from the database and sends via the Sojourn email API.",
+  schema: z.object({
+    confirmation_code: z.string().describe("The reservation confirmation code (e.g., 'B3FZ00M5QAQ')"),
+  }),
+  async func({ confirmation_code }) {
+    // Fetch reservation
+    const { data: res, error } = await supabase
+      .from("reservations")
+      .select("*, room_types(name, code)")
+      .eq("confirmation_code", confirmation_code.toUpperCase())
+      .single();
+
+    if (error || !res) return `✗ Reservation '${confirmation_code}' not found.`;
+    if (!res.guest_email) return `✗ No email address on file for reservation ${confirmation_code}.`;
+
+    // Fetch reservation extras
+    const { data: resExtras } = await supabase
+      .from("reservation_extras")
+      .select("extra_name, extra_code, price, quantity, subtotal, discount_amount")
+      .eq("reservation_id", res.id);
+
+    // Check if any extras need guest selection (have a needs_selection flag)
+    const { data: allExtras } = await supabase
+      .from("extras")
+      .select("code, needs_selection");
+    const needsSelectionMap = {};
+    (allExtras || []).forEach(e => { needsSelectionMap[e.code] = e.needs_selection; });
+
+    const extras = (resExtras || []).map(e => ({
+      extra_name: e.extra_name,
+      extra_code: e.extra_code,
+      price: e.price,
+      quantity: e.quantity,
+      subtotal: e.subtotal,
+      discount_amount: e.discount_amount || 0,
+      needs_selection: needsSelectionMap[e.extra_code] || false,
+    }));
+
+    // Build email data matching the webhook structure
+    const emailData = {
+      booking: {
+        confirmation_code: res.confirmation_code,
+        group_reservation_code: null,
+        guest_first_name: res.guest_first_name,
+        guest_last_name: res.guest_last_name,
+        guest_email: res.guest_email,
+        guest_phone: res.guest_phone,
+        check_in: res.check_in,
+        check_out: res.check_out,
+        nights: res.nights,
+        adults: res.adults,
+        currency: res.currency || 'GHS',
+        room_name: res.room_name || res.room_types?.name || '',
+        room_subtotal: res.room_subtotal,
+        extras_total: res.extras_total,
+        discount_amount: res.discount_amount,
+        coupon_code: res.coupon_code,
+        total: res.total,
+        is_group_booking: false,
+        rooms: [{
+          room_name: res.room_name || res.room_types?.name || '',
+          room_code: res.room_type_code || res.room_types?.code || '',
+          check_in: res.check_in,
+          check_out: res.check_out,
+          nights: res.nights,
+          adults: res.adults,
+          room_subtotal: res.room_subtotal,
+          extras_total: res.extras_total,
+          discount_amount: res.discount_amount,
+          total: res.total,
+          currency: res.currency || 'GHS',
+          extras,
+        }],
+      },
+    };
+
+    // Send confirmation email
+    try {
+      const emailResp = await fetch(`${SOJOURN_API_BASE_URL}/api/send-booking-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(emailData),
+      });
+
+      if (!emailResp.ok) {
+        const errText = await emailResp.text().catch(() => '');
+        return `✗ Failed to send confirmation email (${emailResp.status}): ${errText}`;
+      }
+    } catch (err) {
+      return `✗ Failed to send confirmation email: ${err.message}`;
+    }
+
+    // Send extras selection email if applicable
+    const hasExtrasNeedingSelection = extras.some(e => e.needs_selection);
+    if (hasExtrasNeedingSelection) {
+      try {
+        const extrasLink = `${SOJOURN_API_BASE_URL}/extra-selections?code=${encodeURIComponent(confirmation_code)}`;
+        await fetch(`${SOJOURN_API_BASE_URL}/api/send-extra-selections-email`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ booking: emailData.booking, extrasLink }),
+        });
+      } catch (err) {
+        // Non-critical, log but don't fail
+        console.error('Failed to send extras selection email:', err);
+      }
+    }
+
+    let result = `✓ Confirmation email sent to ${res.guest_email} for booking ${confirmation_code}.`;
+    if (hasExtrasNeedingSelection) {
+      result += `\n✓ Extras selection email also sent.`;
+    }
+    return result;
+  },
+});
+
+// ============================================================================
 // ANALYTICS TOOLS
 // ============================================================================
 
@@ -2223,6 +2347,7 @@ export const allTools = [
   getTodayCheckInsTool,
   getTodayCheckOutsTool,
   checkAvailabilityTool,
+  sendBookingEmailTool,
   
   // Analytics
   getOccupancyStatsTool,
