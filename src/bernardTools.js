@@ -1210,6 +1210,96 @@ ${conflicts.map(c => `- ${c.confirmation_code}: ${formatDate(c.check_in)} to ${f
   },
 });
 
+export const checkAllAvailabilityTool = tool({
+  name: "check_all_availability",
+  description: "Check availability of ALL rooms for specific dates. Returns which rooms are available and which are booked. Use this when the user wants to book but hasn't specified a room.",
+  schema: z.object({
+    check_in: z.string().describe("Check-in date (YYYY-MM-DD)"),
+    check_out: z.string().describe("Check-out date (YYYY-MM-DD)"),
+  }),
+  async func({ check_in, check_out }) {
+    // Get all active room types
+    const { data: rooms, error: roomErr } = await supabase
+      .from("room_types")
+      .select("id, code, name, base_price_per_night_weekday, base_price_per_night_weekend, max_adults, currency")
+      .eq("is_active", true)
+      .order("code", { ascending: true });
+
+    if (roomErr) return `Error: ${roomErr.message}`;
+    if (!rooms?.length) return "No active rooms found.";
+
+    // Get all conflicting reservations for all rooms at once
+    const { data: conflicts } = await supabase
+      .from("reservations")
+      .select("room_type_id, confirmation_code, check_in, check_out")
+      .in("room_type_id", rooms.map(r => r.id))
+      .in("status", ["confirmed", "checked-in"])
+      .or(`and(check_in.lt.${check_out},check_out.gt.${check_in})`);
+
+    // Get blocked dates for all rooms
+    const { data: blocked } = await supabase
+      .from("blocked_dates")
+      .select("room_type_id, blocked_date")
+      .in("room_type_id", rooms.map(r => r.id))
+      .gte("blocked_date", check_in)
+      .lt("blocked_date", check_out);
+
+    const conflictsByRoom = {};
+    (conflicts || []).forEach(c => {
+      if (!conflictsByRoom[c.room_type_id]) conflictsByRoom[c.room_type_id] = [];
+      conflictsByRoom[c.room_type_id].push(c);
+    });
+
+    const blockedByRoom = {};
+    (blocked || []).forEach(b => {
+      if (!blockedByRoom[b.room_type_id]) blockedByRoom[b.room_type_id] = [];
+      blockedByRoom[b.room_type_id].push(b.blocked_date);
+    });
+
+    const available = [];
+    const unavailable = [];
+
+    rooms.forEach(room => {
+      const roomConflicts = conflictsByRoom[room.id] || [];
+      const roomBlocked = blockedByRoom[room.id] || [];
+      const currency = room.currency || 'GHS';
+
+      if (roomConflicts.length === 0 && roomBlocked.length === 0) {
+        available.push({
+          Code: room.code,
+          Name: room.name,
+          "Weekday Price": `${currency} ${room.base_price_per_night_weekday}`,
+          "Weekend Price": `${currency} ${room.base_price_per_night_weekend}`,
+          "Max Adults": room.max_adults || 2,
+        });
+      } else {
+        const reason = roomConflicts.length > 0
+          ? `Booked (${roomConflicts[0].confirmation_code})`
+          : `Blocked dates`;
+        unavailable.push({ code: room.code, name: room.name, reason });
+      }
+    });
+
+    let result = `**Availability for ${formatDate(check_in)} to ${formatDate(check_out)}:**\n\n`;
+
+    if (available.length > 0) {
+      result += `**✓ Available Rooms (${available.length}):**\n`;
+      result += formatTable(available, { minWidth: "400px" });
+    } else {
+      result += `✗ No rooms available for these dates.\n`;
+    }
+
+    if (unavailable.length > 0) {
+      result += `\n**✗ Unavailable:**\n`;
+      unavailable.forEach(u => {
+        result += `- ${u.name} (${u.code}) — ${u.reason}\n`;
+      });
+    }
+
+    return result;
+  },
+});
+
 // ============================================================================
 // CREATE RESERVATION TOOL
 // ============================================================================
@@ -2393,6 +2483,7 @@ export const allTools = [
   getTodayCheckInsTool,
   getTodayCheckOutsTool,
   checkAvailabilityTool,
+  checkAllAvailabilityTool,
   sendBookingEmailTool,
   
   // Analytics

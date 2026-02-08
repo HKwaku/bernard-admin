@@ -16,6 +16,7 @@ import {
   listExtrasTool,
   sendBookingEmailTool,
   listRoomsTool,
+  checkAllAvailabilityTool,
 } from "../bernardTools.js";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY });
@@ -31,6 +32,7 @@ const toolMap = {
   get_today_checkins: getTodayCheckInsTool,
   get_today_checkouts: getTodayCheckOutsTool,
   check_availability: checkAvailabilityTool,
+  check_all_availability: checkAllAvailabilityTool,
   list_extras: listExtrasTool,
   send_booking_email: sendBookingEmailTool,
   list_room_types: listRoomsTool,
@@ -82,6 +84,21 @@ const tools = [
           check_out: { type: "string", description: "Check-out date (YYYY-MM-DD)" }
         },
         required: ["room_code", "check_in", "check_out"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "check_all_availability",
+      description: "Check availability of ALL rooms for specific dates. Returns which rooms are available and which are booked. Use this when the user wants to book but hasn't specified a room — much faster than checking each room individually.",
+      parameters: {
+        type: "object",
+        properties: {
+          check_in: { type: "string", description: "Check-in date (YYYY-MM-DD)" },
+          check_out: { type: "string", description: "Check-out date (YYYY-MM-DD)" }
+        },
+        required: ["check_in", "check_out"]
       }
     }
   },
@@ -269,12 +286,13 @@ IMPORTANT: Do NOT assume or hardcode room/cabin names. ALWAYS call list_room_typ
 When a user wants to book/reserve a cabin, guide them step-by-step. Do NOT ask for everything at once.
 
 **Step 1 — Cabin & Dates:**
-If user provides a cabin and dates, first call list_room_types to verify the room exists, then check availability.
-If user only says "make a booking", call list_room_types to get the actual rooms from the database, then ask which one and what dates.
-If user provides a room name that doesn't match any room code exactly, call list_room_types to find the closest match. If unsure, show the user the actual available rooms from the database.
+If user provides a cabin and dates, call check_availability for that specific room to verify it's free.
+If user provides dates but NO specific cabin, call check_all_availability with those dates. This checks ALL rooms at once and returns which are available and which are booked. Only present the available rooms to the user.
+If user only says "make a booking" with no dates, ask for dates first, then call check_all_availability.
+IMPORTANT: NEVER just list rooms without checking availability when dates are provided. Always use check_all_availability or check_availability.
 
 **Step 2 — Check Availability:**
-ALWAYS call check_availability before proceeding. If not available, suggest alternative dates or cabins.
+ALWAYS call check_availability (or check_all_availability) before proceeding with a booking. If the selected room is not available, show which other rooms ARE available using check_all_availability.
 
 **Step 3 — Guest Name:**
 Ask: "What is the guest's first and last name?"
