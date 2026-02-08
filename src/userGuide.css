@@ -28,6 +28,7 @@
   flex-direction: column;
   overflow: hidden;
   animation: guideSlideUp 0.3s ease;
+  box-sizing: border-box;
 }
 
 @keyframes guideSlideUp {
@@ -143,6 +144,7 @@
 .guide-body {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 32px 36px;
   -webkit-overflow-scrolling: touch;
 }
@@ -465,56 +467,163 @@
     max-height: 95vh;
     max-height: 95dvh;
     width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
   }
 
   .guide-header {
-    padding: 18px 20px;
+    padding: 16px 16px;
+    gap: 10px;
+  }
+
+  .guide-header-content {
+    gap: 10px;
+    min-width: 0;
+    overflow: hidden;
   }
 
   .guide-title {
-    font-size: 1.15rem;
+    font-size: 1.05rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .guide-subtitle {
     display: none;
   }
 
+  .guide-logo {
+    font-size: 1.5rem;
+    flex-shrink: 0;
+  }
+
+  .guide-close {
+    width: 36px;
+    height: 36px;
+    font-size: 20px;
+    border-radius: 10px;
+    flex-shrink: 0;
+  }
+
   .guide-nav {
-    padding: 10px 14px;
+    padding: 8px 12px;
     gap: 3px;
   }
 
   .guide-nav-btn {
-    padding: 7px 11px;
-    font-size: 0.78rem;
+    padding: 6px 10px;
+    font-size: 0.75rem;
   }
 
   .guide-body {
-    padding: 20px;
+    padding: 18px 16px;
+    overflow-x: hidden;
   }
 
   .guide-section h2 {
-    font-size: 1.25rem;
+    font-size: 1.2rem;
+  }
+
+  .guide-section h3 {
+    font-size: 1rem;
+    margin: 20px 0 8px;
+  }
+
+  .guide-section h4 {
+    font-size: 0.9rem;
+  }
+
+  .guide-section p {
+    font-size: 0.88rem;
+    line-height: 1.6;
+  }
+
+  .guide-list {
+    padding-left: 18px;
+    font-size: 0.88rem;
+    line-height: 1.65;
   }
 
   .guide-feature-grid {
     grid-template-columns: 1fr;
+    gap: 10px;
   }
 
+  .guide-feature-card {
+    padding: 14px;
+    border-radius: 12px;
+  }
+
+  .guide-feature-icon {
+    font-size: 1.3rem;
+    margin-bottom: 6px;
+  }
+
+  .guide-feature-card h3 {
+    font-size: 0.88rem;
+  }
+
+  .guide-feature-card p {
+    font-size: 0.8rem;
+  }
+
+  /* Tables – mobile friendly */
+  .guide-table-wrap {
+    margin: 10px -16px 16px;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+
+  .guide-table {
+    font-size: 0.8rem;
+  }
+
+  .guide-table th {
+    white-space: normal;
+    padding: 8px 10px;
+    font-size: 0.78rem;
+  }
+
+  .guide-table td {
+    padding: 8px 10px;
+    font-size: 0.8rem;
+    word-break: break-word;
+  }
+
+  /* Callouts */
+  .guide-callout {
+    padding: 12px 14px;
+    font-size: 0.82rem;
+    margin: 12px 0;
+    border-radius: 10px;
+  }
+
+  /* Workflow */
   .guide-workflow {
     flex-direction: column;
     align-items: stretch;
+    gap: 8px;
   }
 
   .guide-workflow-arrow {
     text-align: center;
     transform: rotate(90deg);
+    font-size: 1rem;
   }
 
   .guide-workflow-step {
     min-width: 0;
+    padding: 10px 12px;
+    border-radius: 10px;
   }
 
+  .guide-workflow-step p {
+    font-size: 0.75rem;
+  }
+
+  /* Help button */
   .help-btn {
     padding: 7px 10px;
     font-size: 0.78rem;
@@ -529,21 +638,57 @@
 }
 
 @media (max-width: 480px) {
+  .guide-container {
+    max-height: 98vh;
+    max-height: 98dvh;
+    border-radius: 16px 16px 0 0;
+  }
+
   .guide-header {
-    padding: 14px 16px;
+    padding: 12px 12px;
+  }
+
+  .guide-title {
+    font-size: 0.95rem;
   }
 
   .guide-logo {
-    font-size: 1.5rem;
+    font-size: 1.3rem;
+  }
+
+  .guide-nav {
+    padding: 6px 8px;
+  }
+
+  .guide-nav-btn {
+    padding: 5px 8px;
+    font-size: 0.72rem;
   }
 
   .guide-body {
-    padding: 16px;
+    padding: 14px 12px;
+  }
+
+  .guide-section h2 {
+    font-size: 1.1rem;
+  }
+
+  .guide-table-wrap {
+    margin: 8px -12px 14px;
   }
 
   .guide-table th,
   .guide-table td {
-    padding: 8px 10px;
+    padding: 6px 8px;
+    font-size: 0.75rem;
+  }
+
+  .guide-feature-card {
+    padding: 12px;
+  }
+
+  .guide-callout {
+    padding: 10px 12px;
     font-size: 0.8rem;
   }
 }
