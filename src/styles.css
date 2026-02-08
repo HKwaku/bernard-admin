@@ -609,37 +609,6 @@ label {
   border-color: var(--ring);
 }
 
-/* Markdown-rendered content in chat bubbles */
-.msg.bot .bubble strong {
-  color: #1e293b;
-}
-
-.msg.bot .bubble ul {
-  list-style: disc inside;
-  padding-left: 8px;
-  margin: 6px 0;
-}
-
-.msg.bot .bubble ul li {
-  margin: 3px 0;
-  line-height: 1.5;
-}
-
-.msg.bot .bubble ul li strong {
-  font-weight: 600;
-}
-
-/* Nested lists */
-.msg.bot .bubble ul ul {
-  list-style: circle;
-  margin: 2px 0;
-}
-
-.msg.bot .bubble em {
-  font-style: italic;
-  color: #475569;
-}
-
 .chat-input {
   border-top: 1px solid var(--ring);
   padding: var(--space-lg);
