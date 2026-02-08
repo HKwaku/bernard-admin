@@ -1,5 +1,7 @@
-// This file should be saved as: api/chat.js
-// (create an 'api' folder at your project root if it doesn't exist)
+// api/chat.js — Vercel serverless function for Bernard multi-agent chatbot
+// Static import ensures Vercel's bundler includes all agent dependencies
+
+import { runBernardAgent } from '../src/bernardAgent.js';
 
 export default async function handler(req, res) {
   // Enable CORS
@@ -14,18 +16,9 @@ export default async function handler(req, res) {
     return;
   }
 
-  // Log for debugging
-  console.log('📨 Received request:', {
-    method: req.method,
-    path: req.url,
-    hasBody: !!req.body
-  });
-
   if (req.method !== 'POST') {
-    console.error('❌ Wrong method:', req.method);
     return res.status(405).json({ 
-      error: `Method ${req.method} not allowed. Use POST.`,
-      hint: 'The chat endpoint only accepts POST requests with a JSON body containing messages array.'
+      error: `Method ${req.method} not allowed. Use POST.`
     });
   }
 
@@ -46,36 +39,28 @@ export default async function handler(req, res) {
       try {
         body = JSON.parse(req.body);
       } catch (e) {
-        console.error('❌ Failed to parse body as JSON:', e.message);
         return res.status(400).json({ error: 'Invalid JSON in request body' });
       }
     } else {
       body = req.body || {};
     }
 
-    console.log('📦 Parsed body:', { hasMessages: !!body.messages, messageCount: body.messages?.length });
-
     const { messages, threadId } = body;
 
     if (!Array.isArray(messages) || messages.length === 0) {
-      console.error('❌ Invalid messages:', messages);
       return res.status(400).json({ 
         error: 'Invalid request: messages array required',
-        received: typeof messages,
-        hint: 'Send POST request with body: { messages: [{role: "user", content: "..."}] }'
+        hint: 'Send POST with body: { messages: [{role: "user", content: "..."}] }'
       });
     }
 
-    console.log('✅ Valid request, calling Bernard agent...');
+    console.log(`📨 Bernard request: ${messages.length} messages`);
 
-    // Import and run Bernard (multi-agent orchestrator)
-    const { runBernardAgent } = await import('../src/bernardAgent.js');
     const result = await runBernardAgent(
       messages, 
       threadId || `thread-${Date.now()}`
     );
 
-    // result is { reply, agent } from the orchestrator
     const reply = typeof result === 'string' ? result : result.reply;
     const agent = typeof result === 'string' ? null : result.agent;
 
@@ -88,7 +73,6 @@ export default async function handler(req, res) {
     return res.status(500).json({ 
       error: error.message || 'Internal server error',
       type: error.name,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 }
