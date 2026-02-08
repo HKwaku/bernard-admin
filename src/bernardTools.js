@@ -318,18 +318,17 @@ export const listExtrasTool = tool({
     if (error) return `Error: ${error.message}`;
     if (!data?.length) return "No extras found.";
 
+    // Only show active extras by default, keep output compact to avoid token limits
+    const activeExtras = data.filter(e => e.is_active !== false);
     return formatTable(
-      data.map(e => ({
-        ID: e.id,
+      activeExtras.map(e => ({
         Code: e.code || '—',
         Name: e.name,
         Category: e.category || "N/A",
         Price: `${e.currency || 'GHS'} ${e.price}`,
         "Unit Type": e.unit_type?.replace(/_/g, ' ') || 'per booking',
-        "Needs Guest Input": e.needs_guest_input ? "✓" : "✗",
-        Active: e.is_active ? "✓" : "✗",
       })),
-      { minWidth: "480px" }
+      { minWidth: "400px" }
     );
   },
 });
