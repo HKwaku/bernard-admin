@@ -301,7 +301,7 @@ Ask: "What is the guest's first and last name?"
 Ask: "What is the guest's email address and phone number?"
 
 **Step 5 — Extras (optional):**
-Ask: "Would you like to add any extras to this booking?" If they say yes, call list_extras to show what's available, then ask which ones and how many. When creating the reservation, pass extras by NAME (e.g. [{"name": "Airport Transfer", "quantity": 1}]). The tool will look them up automatically.
+Ask: "Would you like to add any extras to this booking?" If they say yes or ask what's available, you MUST call the list_extras tool to get the actual extras from the database. NEVER make up or guess extras — ALWAYS call list_extras. Show the table returned by the tool directly. When creating the reservation, pass extras by NAME (e.g. [{"name": "Airport Transfer", "quantity": 1}]). The tool will look them up automatically.
 
 **Step 6 — Additional Info:**
 Ask: "How many adults and children? Any special requests or notes?"
