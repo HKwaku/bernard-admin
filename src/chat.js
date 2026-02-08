@@ -25,6 +25,17 @@ function markdownToHtml(text) {
 
   // Protect existing HTML tags from being broken
   const htmlBlocks = [];
+  // First pass: protect complete <table>...</table> blocks (greedy, so nested tags stay intact)
+  result = result.replace(/<table[\s\S]*?<\/table>/gi, (match) => {
+    htmlBlocks.push(match);
+    return `__HTML_BLOCK_${htmlBlocks.length - 1}__`;
+  });
+  // Second pass: protect complete <div>...</div> blocks
+  result = result.replace(/<div[\s\S]*?<\/div>/gi, (match) => {
+    htmlBlocks.push(match);
+    return `__HTML_BLOCK_${htmlBlocks.length - 1}__`;
+  });
+  // Third pass: protect remaining paired HTML tags
   result = result.replace(/<[^>]+>[\s\S]*?<\/[^>]+>/g, (match) => {
     htmlBlocks.push(match);
     return `__HTML_BLOCK_${htmlBlocks.length - 1}__`;
@@ -84,6 +95,8 @@ function markdownToHtml(text) {
   // Clean up <br> tags adjacent to block-level HTML elements (tables, divs, uls)
   result = result.replace(/(<br\s*\/?>)+\s*(<table|<div|<ul)/gi, '$2');
   result = result.replace(/(<\/table>|<\/div>|<\/ul>)\s*(<br\s*\/?>)+/gi, '$1');
+  // Reduce excessive <br> between a heading/bold and a block element to a single <br>
+  result = result.replace(/(<\/strong>)\s*(<br\s*\/?>){2,}\s*(<table|<div)/gi, '$1<br>$3');
   // Collapse multiple consecutive <br> into max 2
   result = result.replace(/(<br\s*\/?>){3,}/gi, '<br><br>');
 

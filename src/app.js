@@ -31,6 +31,7 @@ import { openNewCustomBookingModal } from './custom_booking.js';
 import { openBlockDatesModal } from './blocked_bookings.js'; // NEW
 import { initChefMenu } from './chefMenu.js';
 import { initExtraSelections } from './extraSelections.js';
+import { openUserGuide } from './userGuide.js';
 
 
 // Main app initializer
@@ -76,6 +77,8 @@ export function initApp() {
 
           </div>        
 
+          <button id="help-btn" class="help-btn" title="User Guide"><span class="help-icon">?</span> Help</button>
+
           <div class="now" id="now"></div>
 
           <!-- Right-aligned dropdown drawer -->
@@ -111,6 +114,7 @@ export function initApp() {
               <li><button id="mobile-package-btn" class="btn btn-primary" style="width:100%">+New Package</button></li>
               <li><button id="mobile-block-dates-btn" class="btn btn-primary" style="width:100%">Block Dates</button></li>
               <li><hr style="border:0;border-top:1px solid var(--ring);margin:6px 0"></li>
+              <li><button id="mobile-help-btn" class="btn" style="width:100%">❓ User Guide</button></li>
             </ul>
           </nav>
         </div>
@@ -250,6 +254,15 @@ export function initApp() {
       </div>
     </div>
   `;
+
+  // ---------- Help Button ----------
+  const helpBtn = $('#help-btn');
+  if (helpBtn) {
+    helpBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openUserGuide();
+    });
+  }
 
   // ---------- Live Clock ----------
   const nowEl = $('#now');
@@ -398,7 +411,17 @@ export function initApp() {
       });
     }
 
-        const mobileBlockDatesBtn = $('#mobile-block-dates-btn');
+        const mobileHelpBtn = $('#mobile-help-btn');
+    if (mobileHelpBtn && !mobileHelpBtn.dataset._wired) {
+      mobileHelpBtn.dataset._wired = '1';
+      mobileHelpBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        close();
+        openUserGuide();
+      });
+    }
+
+    const mobileBlockDatesBtn = $('#mobile-block-dates-btn');
     if (mobileBlockDatesBtn && !mobileBlockDatesBtn.dataset._wired) {
       mobileBlockDatesBtn.dataset._wired = '1';
       mobileBlockDatesBtn.addEventListener('click', (e) => {

@@ -1,6 +1,7 @@
 // src/main.js
 import './styles.css';
 import './analytics.css';
+import './userGuide.css';
 import { initApp } from './app.js';
 
 // Single, central bootstrap
