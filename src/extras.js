@@ -99,8 +99,8 @@ function openExtraModal(id = null) {
             <input id="e-category" placeholder="e.g., Food, Activity, Service" />
           </div>
           <div class="form-group">
-            <label>Needs Guest Selection</label>
-            <select id="e-needs-selection">
+            <label>Needs Guest Input</label>
+            <select id="e-needs-guest-input">
               <option value="false" selected>No</option>
               <option value="true">Yes</option>
             </select>
@@ -197,7 +197,7 @@ function collectExtraForm() {
   const currency = root.querySelector('#e-currency').value;
   const unit_type = root.querySelector('#e-unit-type').value;
   const active = root.querySelector('#e-active').value === 'true';
-  const needs_selection = root.querySelector('#e-needs-selection').value === 'true';
+  const needs_guest_input = root.querySelector('#e-needs-guest-input').value === 'true';
 
   if (!name || !code || Number.isNaN(price)) {
     throw new Error('Name, Code, and Price are required.');
@@ -211,7 +211,7 @@ function collectExtraForm() {
     currency,
     unit_type,
     is_active: active,
-    needs_selection
+    needs_guest_input
   };
 }
 
@@ -232,7 +232,7 @@ async function fillExtraForm(id) {
   root.querySelector('#e-currency').value = e.currency || 'GHS';
   root.querySelector('#e-unit-type').value = e.unit_type || 'per_booking';
   root.querySelector('#e-active').value = (e.is_active !== false) ? 'true' : 'false';
-  root.querySelector('#e-needs-selection').value = e.needs_selection ? 'true' : 'false';
+  root.querySelector('#e-needs-guest-input').value = e.needs_guest_input ? 'true' : 'false';
 }
 
 async function toggleExtraStatus(id, currentStatus) {

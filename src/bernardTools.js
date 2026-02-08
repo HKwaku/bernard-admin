@@ -326,7 +326,7 @@ export const listExtrasTool = tool({
         Category: e.category || "N/A",
         Price: `${e.currency || 'GHS'} ${e.price}`,
         "Unit Type": e.unit_type?.replace(/_/g, ' ') || 'per booking',
-        "Needs Selection": e.needs_selection ? "✓" : "✗",
+        "Needs Guest Input": e.needs_guest_input ? "✓" : "✗",
         Active: e.is_active ? "✓" : "✗",
       })),
       { minWidth: "480px" }
@@ -362,7 +362,7 @@ export const getExtraDetailsTool = tool({
 - **Code**: ${extra.code || '—'}
 - **Category**: ${extra.category || 'N/A'}
 - **Price**: ${extra.currency || 'GHS'} ${extra.price} ${extra.unit_type?.replace(/_/g, ' ') || 'per booking'}
-- **Needs Selection**: ${extra.needs_selection ? 'Yes ✓' : 'No'}
+- **Needs Guest Input**: ${extra.needs_guest_input ? 'Yes ✓' : 'No'}
 - **Status**: ${extra.is_active ? 'Active ✓' : 'Inactive ✗'}
 - **Description**: ${extra.description || 'N/A'}
 - **Extra ID**: ${extra.id}
@@ -382,7 +382,7 @@ export const createExtraTool = tool({
     currency: z.string().default("GHS").describe("Currency code"),
     unit_type: z.enum(["per_booking", "per_night", "per_person", "per_person_per_night"]).default("per_booking"),
     is_active: z.boolean().default(true),
-    needs_selection: z.boolean().default(false).describe("Whether the guest needs to make a selection for this extra (e.g., choosing a date/time)"),
+    needs_guest_input: z.boolean().default(false).describe("Whether the guest needs to provide input for this extra (e.g., choosing a date/time for an experience)"),
   }),
   async func(input) {
     const { error } = await supabase.from("extras").insert({
@@ -394,7 +394,7 @@ export const createExtraTool = tool({
       currency: input.currency,
       unit_type: input.unit_type,
       is_active: input.is_active,
-      needs_selection: input.needs_selection,
+      needs_guest_input: input.needs_guest_input,
     });
 
     if (error) return `Error creating extra: ${error.message}`;
@@ -402,7 +402,7 @@ export const createExtraTool = tool({
     return `✓ Extra "${input.name}" (${input.code.toUpperCase()}) created successfully!
 - Price: ${input.currency} ${input.price} ${input.unit_type.replace(/_/g, ' ')}
 - Category: ${input.category || 'N/A'}
-- Needs Selection: ${input.needs_selection ? 'Yes' : 'No'}
+- Needs Guest Input: ${input.needs_guest_input ? 'Yes' : 'No'}
 - Status: ${input.is_active ? 'Active' : 'Inactive'}`;
   },
 });
@@ -421,7 +421,7 @@ export const updateExtraTool = tool({
       currency: z.string().optional(),
       unit_type: z.enum(["per_booking", "per_night", "per_person", "per_person_per_night"]).optional(),
       is_active: z.boolean().optional(),
-      needs_selection: z.boolean().optional().describe("Whether the guest needs to make a selection for this extra"),
+      needs_guest_input: z.boolean().optional().describe("Whether the guest needs to provide input for this extra"),
     }),
   }),
   async func({ identifier, updates }) {
@@ -434,7 +434,7 @@ export const updateExtraTool = tool({
     if (updates.currency) payload.currency = updates.currency;
     if (updates.unit_type) payload.unit_type = updates.unit_type;
     if (updates.is_active !== undefined) payload.is_active = updates.is_active;
-    if (updates.needs_selection !== undefined) payload.needs_selection = updates.needs_selection;
+    if (updates.needs_guest_input !== undefined) payload.needs_guest_input = updates.needs_guest_input;
 
     let query = supabase.from("extras").update(payload);
     
@@ -1518,21 +1518,31 @@ export const sendBookingEmailTool = tool({
       .select("extra_name, extra_code, price, quantity, subtotal, discount_amount")
       .eq("reservation_id", res.id);
 
-    // Check if any extras need guest selection (have a needs_selection flag)
-    const { data: allExtras } = await supabase
-      .from("extras")
-      .select("code, needs_selection");
-    const needsSelectionMap = {};
-    (allExtras || []).forEach(e => { needsSelectionMap[e.code] = e.needs_selection; });
+    // Check if any extras need guest selection (needs_guest_input column in extras table)
+    const extraCodes = (resExtras || []).map(e => e.extra_code).filter(Boolean);
+    let needsInputMap = {};
+    if (extraCodes.length) {
+      const { data: extrasConfig } = await supabase
+        .from("extras")
+        .select("code, needs_guest_input")
+        .in("code", extraCodes);
+      (extrasConfig || []).forEach(e => { needsInputMap[e.code] = !!e.needs_guest_input; });
+    }
+
+    // Check if this is a package booking (all extras need selection for packages)
+    const isPackage = !!(res.package_id || res.package_code || res.package_name);
 
     const extras = (resExtras || []).map(e => ({
+      code: e.extra_code,
+      name: e.extra_name,
       extra_name: e.extra_name,
       extra_code: e.extra_code,
       price: e.price,
+      qty: e.quantity,
       quantity: e.quantity,
       subtotal: e.subtotal,
       discount_amount: e.discount_amount || 0,
-      needs_selection: needsSelectionMap[e.extra_code] || false,
+      needs_selection: isPackage || needsInputMap[e.extra_code] === true,
     }));
 
     // Build email data matching the webhook structure
@@ -1597,9 +1607,14 @@ export const sendBookingEmailTool = tool({
 
     // Send extras selection email
     if (email_type === "extras" || email_type === "both") {
-      if (!hasExtrasNeedingSelection && email_type === "extras") {
-        results.push(`⚠ No extras requiring guest selection found on this booking.`);
-      } else if (hasExtrasNeedingSelection) {
+      const hasExtras = extras.length > 0;
+      // For explicit "extras" request: send if there are any extras at all
+      // For "both": only send if extras need guest selection
+      const shouldSendExtras = email_type === "extras" ? hasExtras : hasExtrasNeedingSelection;
+
+      if (!hasExtras && email_type === "extras") {
+        results.push(`⚠ No extras found on this booking.`);
+      } else if (shouldSendExtras) {
         try {
           const extrasLink = `${SOJOURN_API_BASE_URL}/extra-selections?code=${encodeURIComponent(confirmation_code)}`;
           const extrasResp = await fetch(`${SOJOURN_API_BASE_URL}/api/send-extra-selections-email`, {
