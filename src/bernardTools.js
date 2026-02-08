@@ -1518,32 +1518,39 @@ export const sendBookingEmailTool = tool({
       .select("extra_name, extra_code, price, quantity, subtotal, discount_amount")
       .eq("reservation_id", res.id);
 
-    // Check if any extras need guest selection (needs_guest_input column in extras table)
+    // Fetch full extras config from the extras table (name, code, needs_guest_input)
     const extraCodes = (resExtras || []).map(e => e.extra_code).filter(Boolean);
-    let needsInputMap = {};
+    let extrasConfigMap = {};
     if (extraCodes.length) {
       const { data: extrasConfig } = await supabase
         .from("extras")
-        .select("code, needs_guest_input")
+        .select("code, name, needs_guest_input")
         .in("code", extraCodes);
-      (extrasConfig || []).forEach(e => { needsInputMap[e.code] = !!e.needs_guest_input; });
+      (extrasConfig || []).forEach(e => {
+        extrasConfigMap[e.code] = { name: e.name, needs_guest_input: !!e.needs_guest_input };
+      });
     }
 
     // Check if this is a package booking (all extras need selection for packages)
     const isPackage = !!(res.package_id || res.package_code || res.package_name);
 
-    const extras = (resExtras || []).map(e => ({
-      code: e.extra_code,
-      name: e.extra_name,
-      extra_name: e.extra_name,
-      extra_code: e.extra_code,
-      price: e.price,
-      qty: e.quantity,
-      quantity: e.quantity,
-      subtotal: e.subtotal,
-      discount_amount: e.discount_amount || 0,
-      needs_selection: isPackage || needsInputMap[e.extra_code] === true,
-    }));
+    const extras = (resExtras || []).map(e => {
+      const config = extrasConfigMap[e.extra_code] || {};
+      // Use extras table name as fallback if reservation_extras.extra_name is empty
+      const extraName = e.extra_name || config.name || '';
+      return {
+        code: e.extra_code,
+        name: extraName,
+        extra_name: extraName,
+        extra_code: e.extra_code,
+        price: e.price,
+        qty: e.quantity,
+        quantity: e.quantity,
+        subtotal: e.subtotal,
+        discount_amount: e.discount_amount || 0,
+        needs_selection: isPackage || config.needs_guest_input === true,
+      };
+    });
 
     // Build email data matching the webhook structure
     const emailData = {
