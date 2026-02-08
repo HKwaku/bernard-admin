@@ -84,37 +84,10 @@ export function formatTable(rows, options = {}) {
   if (!Array.isArray(rows) || rows.length === 0) return "No data found.";
 
   const keys = Object.keys(rows[0]);
+  const ths = keys.map(k => `<th style="text-align:left;padding:8px 10px;border-bottom:1px solid #e5e7eb;font-weight:600;color:#0f172a;white-space:nowrap">${k.replace(/_/g, ' ')}</th>`).join("");
+  const trs = rows.map(r => `<tr>${keys.map(k => `<td style="padding:8px 10px;border-bottom:1px solid #f1f5f9;white-space:nowrap">${r[k] ?? ''}</td>`).join("")}</tr>`).join("");
 
-  return `
-  <div class="chat-table-scroll">
-    <table style="width:100%;border-collapse:collapse;font-size:0.85rem;min-width:${options.minWidth || '480px'}">
-      <thead style="background:#f8fafc;">
-        <tr>
-          ${keys
-            .map(
-              (k) =>
-                `<th style="text-align:left;padding:8px 10px;border-bottom:1px solid #e5e7eb;font-weight:600;color:#0f172a;white-space:nowrap">${k.replace(/_/g, ' ')}</th>`
-            )
-            .join("")}
-        </tr>
-      </thead>
-      <tbody>
-        ${rows
-          .map(
-            (r) => `
-          <tr>
-            ${keys
-              .map(
-                (k) =>
-                  `<td style="padding:8px 10px;border-bottom:1px solid #f1f5f9;white-space:nowrap">${r[k] ?? ''}</td>`
-              )
-              .join("")}
-          </tr>`
-          )
-          .join("")}
-      </tbody>
-    </table>
-  </div>`;
+  return `<div class="chat-table-scroll"><table style="width:100%;border-collapse:collapse;font-size:0.85rem;min-width:${options.minWidth || '480px'}"><thead style="background:#f8fafc;"><tr>${ths}</tr></thead><tbody>${trs}</tbody></table></div>`;
 }
 
 // ============================================================================
