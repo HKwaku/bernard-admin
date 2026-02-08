@@ -307,7 +307,7 @@ export const deleteRoomTypeTool = tool({
 
 export const listExtrasTool = tool({
   name: "list_extras",
-  description: "List all extras/add-ons with their pricing, category, and unit type.",
+  description: "List all extras/add-ons with their ID, pricing, category, and unit type. Use the ID when adding extras to a reservation.",
   schema: z.object({}),
   async func(_input) {
     const { data, error } = await supabase
@@ -320,6 +320,7 @@ export const listExtrasTool = tool({
 
     return formatTable(
       data.map(e => ({
+        ID: e.id,
         Name: e.name,
         Category: e.category || "N/A",
         Price: `${e.currency || 'GHS'} ${e.price}`,
@@ -1307,11 +1308,27 @@ export const createReservationTool = tool({
       try {
         const extrasList = typeof extras === 'string' ? JSON.parse(extras) : extras;
         for (const item of extrasList) {
-          const { data: extra } = await supabase
-            .from("extras")
-            .select("id, name, code, price, currency, unit_type")
-            .eq("id", item.extra_id)
-            .single();
+          let extra = null;
+
+          // Look up by ID first, then by name
+          if (item.extra_id) {
+            const { data } = await supabase
+              .from("extras")
+              .select("id, name, code, price, currency, unit_type")
+              .eq("id", item.extra_id)
+              .single();
+            extra = data;
+          }
+
+          if (!extra && item.name) {
+            // Search by name (case-insensitive partial match)
+            const { data } = await supabase
+              .from("extras")
+              .select("id, name, code, price, currency, unit_type")
+              .ilike("name", `%${item.name}%`)
+              .limit(1);
+            extra = data?.[0] || null;
+          }
 
           if (extra) {
             const qty = item.quantity || 1;
@@ -1439,8 +1456,11 @@ export const createReservationTool = tool({
 - **Adults**: ${adults || 2} | **Children**: ${children || 0}
 - **Room Cost**: ${currency} ${roomSubtotal.toFixed(2)}`;
 
-    if (extrasTotal > 0) {
-      response += `\n- **Extras**: ${currency} ${extrasTotal.toFixed(2)}`;
+    if (selectedExtras.length > 0) {
+      response += `\n- **Extras** (${currency} ${extrasTotal.toFixed(2)}):`;
+      selectedExtras.forEach(e => {
+        response += `\n  - ${e.extra_name} × ${e.quantity} = ${currency} ${e.subtotal.toFixed(2)}`;
+      });
     }
     if (discountAmount > 0) {
       response += `\n- **Discount** (${appliedCouponCode}): -${currency} ${discountAmount.toFixed(2)}`;

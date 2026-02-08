@@ -108,7 +108,7 @@ const tools = [
           adults: { type: "number", description: "Number of adults (default 2)" },
           children: { type: "number", description: "Number of children (default 0)" },
           notes: { type: "string", description: "Special requests or notes" },
-          extras: { type: "string", description: "JSON array of extras: [{\"extra_id\": \"uuid\", \"quantity\": 1}]" },
+          extras: { type: "string", description: "JSON array of extras by name and quantity, e.g. [{\"name\": \"Airport Transfer\", \"quantity\": 1}, {\"name\": \"Breakfast\", \"quantity\": 2}]" },
           coupon_code: { type: "string", description: "Coupon code to apply" }
         },
         required: ["room_code", "check_in", "check_out", "guest_first_name", "guest_last_name", "guest_email"]
@@ -254,7 +254,7 @@ Ask: "What is the guest's first and last name?"
 Ask: "What is the guest's email address and phone number?"
 
 **Step 5 — Extras (optional):**
-Ask: "Would you like to add any extras to this booking?" If they say yes, call list_extras to show what's available, then ask which ones and quantities.
+Ask: "Would you like to add any extras to this booking?" If they say yes, call list_extras to show what's available, then ask which ones and how many. When creating the reservation, pass extras by NAME (e.g. [{"name": "Airport Transfer", "quantity": 1}]). The tool will look them up automatically.
 
 **Step 6 — Additional Info:**
 Ask: "How many adults and children? Any special requests or notes?"
