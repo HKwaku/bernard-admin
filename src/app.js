@@ -6,6 +6,7 @@
 
 import { supabase } from './config/supabase.js';
 import { callOpenAI, conversationHistory } from './config/openai.js';
+import { logout } from './auth.js';
 import {
   $,
   $$,
@@ -78,6 +79,17 @@ export function initApp() {
           </div>        
 
           <button id="help-btn" class="help-btn" title="User Guide"><span class="help-icon">?</span> Help</button>
+          <button id="logout-btn" title="Sign out" style="
+            background:none;
+            border:1px solid #e2e8f0;
+            border-radius:8px;
+            color:#64748b;
+            font-size:12px;
+            padding:5px 10px;
+            cursor:pointer;
+            white-space:nowrap;
+            transition:all 0.15s;
+          ">Logout</button>
 
           <div class="now" id="now"></div>
 
@@ -115,6 +127,7 @@ export function initApp() {
               <li><button id="mobile-block-dates-btn" class="btn btn-primary" style="width:100%">Block Dates</button></li>
               <li><hr style="border:0;border-top:1px solid var(--ring);margin:6px 0"></li>
               <li><button id="mobile-help-btn" class="btn" style="width:100%">❓ User Guide</button></li>
+              <li><button id="mobile-logout-btn" class="btn" style="width:100%;color:#ef4444;">🔒 Logout</button></li>
             </ul>
           </nav>
         </div>
@@ -262,6 +275,11 @@ export function initApp() {
       e.stopPropagation();
       openUserGuide();
     });
+  }
+
+  const logoutBtn = $('#logout-btn');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', logout);
   }
 
   // ---------- Live Clock ----------
@@ -418,6 +436,16 @@ export function initApp() {
         e.preventDefault();
         close();
         openUserGuide();
+      });
+    }
+
+    const mobileLogoutBtn = $('#mobile-logout-btn');
+    if (mobileLogoutBtn && !mobileLogoutBtn.dataset._wired) {
+      mobileLogoutBtn.dataset._wired = '1';
+      mobileLogoutBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        close();
+        logout();
       });
     }
 
