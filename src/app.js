@@ -62,7 +62,21 @@ export function initApp() {
             title="Menu"
           >☰</button>
 
-          <div class="brand"><span class="bot">🤖</span> Bernard</div>
+          <div class="brand">
+            <span class="bot">🤖</span> Bernard
+            <button id="logout-btn" title="Sign out" style="
+              margin-left:auto;
+              background:none;
+              border:1px solid rgba(255,255,255,0.2);
+              border-radius:8px;
+              color:#94a3b8;
+              font-size:12px;
+              padding:5px 10px;
+              cursor:pointer;
+              white-space:nowrap;
+              transition:all 0.15s;
+            ">Logout</button>
+          </div>
 
           <div class="tabs" id="tabs">
             <button class="tab active" data-view="chat">💬 Chat</button>
@@ -79,17 +93,6 @@ export function initApp() {
           </div>        
 
           <button id="help-btn" class="help-btn" title="User Guide"><span class="help-icon">?</span> Help</button>
-          <button id="logout-btn" title="Sign out" style="
-            background:none;
-            border:1px solid #e2e8f0;
-            border-radius:8px;
-            color:#64748b;
-            font-size:12px;
-            padding:5px 10px;
-            cursor:pointer;
-            white-space:nowrap;
-            transition:all 0.15s;
-          ">Logout</button>
 
           <div class="now" id="now"></div>
 
