@@ -23,13 +23,7 @@ let collapsedGroups = new Set(); // Track which groups are collapsed
 /* ----------------- Public API ----------------- */
 
 export function initReservations() {
-  // If we've already loaded once, just re-render
-  if (allReservations.length) {
-    setupReservationFilters();
-    renderReservations();
-  } else {
-    loadReservations();
-  }
+  loadReservations();
 }
 
 // Optional extra export if other modules ever need to force a reload
@@ -168,7 +162,11 @@ function setupReservationFilters() {
     yearSelect.dataset._yearsInitialised = '1';
   }
 
-  searchInput?.addEventListener('input', () => renderReservations());
+  let searchDebounceTimer = null;
+  searchInput?.addEventListener('input', () => {
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => renderReservations(), 300);
+  });
   monthSelect?.addEventListener('change', () => renderReservations());
   yearSelect?.addEventListener('change', () => renderReservations());
 
@@ -1498,21 +1496,8 @@ async function openEditModal(id) {
    </option>`
   ).join('');
 
-  // Generate extras HTML - for packages, show as read-only with quantities
-  const extrasHtml = isPackage 
-    ? (resExtras || [])
-        .map(e => `
-          <div class="extra-row" style="display:flex;justify-content:space-between;align-items:center;margin:6px 0;padding:8px;border:1px solid #e5e7eb;border-radius:10px;background:#f9fafb;">
-            <div>
-              <div style="font-weight:700">${e.extra_name || 'Extra'}</div>
-              <div style="color:#64748b;font-size:0.85rem">GHS ${formatCurrency(e.price || 0, 'GHS')}</div>
-            </div>
-            <div style="font-weight:600;color:#0f172a">
-              Qty: ${e.quantity || 1}
-            </div>
-          </div>
-        `).join('') || '<div class="muted">No extras included</div>'
-    : (extras || [])
+  // Generate extras HTML with +/- controls (editable for both packages and custom bookings)
+  const extrasHtml = (extras || [])
         .map(
           (e) => `
           <div class="extra-row" data-extra-id="${e.id}" style="display:flex;justify-content:space-between;align-items:center;margin:6px 0;padding:8px;border:1px solid var(--ring);border-radius:10px;">
@@ -1776,7 +1761,7 @@ async function openEditModal(id) {
           <div style="border:1px solid var(--ring);border-radius:var(--radius-md);padding:10px;max-height:260px;overflow-y:auto">
             ${extrasHtml || '<div class="muted">No extras available</div>'}
           </div>
-          ${isPackage ? '<div style="margin-top:8px;padding:8px;background:#f0f9ff;border:1px solid #bfdbfe;border-radius:6px;font-size:12px;color:#1e40af">📦 Package extras cannot be modified</div>' : ''}
+          ${isPackage ? '<div style="margin-top:6px;padding:6px 10px;background:#f0f9ff;border:1px solid #bfdbfe;border-radius:6px;font-size:12px;color:#1e40af">Package default extras are pre-filled. You can adjust quantities or add more.</div>' : ''}
         </div>
 
         ${!isPackage ? `
@@ -1801,15 +1786,9 @@ async function openEditModal(id) {
             </button>
             ` : ''}
           </div>
-          ${!isPackage ? `
           <div id="price-note" style="padding:8px;background:#fef3c7;border:1px solid #fde047;border-radius:6px;margin-bottom:10px;font-size:12px;color:#78350f">
-            💡 Using original booking prices. Click "Recalculate" to apply current dynamic pricing.
+            ${!isPackage ? '💡 Using original booking prices. Click "Recalculate" to apply current dynamic pricing.' : '📦 Package room pricing is fixed. Extras can be modified above.'}
           </div>
-          ` : `
-          <div style="padding:8px;background:#f0f9ff;border:1px solid #bfdbfe;border-radius:6px;margin-bottom:10px;font-size:12px;color:#1e40af">
-            📦 Package pricing is fixed and cannot be recalculated.
-          </div>
-          `}
           <!-- Manual Price Override -->
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:10px;background:white;border:1px solid #e5e7eb;border-radius:8px">
             <label style="font-size:13px;color:#64748b;white-space:nowrap;font-weight:500">Override Price/Night:</label>
@@ -4265,12 +4244,7 @@ if (recalcBtn && priceNote) {
 
       toast('Reservation updated');
       wrap.remove();
-      loadReservations(); // Refresh the list
-
-      // Refresh calendar/list
-      if (typeof initReservations === 'function') {
-        initReservations();
-      }
+      initReservations();
     } catch (e) {
       alert('Error saving: ' + (e.message || e));
     }

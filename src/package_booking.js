@@ -215,9 +215,15 @@ export async function openBookPackageModal() {
       .select('id, name, price, currency, code, needs_guest_input')
       .in('id', extraIds);
 
-
     extrasById = new Map((extras || []).map((e) => [e.id, e]));
   }
+
+  // 3b) Load ALL active extras so admin can add extras beyond the package defaults
+  const { data: allExtras } = await supabase
+    .from('extras')
+    .select('id, name, price, currency, code, needs_guest_input')
+    .eq('is_active', true)
+    .order('name');
 
   const extrasByPackage = new Map();
   (pkgExtras || []).forEach((px) => {
@@ -246,6 +252,25 @@ export async function openBookPackageModal() {
     .join('');
 
   const today = toDateInput(new Date());
+
+  // Build extras HTML with +/- controls for all active extras
+  const extrasHtml = (allExtras || [])
+    .map(
+      (e) => `
+      <div class="extra-row" data-extra-id="${e.id}" style="display:flex;justify-content:space-between;align-items:center;margin:6px 0;padding:8px;border:1px solid var(--ring);border-radius:10px;">
+        <div>
+          <div style="font-weight:700">${e.name}</div>
+          <div style="color:#64748b;font-size:0.85rem">GHS ${e.price}</div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="btn btn-sm pb-extra-dec" data-id="${e.id}">−</button>
+          <span class="pb-extra-qty" id="pb-extra-qty-${e.id}">0</span>
+          <button class="btn btn-sm pb-extra-inc" data-id="${e.id}">+</button>
+        </div>
+      </div>
+    `
+    )
+    .join('');
 
   wrap.innerHTML = `
     <div class="content" onclick="event.stopPropagation()">
@@ -340,6 +365,14 @@ export async function openBookPackageModal() {
         </div>
 
         <div class="form-group">
+          <label>Extras</label>
+          <div style="border:1px solid var(--ring);border-radius:var(--radius-md);padding:10px;max-height:260px;overflow-y:auto">
+            ${extrasHtml || '<div class="muted">No extras available</div>'}
+          </div>
+          <div style="margin-top:6px;padding:6px 10px;background:#f0f9ff;border:1px solid #bfdbfe;border-radius:6px;font-size:12px;color:#1e40af">Package default extras are pre-filled. You can adjust quantities or add more.</div>
+        </div>
+
+        <div class="form-group">
           <label>Notes</label>
           <textarea id="pb-notes" rows="3"></textarea>
         </div>
@@ -362,10 +395,9 @@ export async function openBookPackageModal() {
             <span id="pb-extras-total-val">GHS 0.00</span>
           </div>
           <div style="border-top:2px solid var(--ring);margin:8px 0;padding-top:8px;display:flex;justify-content:space-between;font-size:0.95rem">
-            <span style="font-weight:800">Total Package Price:</span>
+            <span style="font-weight:800">Total:</span>
             <span id="pb-total-val" style="font-weight:800;color:var(--brand)">GHS 0.00</span>
           </div>
-          <div id="pb-extra-lines" style="margin-top:6px;font-size:0.8rem;color:#4b5563"></div>
         </div>
       </div>
 
@@ -384,7 +416,42 @@ export async function openBookPackageModal() {
   const roomSubtotalDisplay = wrap.querySelector('#pb-room-subtotal-val');
   const extrasTotalDisplay = wrap.querySelector('#pb-extras-total-val');
   const totalDisplay = wrap.querySelector('#pb-total-val');
-  const extraLines = wrap.querySelector('#pb-extra-lines');
+
+  // --- Extras quantity tracking ---
+  const pbExtraQuantities = {};
+
+  function prefillPackageExtras() {
+    Object.keys(pbExtraQuantities).forEach((k) => (pbExtraQuantities[k] = 0));
+    const pkg = getSelectedPackage();
+    if (!pkg) return;
+    const defaults = extrasByPackage.get(pkg.id) || [];
+    defaults.forEach((de) => {
+      pbExtraQuantities[String(de.extra_id)] = de.quantity || 1;
+    });
+    (allExtras || []).forEach((e) => {
+      const qtyEl = wrap.querySelector(`#pb-extra-qty-${e.id}`);
+      if (qtyEl) qtyEl.textContent = pbExtraQuantities[String(e.id)] || 0;
+    });
+  }
+
+  wrap.querySelectorAll('.pb-extra-inc').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      pbExtraQuantities[id] = (pbExtraQuantities[id] || 0) + 1;
+      wrap.querySelector(`#pb-extra-qty-${id}`).textContent = pbExtraQuantities[id];
+      updatePriceBreakdown();
+    });
+  });
+
+  wrap.querySelectorAll('.pb-extra-dec').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      if (!pbExtraQuantities[id]) return;
+      pbExtraQuantities[id]--;
+      wrap.querySelector(`#pb-extra-qty-${id}`).textContent = pbExtraQuantities[id];
+      updatePriceBreakdown();
+    });
+  });
 
     // ===== Custom date picker (PackagesModal-style) =====
 
@@ -890,39 +957,41 @@ export async function openBookPackageModal() {
     const pkg = getSelectedPackage();
     if (!pkg) return;
     const cur = pkg.currency || 'GHS';
-    const extras = extrasByPackage.get(pkg.id) || [];
 
-    const extrasTotal = extras.reduce(
+    // Default extras total from the package definition (fixed baseline)
+    const defaultExtras = extrasByPackage.get(pkg.id) || [];
+    const defaultExtrasTotal = defaultExtras.reduce(
       (sum, e) => sum + (e.price || 0) * (e.quantity || 1),
       0
     );
+
+    // Current extras total from admin-editable quantities
+    const currentExtrasTotal = Object.entries(pbExtraQuantities)
+      .filter(([_, qty]) => qty > 0)
+      .reduce((sum, [id, qty]) => {
+        const ex = (allExtras || []).find((e) => String(e.id) === String(id));
+        return sum + (ex ? ex.price : 0) * qty;
+      }, 0);
+
     const packagePrice = Number(pkg.package_price || 0);
-    let roomSubtotal = packagePrice - extrasTotal;
+    let roomSubtotal = packagePrice - defaultExtrasTotal;
     if (roomSubtotal < 0) roomSubtotal = 0;
 
-    roomSubtotalDisplay.textContent = `${cur} ${roomSubtotal.toFixed(2)}`;
-    extrasTotalDisplay.textContent = `${cur} ${extrasTotal.toFixed(2)}`;
-    totalDisplay.textContent = `${cur} ${packagePrice.toFixed(2)}`;
+    const total = roomSubtotal + currentExtrasTotal;
 
-    if (extras.length) {
-      extraLines.innerHTML =
-        extras
-          .map(
-            (e) =>
-              `${e.quantity} × ${e.name} – ${cur} ${(e.price || 0).toFixed(2)}`
-          )
-          .join('<br>') || '';
-    } else {
-      extraLines.innerHTML = '<em>No extras included in this package.</em>';
-    }
+    roomSubtotalDisplay.textContent = `${cur} ${roomSubtotal.toFixed(2)}`;
+    extrasTotalDisplay.textContent = `${cur} ${currentExtrasTotal.toFixed(2)}`;
+    totalDisplay.textContent = `${cur} ${total.toFixed(2)}`;
   }
 
   // initial hydrate
+  prefillPackageExtras();
   hydrateRoomsForPackage();
   updateDatesAndNightsFromPackage();
   updatePriceBreakdown();
 
   pkgSel.addEventListener('change', () => {
+    prefillPackageExtras();
     hydrateRoomsForPackage();
     updateDatesAndNightsFromPackage();
     updatePriceBreakdown();
@@ -1020,16 +1089,37 @@ export async function openBookPackageModal() {
         return;
       }
 
-      // Pricing
-      const extras = extrasByPackage.get(pkg.id) || [];
-      const extrasTotal = extras.reduce(
+      // Pricing - use admin-editable extras
+      const defaultExtras = extrasByPackage.get(pkg.id) || [];
+      const defaultExtrasTotal = defaultExtras.reduce(
         (sum, e) => sum + (e.price || 0) * (e.quantity || 1),
         0
       );
+
+      const selectedExtras = Object.entries(pbExtraQuantities)
+        .filter(([_, qty]) => qty > 0)
+        .map(([id, qty]) => {
+          const ex = (allExtras || []).find((e) => String(e.id) === String(id)) || {};
+          return {
+            extra_id: id,
+            extra_code: ex.code || '',
+            extra_name: ex.name || '',
+            price: Number(ex.price || 0),
+            quantity: qty,
+            needs_guest_input: !!ex.needs_guest_input,
+          };
+        });
+
+      const extrasTotal = selectedExtras.reduce(
+        (sum, e) => sum + e.price * e.quantity,
+        0
+      );
+
       const packagePrice = Number(pkg.package_price || 0);
-      let roomSubtotal = packagePrice - extrasTotal;
+      let roomSubtotal = packagePrice - defaultExtrasTotal;
       if (roomSubtotal < 0) roomSubtotal = 0;
 
+      const total = roomSubtotal + extrasTotal;
       const currency = pkg.currency || 'GHS';
 
       // Insert reservation
@@ -1067,8 +1157,8 @@ export async function openBookPackageModal() {
         package_name: pkg.name || null,
         room_subtotal: roomSubtotal,
         extras_total: extrasTotal,
-        discount_amount: 0, // implicit discount is baked into room_subtotal
-        total: packagePrice,
+        discount_amount: 0,
+        total: total,
         notes: wrap.querySelector('#pb-notes').value || null,
       };
 
@@ -1081,12 +1171,12 @@ export async function openBookPackageModal() {
       if (resErr) throw resErr;
 
       // Insert reservation_extras
-      if (reservation && extras.length) {
-        const extrasRows = extras.map((e) => ({
+      if (reservation && selectedExtras.length) {
+        const extrasRows = selectedExtras.map((e) => ({
           reservation_id: reservation.id,
           extra_id: e.extra_id,
-          extra_code: e.code || null,
-          extra_name: e.name || null,
+          extra_code: e.extra_code || null,
+          extra_name: e.extra_name || null,
           price: e.price || 0,
           quantity: e.quantity || 1,
           subtotal: (e.price || 0) * (e.quantity || 1),
@@ -1118,12 +1208,11 @@ export async function openBookPackageModal() {
             reservation.group_reservation_code || reservation.confirmation_code;
 
           // Build extras in the structure the extras-email template expects
-          const roomExtrasForEmail = (extras || []).map((e) => ({
-            code: e.code || null,
-            name: e.name || null,
+          const roomExtrasForEmail = (selectedExtras || []).map((e) => ({
+            code: e.extra_code || null,
+            name: e.extra_name || null,
             price: e.price || 0,
             qty: e.quantity || 1,
-            // this is the critical flag your template uses
             needs_selection: !!e.needs_guest_input,
           }));
 
@@ -1133,7 +1222,6 @@ export async function openBookPackageModal() {
             package_name: pkg.name,
             package_code: pkg.code,
 
-            // IMPORTANT: extras email reads booking.rooms[].extras[]
             rooms: [
               {
                 room_name: reservation.room_name,
@@ -1150,9 +1238,8 @@ export async function openBookPackageModal() {
               },
             ],
 
-            // keep this too (booking email can use it)
-            packageExtras: (extras || []).map((e) => ({
-              name: e.name,
+            packageExtras: (selectedExtras || []).map((e) => ({
+              name: e.extra_name,
               quantity: e.quantity || 1,
               needs_selection: !!e.needs_guest_input,
             })),
