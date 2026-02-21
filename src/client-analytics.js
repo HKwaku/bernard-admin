@@ -3,6 +3,7 @@
 
 import { supabase } from './config/supabase.js';
 import { formatCurrency, formatDate, toast } from './utils/helpers.js';
+import { getExcludeInfluencer } from './analytics.js';
 
 // Country code to country name mapping
 const COUNTRY_CODE_MAP = {
@@ -96,7 +97,7 @@ function renderClientAnalytics() {
       <!-- Header -->
       <div style="margin-bottom: 24px;">
         <h2 style="font-size: 20px; font-weight: 700; color: #0f172a; margin-bottom: 8px;">Client Analytics</h2>
-        <p style="font-size: 14px; color: #64748b;">Guest demographics, booking patterns, and loyalty insights</p>
+        <p style="font-size: 14px; color: #64748b;">Guest demographics, booking patterns, and loyalty insights${getExcludeInfluencer() ? ' <span style="color:#ef4444;font-weight:600;">(excl. influencer)</span>' : ''}</p>
       </div>
 
       <!-- Summary Metrics -->
@@ -174,14 +175,17 @@ async function renderClientOverviewMetrics() {
   if (!el) return;
 
   try {
-    const { data: reservations, error } = await supabase
+    const { data: allRes, error } = await supabase
       .from('reservations')
-      .select('id, guest_first_name, guest_last_name, guest_email, created_at, total, status, adults, children')
+      .select('id, guest_first_name, guest_last_name, guest_email, created_at, total, status, adults, children, is_influencer')
       .lte('check_in', sqlDate(dateRange.end))
       .gte('check_out', sqlDate(dateRange.start))
       .in('status', ['confirmed', 'checked-in', 'checked-out']);
 
     if (error) throw error;
+
+    const excl = getExcludeInfluencer();
+    const reservations = excl ? (allRes || []).filter(r => !r.is_influencer) : (allRes || []);
 
     // Unique guests by email
     const uniqueEmails = new Set(
@@ -255,10 +259,9 @@ async function renderTopClients() {
   if (!el) return;
 
   try {
-    // Get all reservations (not just date range) to identify repeat customers
-    const { data: allReservations, error } = await supabase
+    const { data: rawReservations, error } = await supabase
       .from('reservations')
-      .select('guest_first_name, guest_last_name, guest_email, total, status, created_at')
+      .select('guest_first_name, guest_last_name, guest_email, total, status, created_at, is_influencer')
       .in('status', ['confirmed', 'checked-in', 'checked-out'])
       .order('created_at', { ascending: false });
 
@@ -266,6 +269,11 @@ async function renderTopClients() {
       console.error('Supabase error in renderTopClients:', error);
       throw error;
     }
+
+    const excl = getExcludeInfluencer();
+    const allReservations = excl
+      ? (rawReservations || []).filter(r => !r.is_influencer)
+      : (rawReservations || []);
 
     if (!allReservations || allReservations.length === 0) {
       el.innerHTML = '<div class="analytics-empty">No bookings found</div>';
@@ -350,14 +358,17 @@ async function renderCountrySplit() {
   if (!el) return;
 
   try {
-    const { data: reservations, error } = await supabase
+    const { data: allRes, error } = await supabase
       .from('reservations')
-      .select('country_code')
+      .select('country_code, is_influencer')
       .lte('check_in', sqlDate(dateRange.end))
       .gte('check_out', sqlDate(dateRange.start))
       .in('status', ['confirmed', 'checked-in', 'checked-out']);
 
     if (error) throw error;
+
+    const excl = getExcludeInfluencer();
+    const reservations = excl ? (allRes || []).filter(r => !r.is_influencer) : (allRes || []);
 
     const countryCounts = {};
     reservations.forEach(r => {
@@ -422,14 +433,17 @@ async function renderGenderSplit() {
   if (!el) return;
 
   try {
-    const { data: reservations, error } = await supabase
+    const { data: allRes, error } = await supabase
       .from('reservations')
-      .select('guest_gender')
+      .select('guest_gender, is_influencer')
       .lte('check_in', sqlDate(dateRange.end))
       .gte('check_out', sqlDate(dateRange.start))      
       .in('status', ['confirmed', 'checked-in', 'checked-out']);
 
     if (error) throw error;
+
+    const excl = getExcludeInfluencer();
+    const reservations = excl ? (allRes || []).filter(r => !r.is_influencer) : (allRes || []);
 
     const genderCounts = {
       'Male': 0,
@@ -523,24 +537,26 @@ async function renderGuestTypeAnalysis() {
   if (!el) return;
 
   try {
-    // Get all reservations to identify guest history
-    const { data: allReservations, error: allError } = await supabase
+    const { data: rawAll, error: allError } = await supabase
       .from('reservations')
-      .select('guest_email, created_at, status')
+      .select('guest_email, created_at, status, is_influencer')
       .in('status', ['confirmed', 'checked-in', 'checked-out'])
       .order('created_at', { ascending: true });
 
     if (allError) throw allError;
 
-    // Get current period reservations
-    const { data: periodReservations, error: periodError } = await supabase
+    const { data: rawPeriod, error: periodError } = await supabase
       .from('reservations')
-      .select('guest_email, total')
+      .select('guest_email, total, is_influencer')
       .lte('check_in', sqlDate(dateRange.end))
       .gte('check_out', sqlDate(dateRange.start))
       .in('status', ['confirmed', 'checked-in', 'checked-out']);
 
     if (periodError) throw periodError;
+
+    const excl = getExcludeInfluencer();
+    const allReservations = excl ? (rawAll || []).filter(r => !r.is_influencer) : (rawAll || []);
+    const periodReservations = excl ? (rawPeriod || []).filter(r => !r.is_influencer) : (rawPeriod || []);
 
     // Build guest history map
     const guestFirstBooking = {};
@@ -638,14 +654,17 @@ async function renderBookingLeadTime() {
   if (!el) return;
 
   try {
-    const { data: reservations, error } = await supabase
+    const { data: allRes, error } = await supabase
       .from('reservations')
-      .select('created_at, check_in')
+      .select('created_at, check_in, is_influencer')
       .lte('check_in', sqlDate(dateRange.end))
       .gte('check_out', sqlDate(dateRange.start))
       .in('status', ['confirmed', 'checked-in', 'checked-out']);
 
     if (error) throw error;
+
+    const excl = getExcludeInfluencer();
+    const reservations = excl ? (allRes || []).filter(r => !r.is_influencer) : (allRes || []);
 
     const leadTimes = reservations.map(r => {
       const created = new Date(r.created_at);
@@ -717,16 +736,17 @@ async function renderRoomPreferences() {
   if (!el) return;
 
   try {
-    // Get all reservations to identify guest type
-    const { data: allReservations, error: allError } = await supabase
+    const { data: rawAll, error: allError } = await supabase
       .from('reservations')
-      .select('guest_email, created_at, status')
+      .select('guest_email, created_at, status, is_influencer')
       .in('status', ['confirmed', 'checked-in', 'checked-out'])
       .order('created_at', { ascending: true });
 
     if (allError) throw allError;
 
-    // Build guest history
+    const excl = getExcludeInfluencer();
+    const allReservations = excl ? (rawAll || []).filter(r => !r.is_influencer) : (rawAll || []);
+
     const guestFirstBooking = {};
     allReservations.forEach(r => {
       if (!r.guest_email) return;
@@ -736,15 +756,16 @@ async function renderRoomPreferences() {
       }
     });
 
-    // Get current period with room data
-    const { data: periodReservations, error: periodError } = await supabase
+    const { data: rawPeriod, error: periodError } = await supabase
       .from('reservations')
-      .select('guest_email, room_type_code, created_at')
+      .select('guest_email, room_type_code, created_at, is_influencer')
       .lte('check_in', sqlDate(dateRange.end))
       .gte('check_out', sqlDate(dateRange.start))
       .in('status', ['confirmed', 'checked-in', 'checked-out']);
 
     if (periodError) throw periodError;
+
+    const periodReservations = excl ? (rawPeriod || []).filter(r => !r.is_influencer) : (rawPeriod || []);
 
     // Classify and count
     const roomPrefs = {
@@ -826,12 +847,15 @@ async function renderRepeatGuestAnalysis() {
   if (!el) return;
 
   try {
-    const { data: reservations, error } = await supabase
+    const { data: allRes, error } = await supabase
       .from('reservations')
-      .select('guest_email, status')
+      .select('guest_email, status, is_influencer')
       .in('status', ['confirmed', 'checked-in', 'checked-out']);
 
     if (error) throw error;
+
+    const excl = getExcludeInfluencer();
+    const reservations = excl ? (allRes || []).filter(r => !r.is_influencer) : (allRes || []);
 
     const emailCounts = {};
     reservations.forEach(r => {
@@ -901,12 +925,15 @@ async function renderGuestLifetimeValue() {
   if (!el) return;
 
   try {
-    const { data: reservations, error } = await supabase
+    const { data: allRes, error } = await supabase
       .from('reservations')
-      .select('guest_email, total, status')
+      .select('guest_email, total, status, is_influencer')
       .in('status', ['confirmed', 'checked-in', 'checked-out']);
 
     if (error) throw error;
+
+    const excl = getExcludeInfluencer();
+    const reservations = excl ? (allRes || []).filter(r => !r.is_influencer) : (allRes || []);
 
     const guestLTV = {};
     reservations.forEach(r => {

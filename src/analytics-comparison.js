@@ -3,6 +3,7 @@
 
 import { supabase } from './config/supabase.js';
 import { formatCurrency, toast } from './utils/helpers.js';
+import { getExcludeInfluencer } from './analytics.js';
 
 // Format currency with K/M suffix
 function formatCurrencyCompact(amount, currency = 'GHS') {
@@ -234,11 +235,20 @@ function renderComparisonCard(
 }
 
 
-// Fetch reservations for a period
+function clippedNights(checkInStr, checkOutStr, periodStart, periodEnd) {
+  if (!checkInStr || !checkOutStr) return 0;
+  const ci = new Date(checkInStr + 'T00:00:00');
+  const co = new Date(checkOutStr + 'T00:00:00');
+  const msPerDay = 1000 * 60 * 60 * 24;
+  const rStart = new Date(Math.max(ci.getTime(), periodStart.getTime()));
+  const rEnd = new Date(Math.min(co.getTime(), periodEnd.getTime() + msPerDay));
+  return Math.max(0, Math.round((rEnd - rStart) / msPerDay));
+}
+
 async function fetchReservationsForPeriod(start, end) {
   const { data, error } = await supabase
     .from('reservations')
-    .select('id, total, room_subtotal, extras_total, check_in, check_out, nights, reservation_extras(subtotal)')
+    .select('id, total, room_subtotal, extras_total, check_in, check_out, nights, is_influencer, reservation_extras(subtotal)')
     .lte('check_in', sqlDate(end))
     .gte('check_out', sqlDate(start))
     .in('status', ['confirmed', 'completed', 'checked-in', 'checked-out']);
@@ -247,21 +257,18 @@ async function fetchReservationsForPeriod(start, end) {
   return data || [];
 }
 
-// Calculate occupancy metrics
-async function calculateOccupancyMetrics(reservations, start, end) {
+async function calculateOccupancyMetrics(allReservations, start, end) {
   const NUM_CABINS = 3;
+  const excl = getExcludeInfluencer();
 
-  // Normalize to local midnight to match analytics.js (prevents UTC parsing drift)
   const periodStart = new Date(start);
   periodStart.setHours(0, 0, 0, 0);
-
   const periodEnd = new Date(end);
   periodEnd.setHours(0, 0, 0, 0);
 
   const totalDays =
     Math.ceil((periodEnd - periodStart) / (1000 * 60 * 60 * 24)) + 1;
 
-  // Get blocked dates for this period
   const { data: blockedDates } = await supabase
     .from('blocked_dates')
     .select('blocked_date, room_type_id')
@@ -270,87 +277,67 @@ async function calculateOccupancyMetrics(reservations, start, end) {
 
   const blockedNights = (blockedDates || []).length;
 
+  const reservations = excl
+    ? (allReservations || []).filter(r => !r.is_influencer)
+    : (allReservations || []);
+
+  let influencerNights = 0;
+  if (excl) {
+    (allReservations || []).filter(r => r.is_influencer).forEach(r => {
+      influencerNights += clippedNights(r.check_in, r.check_out, periodStart, periodEnd);
+    });
+  }
+
   const theoreticalCapacity = totalDays * NUM_CABINS;
-  const availableNights = theoreticalCapacity - blockedNights;
+  const availableNights = theoreticalCapacity - blockedNights - influencerNights;
 
   let occupiedNights = 0;
-  const msPerDay = 1000 * 60 * 60 * 24;
-
-  (reservations || []).forEach((r) => {
-    if (!r.check_in || !r.check_out) return;
-
-    // Parse dates
-    const checkIn = new Date(r.check_in + 'T00:00:00');
-    const checkOut = new Date(r.check_out + 'T00:00:00');
-
-    // Clip to period boundaries
-    const rangeStart = new Date(Math.max(checkIn.getTime(), periodStart.getTime()));
-    const rangeEnd = new Date(Math.min(checkOut.getTime(), periodEnd.getTime() + msPerDay));
-
-    // Calculate nights in range
-    const nightsInRange = Math.max(0, (rangeEnd - rangeStart) / msPerDay);
-    occupiedNights += nightsInRange;
+  reservations.forEach(r => {
+    occupiedNights += clippedNights(r.check_in, r.check_out, periodStart, periodEnd);
   });
-
-  occupiedNights = Math.round(occupiedNights);
 
   const occupancyRate =
     availableNights > 0 ? (occupiedNights / availableNights) * 100 : 0;
 
-  const avgLOS = (reservations || []).length > 0
-    ? occupiedNights / (reservations || []).length
+  const avgLOS = reservations.length > 0
+    ? occupiedNights / reservations.length
     : 0;
 
   return {
     occupancyRate,
     avgLOS,
     totalNights: occupiedNights,
-    bookings: (reservations || []).length,
+    bookings: reservations.length,
     availableNights
   };
 }
 
 
-// Calculate revenue metrics
-function calculateRevenueMetrics(reservations, availableNights, start, end) {
+function calculateRevenueMetrics(allReservations, availableNights, start, end) {
+  const excl = getExcludeInfluencer();
+  const reservations = excl
+    ? (allReservations || []).filter(r => !r.is_influencer)
+    : (allReservations || []);
+
+  const periodStart = new Date(start);
+  periodStart.setHours(0, 0, 0, 0);
+  const periodEnd = new Date(end);
+  periodEnd.setHours(0, 0, 0, 0);
+
   const totalRevenue = reservations.reduce((sum, r) => sum + (parseFloat(r.total) || 0), 0);
   const roomRevenue = reservations.reduce((sum, r) => sum + (parseFloat(r.room_subtotal) || 0), 0);
-  const MS_PER_DAY = 1000 * 60 * 60 * 24;
-  const endExclusive = new Date(end);
-  endExclusive.setDate(endExclusive.getDate() + 1);
-
-  // Use extras_total field to match main analytics exactly
   const extrasRevenue = reservations.reduce(
-    (sum, r) => sum + (parseFloat(r.extras_total) || 0),
-    0
+    (sum, r) => sum + (parseFloat(r.extras_total) || 0), 0
   );
 
-  // Calculate occupied nights WITHIN the date range (not total r.nights)
-  // Calculate occupied nights by clipping
   let occupiedNights = 0;
-  const msPerDay = 1000 * 60 * 60 * 24;
-  
   reservations.forEach(r => {
-    if (!r.check_in || !r.check_out) return;
-    const checkIn = new Date(r.check_in);
-    const checkOut = new Date(r.check_out);
-    const rangeStart = new Date(Math.max(checkIn.getTime(), start.getTime()));
-    const rangeEnd = new Date(Math.min(checkOut.getTime(), endExclusive.getTime() + msPerDay));
-    const nightsInRange = Math.max(0, (rangeEnd - rangeStart) / msPerDay);
-    occupiedNights += nightsInRange;
+    occupiedNights += clippedNights(r.check_in, r.check_out, periodStart, periodEnd);
   });
-  
-  occupiedNights = Math.round(occupiedNights);
 
   const avgBookingValue = reservations.length > 0 ? totalRevenue / reservations.length : 0;
-  
-  // RevPAR = Room Revenue / Available Nights (not sold nights)
   const revPAR = availableNights > 0 ? roomRevenue / availableNights : 0;
-  
-  // TRevPAR = Total Revenue / Available Nights (includes extras)
   const trevpar = availableNights > 0 ? totalRevenue / availableNights : 0;
-  
-  // ADR = Room Revenue / Occupied Nights
   const adr = occupiedNights > 0 ? roomRevenue / occupiedNights : 0;
 
   return { totalRevenue, roomRevenue, extrasRevenue, avgBookingValue, revPAR, trevpar, adr };
@@ -409,20 +396,24 @@ async function getWeekdayWeekendComparison(start, end) {
     weekendMap[wd.day_of_week] = wd.is_weekend;
   });
 
-  // Get all reservations with overlap detection
-  const { data: reservations, error } = await supabase
+  const { data: allReservations, error } = await supabase
     .from('reservations')
-    .select('check_in, check_out, nights')
+    .select('check_in, check_out, nights, is_influencer')
     .lte('check_in', sqlDate(end))
     .gte('check_out', sqlDate(start))
     .in('status', ['confirmed', 'completed', 'checked-in', 'checked-out']);
 
   if (error) throw error;
 
+  const excl = getExcludeInfluencer();
+  const reservations = excl
+    ? (allReservations || []).filter(r => !r.is_influencer)
+    : (allReservations || []);
+
   let weekdayNights = 0;
   let weekendNights = 0;
 
-  (reservations || []).forEach(r => {
+  reservations.forEach(r => {
     if (!r.check_in || !r.check_out) return;
 
     const checkIn = new Date(r.check_in);
@@ -471,25 +462,23 @@ async function getWeekdayWeekendComparison(start, end) {
   return { weekdayOccupancy, weekendOccupancy };
 }
 
-// Client-side occupancy trend calculation (works for all granularities)
 async function calculateOccupancyTrendForPeriod(start, end, granularity) {
   const NUM_CABINS = 3;
   const msPerDay = 1000 * 60 * 60 * 24;
+  const excl = getExcludeInfluencer();
 
   const periodStart = new Date(start);
   periodStart.setHours(0, 0, 0, 0);
   const periodEnd = new Date(end);
   periodEnd.setHours(0, 0, 0, 0);
 
-  // Fetch reservations overlapping the period
-  const { data: reservations } = await supabase
+  const { data: allReservations } = await supabase
     .from('reservations')
-    .select('check_in, check_out')
+    .select('check_in, check_out, is_influencer')
     .lte('check_in', sqlDate(periodEnd))
     .gte('check_out', sqlDate(periodStart))
     .in('status', ['confirmed', 'completed', 'checked-in', 'checked-out']);
 
-  // Fetch blocked dates
   const { data: blockedDates } = await supabase
     .from('blocked_dates')
     .select('blocked_date')
@@ -498,28 +487,43 @@ async function calculateOccupancyTrendForPeriod(start, end, granularity) {
 
   const blockedSet = new Set((blockedDates || []).map(b => b.blocked_date));
 
-  // Build daily occupied count
+  const filtered = excl
+    ? (allReservations || []).filter(r => !r.is_influencer)
+    : (allReservations || []);
+
   const dailyOccupied = {};
-  (reservations || []).forEach(r => {
+  const dailyInfluencer = {};
+
+  function addToMap(map, r) {
     if (!r.check_in || !r.check_out) return;
     const ci = new Date(r.check_in + 'T00:00:00');
     const co = new Date(r.check_out + 'T00:00:00');
-    const dayStart = new Date(Math.max(ci.getTime(), periodStart.getTime()));
-    const dayEnd = new Date(Math.min(co.getTime(), periodEnd.getTime()));
-    let d = new Date(dayStart);
-    while (d <= dayEnd) {
+    let d = new Date(Math.max(ci.getTime(), periodStart.getTime()));
+    const dEnd = new Date(Math.min(co.getTime(), periodEnd.getTime()));
+    while (d <= dEnd) {
       const key = d.toISOString().split('T')[0];
-      dailyOccupied[key] = (dailyOccupied[key] || 0) + 1;
+      map[key] = (map[key] || 0) + 1;
       d = new Date(d.getTime() + msPerDay);
     }
-  });
+  }
+
+  filtered.forEach(r => addToMap(dailyOccupied, r));
+  if (excl) {
+    (allReservations || []).filter(r => r.is_influencer).forEach(r => addToMap(dailyInfluencer, r));
+  }
+
+  function dayAvailable(dateKey) {
+    if (blockedSet.has(dateKey)) return 0;
+    const infCount = excl ? (dailyInfluencer[dateKey] || 0) : 0;
+    return Math.max(0, NUM_CABINS - infCount);
+  }
 
   if (granularity === 'day') {
     const points = [];
     let d = new Date(periodStart);
     while (d <= periodEnd) {
       const key = d.toISOString().split('T')[0];
-      const available = blockedSet.has(key) ? 0 : NUM_CABINS;
+      const available = dayAvailable(key);
       const occupied = Math.min(dailyOccupied[key] || 0, available || NUM_CABINS);
       const rate = available > 0 ? (occupied / available) * 100 : 0;
       points.push({ date: new Date(d), value: rate });
@@ -540,7 +544,7 @@ async function calculateOccupancyTrendForPeriod(start, end, granularity) {
       if (!weekBuckets[weekKey]) {
         weekBuckets[weekKey] = { date: new Date(weekStart), totalAvailable: 0, totalOccupied: 0 };
       }
-      const available = blockedSet.has(key) ? 0 : NUM_CABINS;
+      const available = dayAvailable(key);
       weekBuckets[weekKey].totalAvailable += available;
       weekBuckets[weekKey].totalOccupied += Math.min(dailyOccupied[key] || 0, available || NUM_CABINS);
       d = new Date(d.getTime() + msPerDay);
@@ -550,7 +554,6 @@ async function calculateOccupancyTrendForPeriod(start, end, granularity) {
       .map(b => ({ date: b.date, value: b.totalAvailable > 0 ? (b.totalOccupied / b.totalAvailable) * 100 : 0 }));
   }
 
-  // month granularity
   const monthBuckets = {};
   let d = new Date(periodStart);
   while (d <= periodEnd) {
@@ -559,7 +562,7 @@ async function calculateOccupancyTrendForPeriod(start, end, granularity) {
     if (!monthBuckets[monthKey]) {
       monthBuckets[monthKey] = { date: new Date(d.getFullYear(), d.getMonth(), 1), totalAvailable: 0, totalOccupied: 0 };
     }
-    const available = blockedSet.has(key) ? 0 : NUM_CABINS;
+    const available = dayAvailable(key);
     monthBuckets[monthKey].totalAvailable += available;
     monthBuckets[monthKey].totalOccupied += Math.min(dailyOccupied[key] || 0, available || NUM_CABINS);
     d = new Date(d.getTime() + msPerDay);
@@ -604,16 +607,21 @@ async function generateRevenueTimeSeries(periods, granularity = 'day') {
   const datasets = [];
 
   for (const [label, period] of Object.entries(periods)) {
-    const { data: reservations } = await supabase
+    const { data: allRes } = await supabase
       .from('reservations')
-      .select('total, check_in, check_out')
+      .select('total, check_in, check_out, is_influencer')
       .lte('check_in', sqlDate(period.end))
       .gte('check_out', sqlDate(period.start))
       .in('status', ['confirmed', 'completed', 'checked-in', 'checked-out']);
 
+    const excl = getExcludeInfluencer();
+    const reservations = excl
+      ? (allRes || []).filter(r => !r.is_influencer)
+      : (allRes || []);
+
     const revenueByDate = {};
     
-    (reservations || []).forEach(r => {
+    reservations.forEach(r => {
       if (!r.check_in) return;
       const key = sqlDate(new Date(r.check_in));
       revenueByDate[key] = (revenueByDate[key] || 0) + (parseFloat(r.total) || 0);
@@ -1074,19 +1082,22 @@ export async function renderComparisonView(dateRange) {
         ? calculateRevenueMetrics(yoyRes, yoyOccupancy.availableNights, periods.yoy.start, periods.yoy.end)
         : { totalRevenue: 0, roomRevenue: 0, extrasRevenue: 0, avgBookingValue: 0, revPAR: 0, trevpar: 0, adr: 0 };
       
-    const currentExtras = calculateExtrasMetrics(currentRes);
-    const momExtras = calculateExtrasMetrics(momRes);
-    const qoqExtras = calculateExtrasMetrics(qoqRes);
-    const yoyExtras = calculateExtrasMetrics(yoyRes);
+    const exclF = getExcludeInfluencer();
+    const filterRes = (arr) => exclF ? arr.filter(r => !r.is_influencer) : arr;
+    const currentExtras = calculateExtrasMetrics(filterRes(currentRes));
+    const momExtras = calculateExtrasMetrics(filterRes(momRes));
+    const qoqExtras = calculateExtrasMetrics(filterRes(qoqRes));
+    const yoyExtras = calculateExtrasMetrics(filterRes(yoyRes));
 
     // Get weekday vs weekend comparison
     const weekdayWeekend = await getWeekdayWeekendComparison(periods.current.start, periods.current.end);
 
-    // Render the comparison view
+    const filterNote = getExcludeInfluencer() ? ' (excl. influencer)' : '';
+
     container.innerHTML = `
       <!-- Occupancy Comparisons -->
       <div class="analytics-section">
-        <h2 class="analytics-section-title">Occupancy Comparisons</h2>
+        <h2 class="analytics-section-title">Occupancy Comparisons${filterNote}</h2>
         <div class="metrics-grid">
           ${renderComparisonCard(
             'Occupancy Rate',
@@ -1153,7 +1164,7 @@ export async function renderComparisonView(dateRange) {
 
       <!-- Revenue Comparisons -->
       <div class="analytics-section">
-        <h2 class="analytics-section-title">Revenue Comparisons</h2>
+        <h2 class="analytics-section-title">Revenue Comparisons${filterNote}</h2>
         <div class="metrics-grid">
           ${renderComparisonCard(
             'Total Revenue',

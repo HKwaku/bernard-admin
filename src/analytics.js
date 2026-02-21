@@ -136,6 +136,11 @@ const chartGranularity = {
   occupancy: 'day',
 };
 
+// When true, influencer stays are excluded from occupancy & revenue metrics
+let excludeInfluencer = false;
+
+export function getExcludeInfluencer() { return excludeInfluencer; }
+
 function daysInRange(start, end) {
   const diffMs = end - start;
   // +1 so a same-day range counts as 1 day, not 0
@@ -319,7 +324,13 @@ view.innerHTML = `
     <!-- OCCUPANCY OVERVIEW                                        -->
     <!-- ========================================================= -->
     <div class="analytics-section">
-      <h2 class="analytics-section-title">Occupancy Overview</h2>
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <h2 class="analytics-section-title" style="margin:0;">Occupancy Overview</h2>
+        <div class="chart-controls">
+          <button class="chart-btn active" data-influencer="all">All Bookings</button>
+          <button class="chart-btn" data-influencer="exclude">Excl. Influencer</button>
+        </div>
+      </div>
       <div class="metrics-grid" id="occupancy-metrics">
         <div class="metric-card"><div class="metric-label">Loading...</div></div>
       </div>
@@ -513,6 +524,9 @@ syncCheckboxDropdownsToDateRange();
     btn.addEventListener('click', handleChartGranularityClick);
   });
 
+  // Influencer toggle buttons
+  attachInfluencerToggle();
+
   // Date filter – Month / Year / Custom
   document.getElementById('btn-custom-range')?.addEventListener('click', openCustomRange);
   document.getElementById('apply-date-range')?.addEventListener('click', applyCustomDateRange);
@@ -581,7 +595,13 @@ function renderStandardViewContent() {
     <!-- OCCUPANCY OVERVIEW                                        -->
     <!-- ========================================================= -->
     <div class="analytics-section">
-      <h2 class="analytics-section-title">Occupancy Overview</h2>
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <h2 class="analytics-section-title" style="margin:0;">Occupancy Overview</h2>
+        <div class="chart-controls">
+          <button class="chart-btn active" data-influencer="all">All Bookings</button>
+          <button class="chart-btn" data-influencer="exclude">Excl. Influencer</button>
+        </div>
+      </div>
       <div class="metrics-grid" id="occupancy-metrics">
         <div class="metric-card"><div class="metric-label">Loading...</div></div>
       </div>
@@ -721,6 +741,7 @@ function renderStandardViewContent() {
     document.querySelectorAll('.chart-btn[data-chart]').forEach((btn) => {
       btn.addEventListener('click', handleChartGranularityClick);
     });
+    attachInfluencerToggle();
   }, 100);
 
   // Init drill-through modal (idempotent) and attach delegated click handler
@@ -770,74 +791,78 @@ async function loadAllAnalytics() {
   }
 }
 
+function clippedNights(checkInStr, checkOutStr, periodStart, periodEnd) {
+  if (!checkInStr || !checkOutStr) return 0;
+  const ci = new Date(checkInStr + 'T00:00:00');
+  const co = new Date(checkOutStr + 'T00:00:00');
+  const msPerDay = 1000 * 60 * 60 * 24;
+  const rStart = new Date(Math.max(ci.getTime(), periodStart.getTime()));
+  const rEnd = new Date(Math.min(co.getTime(), periodEnd.getTime() + msPerDay));
+  return Math.max(0, Math.round((rEnd - rStart) / msPerDay));
+}
+
 async function loadOccupancyMetrics() {
   try {
-    // Fetch reservations with overlap detection (no RPC needed!)
-    const { data: reservations, error } = await supabase
+    let query = supabase
       .from('reservations')
-      .select('check_in, check_out, nights')
+      .select('check_in, check_out, nights, is_influencer')
       .lte('check_in', sqlDate(dateRange.end))
       .gte('check_out', sqlDate(dateRange.start))
       .in('status', ['confirmed', 'completed', 'checked-in', 'checked-out']);
 
+    const { data: allReservations, error } = await query;
     if (error) throw error;
 
-    // Fetch blocked dates
     const { data: blockedDates } = await supabase
       .from('blocked_dates')
       .select('blocked_date')
       .gte('blocked_date', sqlDate(dateRange.start))
       .lte('blocked_date', sqlDate(dateRange.end));
 
-    // Calculate everything in JavaScript
     const NUM_CABINS = 3;
     const daysInPeriod = Math.ceil((dateRange.end - dateRange.start) / (1000 * 60 * 60 * 24)) + 1;
     const theoreticalCapacity = daysInPeriod * NUM_CABINS;
     const blockedNights = (blockedDates || []).length;
-    const availableNights = theoreticalCapacity - blockedNights;
 
-    // Calculate occupied nights by clipping each reservation to the period
-    // This gives us the actual nights occupied within the period boundaries
+    // Split reservations by influencer flag
+    const reservations = excludeInfluencer
+      ? (allReservations || []).filter(r => !r.is_influencer)
+      : (allReservations || []);
+
+    let influencerNights = 0;
+    if (excludeInfluencer) {
+      (allReservations || []).filter(r => r.is_influencer).forEach(r => {
+        influencerNights += clippedNights(r.check_in, r.check_out, dateRange.start, dateRange.end);
+      });
+    }
+
+    // Available nights: reduce by blocked dates AND influencer nights (they occupy rooms but aren't sellable)
+    const availableNights = theoreticalCapacity - blockedNights - influencerNights;
+
     let occupiedNights = 0;
-    (reservations || []).forEach(r => {
-      if (!r.check_in || !r.check_out) return;
-      
-      // Parse dates
-      const checkIn = new Date(r.check_in + 'T00:00:00');
-      const checkOut = new Date(r.check_out + 'T00:00:00');
-      
-      // Clip to period boundaries
-      // Add 1 day to period end to make it inclusive for the checkout boundary
-      const rangeStart = new Date(Math.max(checkIn.getTime(), dateRange.start.getTime()));
-      const rangeEnd = new Date(Math.min(checkOut.getTime(), dateRange.end.getTime() + (1000 * 60 * 60 * 24)));
-      
-      // Calculate nights within this period
-      const msPerDay = 1000 * 60 * 60 * 24;
-      const nightsInRange = Math.max(0, (rangeEnd - rangeStart) / msPerDay);
-      occupiedNights += nightsInRange;
+    reservations.forEach(r => {
+      occupiedNights += clippedNights(r.check_in, r.check_out, dateRange.start, dateRange.end);
     });
 
-    // Round to avoid floating point issues
-    occupiedNights = Math.round(occupiedNights);
-
     const occupancyRate = availableNights > 0 ? (occupiedNights / availableNights) * 100 : 0;
-    const alos = (reservations || []).length > 0 ? occupiedNights / (reservations || []).length : 0;
+    const alos = reservations.length > 0 ? occupiedNights / reservations.length : 0;
+    const filterNote = excludeInfluencer ? ' (excl. influencer)' : '';
 
     const html = `
       <div class="metric-card" data-drill="occupancy">
         <div class="metric-label">Occupancy Rate</div>
         <div class="metric-value">${occupancyRate.toFixed(1)}%</div>
-        <div class="metric-subtext">${occupiedNights} of ${availableNights} nights occupied</div>
+        <div class="metric-subtext">${occupiedNights} of ${availableNights} nights occupied${filterNote}</div>
       </div>
       <div class="metric-card" data-drill="occupancy">
         <div class="metric-label">Nights Sold</div>
         <div class="metric-value">${occupiedNights}</div>
-        <div class="metric-subtext">in selected period</div>
+        <div class="metric-subtext">in selected period${filterNote}</div>
       </div>
       <div class="metric-card" data-drill="occupancy">
         <div class="metric-label">Available Nights</div>
         <div class="metric-value">${availableNights}</div>
-        <div class="metric-subtext">${blockedNights} nights blocked</div>
+        <div class="metric-subtext">${blockedNights} blocked${excludeInfluencer ? `, ${influencerNights} influencer` : ''}</div>
       </div>
       <div class="metric-card" data-drill="occupancy">
         <div class="metric-label">ALOS</div>
@@ -846,7 +871,7 @@ async function loadOccupancyMetrics() {
       </div>
       <div class="metric-card" data-drill="occupancy">
         <div class="metric-label">Bookings in Period</div>
-        <div class="metric-value">${(reservations || []).length}</div>
+        <div class="metric-value">${reservations.length}</div>
       </div>
     `;
 
@@ -860,24 +885,32 @@ async function loadOccupancyMetrics() {
 
 async function loadRevenueMetrics() {
   try {
-    const { data: reservations, error } = await supabase
+    const { data: allReservations, error } = await supabase
       .from('reservations')
-      .select('total, room_subtotal, extras_total, check_in, check_out, nights')
+      .select('total, room_subtotal, extras_total, check_in, check_out, nights, is_influencer')
       .lte('check_in', sqlDate(dateRange.end))
       .gte('check_out', sqlDate(dateRange.start))
       .in('status', ['confirmed','completed', 'checked-in', 'checked-out']);
 
     if (error) throw error;
 
-    // Get blocked dates to calculate available nights correctly
     const { data: blockedDates } = await supabase
       .from('blocked_dates')
       .select('blocked_date, room_type_id')
       .gte('blocked_date', sqlDate(dateRange.start))
       .lte('blocked_date', sqlDate(dateRange.end));
 
+    const reservations = excludeInfluencer
+      ? (allReservations || []).filter(r => !r.is_influencer)
+      : (allReservations || []);
 
-    // Calculate available nights (excluding blocked dates)
+    let influencerNights = 0;
+    if (excludeInfluencer) {
+      (allReservations || []).filter(r => r.is_influencer).forEach(r => {
+        influencerNights += clippedNights(r.check_in, r.check_out, dateRange.start, dateRange.end);
+      });
+    }
+
     const daysInPeriod = Math.max(
       1,
       Math.ceil((dateRange.end - dateRange.start) / (1000 * 60 * 60 * 24)) + 1
@@ -885,44 +918,27 @@ async function loadRevenueMetrics() {
     const NUM_CABINS = 3;
     const theoreticalCapacity = daysInPeriod * NUM_CABINS;
     const blockedNights = (blockedDates || []).length;
-    const totalAvailableNights = theoreticalCapacity - blockedNights;
+    const totalAvailableNights = theoreticalCapacity - blockedNights - influencerNights;
 
-    // Calculate revenue totals
     const totalRevenue = reservations.reduce(
-      (sum, r) => sum + (parseFloat(r.total) || 0),
-      0
+      (sum, r) => sum + (parseFloat(r.total) || 0), 0
     );
     const roomRevenue = reservations.reduce(
-      (sum, r) => sum + (parseFloat(r.room_subtotal) || 0),
-      0
+      (sum, r) => sum + (parseFloat(r.room_subtotal) || 0), 0
     );
     const extrasRevenue = reservations.reduce(
-      (sum, r) => sum + (parseFloat(r.extras_total) || 0),
-      0
+      (sum, r) => sum + (parseFloat(r.extras_total) || 0), 0
     );
 
-    // Calculate occupied nights WITHIN the date range
     let occupiedNightsInRange = 0;
     reservations.forEach(r => {
-      if (!r.check_in || !r.check_out) return;
-      const checkIn = new Date(r.check_in);
-      const checkOut = new Date(r.check_out);
-      const rangeStart = new Date(Math.max(checkIn, dateRange.start));
-      const rangeEnd = new Date(Math.min(checkOut, dateRange.end.getTime() + (1000 * 60 * 60 * 24)));
-      const nightsInRange = Math.max(0, Math.ceil((rangeEnd - rangeStart) / (1000 * 60 * 60 * 24)));
-      occupiedNightsInRange += nightsInRange;
+      occupiedNightsInRange += clippedNights(r.check_in, r.check_out, dateRange.start, dateRange.end);
     });
 
     const avgBookingValue =
       reservations.length > 0 ? totalRevenue / reservations.length : 0;
-
-    // RevPAR = Room Revenue / Available Nights (not sold nights)
     const revPAR = totalAvailableNights > 0 ? roomRevenue / totalAvailableNights : 0;
-
-    // TRevPAR = Total Revenue / Available Nights (includes extras)
     const trevpar = totalAvailableNights > 0 ? totalRevenue / totalAvailableNights : 0;
-
-    // ADR = Room Revenue / Occupied Nights (in range)
     const adr = occupiedNightsInRange > 0 ? roomRevenue / occupiedNightsInRange : 0;
 
     const html = `
@@ -1253,15 +1269,13 @@ async function calculateOccupancyTrendLocal(start, end, granularity) {
   const NUM_CABINS = 3;
   const msPerDay = 1000 * 60 * 60 * 24;
 
-  // Fetch reservations overlapping the period
-  const { data: reservations } = await supabase
+  const { data: allReservations } = await supabase
     .from('reservations')
-    .select('check_in, check_out')
+    .select('check_in, check_out, is_influencer')
     .lte('check_in', sqlDate(end))
     .gte('check_out', sqlDate(start))
     .in('status', ['confirmed', 'completed', 'checked-in', 'checked-out']);
 
-  // Fetch blocked dates in the period
   const { data: blockedDates } = await supabase
     .from('blocked_dates')
     .select('blocked_date')
@@ -1270,36 +1284,49 @@ async function calculateOccupancyTrendLocal(start, end, granularity) {
 
   const blockedSet = new Set((blockedDates || []).map(b => b.blocked_date));
 
-  // Build daily occupancy map
-  const dailyOccupied = {};
   const periodStart = new Date(start);
   periodStart.setHours(0, 0, 0, 0);
   const periodEnd = new Date(end);
   periodEnd.setHours(0, 0, 0, 0);
 
-  // Count occupied cabins per day
-  (reservations || []).forEach(r => {
+  const filtered = excludeInfluencer
+    ? (allReservations || []).filter(r => !r.is_influencer)
+    : (allReservations || []);
+
+  // Build daily maps: occupied cabins + influencer cabins per day
+  const dailyOccupied = {};
+  const dailyInfluencer = {};
+
+  function addToDailyMap(map, r) {
     if (!r.check_in || !r.check_out) return;
     const ci = new Date(r.check_in + 'T00:00:00');
     const co = new Date(r.check_out + 'T00:00:00');
-    const dayStart = new Date(Math.max(ci.getTime(), periodStart.getTime()));
-    const dayEnd = new Date(Math.min(co.getTime(), periodEnd.getTime()));
-    let d = new Date(dayStart);
-    while (d <= dayEnd) {
+    let d = new Date(Math.max(ci.getTime(), periodStart.getTime()));
+    const dEnd = new Date(Math.min(co.getTime(), periodEnd.getTime()));
+    while (d <= dEnd) {
       const key = d.toISOString().split('T')[0];
-      dailyOccupied[key] = (dailyOccupied[key] || 0) + 1;
+      map[key] = (map[key] || 0) + 1;
       d = new Date(d.getTime() + msPerDay);
     }
-  });
+  }
 
-  // Build points based on granularity
+  filtered.forEach(r => addToDailyMap(dailyOccupied, r));
+  if (excludeInfluencer) {
+    (allReservations || []).filter(r => r.is_influencer).forEach(r => addToDailyMap(dailyInfluencer, r));
+  }
+
+  function dayAvailable(dateKey) {
+    if (blockedSet.has(dateKey)) return 0;
+    const infCount = excludeInfluencer ? (dailyInfluencer[dateKey] || 0) : 0;
+    return Math.max(0, NUM_CABINS - infCount);
+  }
+
   if (granularity === 'day') {
     const points = [];
     let d = new Date(periodStart);
     while (d <= periodEnd) {
       const key = d.toISOString().split('T')[0];
-      const isBlocked = blockedSet.has(key);
-      const available = isBlocked ? 0 : NUM_CABINS;
+      const available = dayAvailable(key);
       const occupied = Math.min(dailyOccupied[key] || 0, available || NUM_CABINS);
       const rate = available > 0 ? (occupied / available) * 100 : 0;
       points.push({ date: new Date(d), value: rate });
@@ -1313,21 +1340,17 @@ async function calculateOccupancyTrendLocal(start, end, granularity) {
     let d = new Date(periodStart);
     while (d <= periodEnd) {
       const key = d.toISOString().split('T')[0];
-      // Get Monday of this week
       const weekStart = new Date(d);
       const dow = weekStart.getDay();
-      const diff = (dow + 6) % 7;
-      weekStart.setDate(weekStart.getDate() - diff);
+      weekStart.setDate(weekStart.getDate() - ((dow + 6) % 7));
       const weekKey = weekStart.toISOString().split('T')[0];
 
       if (!weekBuckets[weekKey]) {
         weekBuckets[weekKey] = { date: new Date(weekStart), totalAvailable: 0, totalOccupied: 0 };
       }
-      const isBlocked = blockedSet.has(key);
-      const available = isBlocked ? 0 : NUM_CABINS;
+      const available = dayAvailable(key);
       weekBuckets[weekKey].totalAvailable += available;
       weekBuckets[weekKey].totalOccupied += Math.min(dailyOccupied[key] || 0, available || NUM_CABINS);
-
       d = new Date(d.getTime() + msPerDay);
     }
     return Object.values(weekBuckets)
@@ -1338,7 +1361,6 @@ async function calculateOccupancyTrendLocal(start, end, granularity) {
       }));
   }
 
-  // month granularity
   const monthBuckets = {};
   let d = new Date(periodStart);
   while (d <= periodEnd) {
@@ -1351,11 +1373,9 @@ async function calculateOccupancyTrendLocal(start, end, granularity) {
         totalOccupied: 0
       };
     }
-    const isBlocked = blockedSet.has(key);
-    const available = isBlocked ? 0 : NUM_CABINS;
+    const available = dayAvailable(key);
     monthBuckets[monthKey].totalAvailable += available;
     monthBuckets[monthKey].totalOccupied += Math.min(dailyOccupied[key] || 0, available || NUM_CABINS);
-
     d = new Date(d.getTime() + msPerDay);
   }
   return Object.values(monthBuckets)
@@ -1404,25 +1424,50 @@ async function loadOccupancyTrendChart() {
 
 async function loadOccupancyChart() {
   try {
-    // Call database function for occupancy by room
-    const { data, error } = await supabase
-      .rpc('calculate_occupancy_by_room', {
-        p_start_date: sqlDate(dateRange.start),
-        p_end_date: sqlDate(dateRange.end)
+    let cabins = { SAND: 0, SEA: 0, SUN: 0 };
+
+    if (!excludeInfluencer) {
+      // Default: use the RPC
+      const { data, error } = await supabase
+        .rpc('calculate_occupancy_by_room', {
+          p_start_date: sqlDate(dateRange.start),
+          p_end_date: sqlDate(dateRange.end)
+        });
+      if (error) throw new Error(`Failed to load occupancy by cabin: ${error.message}`);
+      (data || []).forEach(room => {
+        if (cabins.hasOwnProperty(room.room_code)) {
+          cabins[room.room_code] = room.occupancy_rate;
+        }
       });
+    } else {
+      // Client-side calculation excluding influencer stays
+      const { data: reservations } = await supabase
+        .from('reservations')
+        .select('check_in, check_out, room_type_code, is_influencer')
+        .lte('check_in', sqlDate(dateRange.end))
+        .gte('check_out', sqlDate(dateRange.start))
+        .in('status', ['confirmed', 'completed', 'checked-in', 'checked-out']);
 
-    if (error) {
-      console.error('Database function error:', error);
-      throw new Error(`Failed to load occupancy by cabin: ${error.message}`);
-    }
+      const { data: blockedDates } = await supabase
+        .from('blocked_dates')
+        .select('blocked_date')
+        .gte('blocked_date', sqlDate(dateRange.start))
+        .lte('blocked_date', sqlDate(dateRange.end));
 
-    // Extract occupancy rates for each cabin
-    const cabins = { SAND: 0, SEA: 0, SUN: 0 };
-    (data || []).forEach(room => {
-      if (cabins.hasOwnProperty(room.room_code)) {
-        cabins[room.room_code] = room.occupancy_rate;
+      const daysInPeriod = Math.ceil((dateRange.end - dateRange.start) / (1000 * 60 * 60 * 24)) + 1;
+      const blockedNights = (blockedDates || []).length;
+
+      for (const code of Object.keys(cabins)) {
+        const cabinRes = (reservations || []).filter(r => r.room_type_code === code && !r.is_influencer);
+        const infRes = (reservations || []).filter(r => r.room_type_code === code && r.is_influencer);
+        let soldNights = 0;
+        cabinRes.forEach(r => { soldNights += clippedNights(r.check_in, r.check_out, dateRange.start, dateRange.end); });
+        let infNights = 0;
+        infRes.forEach(r => { infNights += clippedNights(r.check_in, r.check_out, dateRange.start, dateRange.end); });
+        const avail = daysInPeriod - Math.round(blockedNights / 3) - infNights;
+        cabins[code] = avail > 0 ? (soldNights / avail) * 100 : 0;
       }
-    });
+    }
 
     let html = '<div style="display: flex; flex-direction: column; gap: 16px;">';
     
@@ -1431,7 +1476,7 @@ async function loadOccupancyChart() {
         <div class="drill-bar-row" data-drill-bar="cabin-${cabin}" style="display: flex; align-items: center; gap: 12px; cursor: pointer; border-radius: 6px; padding: 4px 0; transition: background 0.15s ease;">
           <div style="min-width: 60px; font-weight: 600; color: #0f172a;">${cabin}</div>
           <div style="flex: 1; height: 32px; background: #f1f5f9; border-radius: 6px; overflow: hidden; position: relative;">
-            <div style="width: ${percentage}%; height: 100%; background: linear-gradient(90deg, #4f46e5 0%, #22c55e 100%); transition: width 0.5s ease;"></div>
+            <div style="width: ${Math.min(percentage, 100)}%; height: 100%; background: linear-gradient(90deg, #4f46e5 0%, #22c55e 100%); transition: width 0.5s ease;"></div>
           </div>
           <div style="min-width: 50px; text-align: right; font-weight: 600; color: #0f172a;">${percentage.toFixed(0)}%</div>
         </div>
@@ -2184,6 +2229,25 @@ function handleChartGranularityClick(e) {
   } else if (chart === 'occupancy') {
     loadOccupancyTrendChart();
   }
+}
+
+function attachInfluencerToggle() {
+  document.querySelectorAll('.chart-btn[data-influencer]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      excludeInfluencer = btn.dataset.influencer === 'exclude';
+      document.querySelectorAll('.chart-btn[data-influencer]').forEach(b => {
+        b.classList.toggle('active', b.dataset.influencer === btn.dataset.influencer);
+      });
+      refreshOccupancyAndRevenue();
+    });
+  });
+}
+
+function refreshOccupancyAndRevenue() {
+  loadOccupancyMetrics();
+  loadOccupancyTrendChart();
+  loadOccupancyChart();
+  loadRevenueMetrics();
 }
 
 // ============================================================
