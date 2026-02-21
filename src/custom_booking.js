@@ -1033,17 +1033,13 @@ export async function openNewCustomBookingModal() {
     
     const disabledSet = new Set();
     
-    // 1) Always disable past dates
-    for (let i = -365; i < 0; i++) {
-      disabledSet.add(addDaysISO(todayISO, i));
-    }
-    
-    // 2) For next 90 days (not 365!), disable dates where combined capacity < adults
-    // Reduced from 365 to 90 for performance - most bookings are within 90 days
+    // Disable dates where combined capacity < adults (past dates are NOT blanket-disabled)
+    // Past dates are selectable; only fully booked dates are deactivated.
+    const PAST_LOOKAHEAD = 365; // Check 1 year back for fully booked dates
     const MAX_LOOKAHEAD = 365;
-    const BATCH_SIZE = 30; // Smaller batches for faster response
+    const BATCH_SIZE = 30;
     
-    for (let batchStart = 0; batchStart <= MAX_LOOKAHEAD; batchStart += BATCH_SIZE) {
+    for (let batchStart = -PAST_LOOKAHEAD; batchStart <= MAX_LOOKAHEAD; batchStart += BATCH_SIZE) {
       const promises = [];
       const dates = [];
       
@@ -1170,8 +1166,8 @@ export async function openNewCustomBookingModal() {
       
       // Different blocking logic for check-in vs check-out
       if (pickerId === 'nb-in') {
-        // For check-in: block if that specific date has no availability
-        isDisabled = calendarDisabledDates.indexOf(dateStr) !== -1 || dateStr < today;
+        // For check-in: block if that specific date has no availability (fully booked)
+        isDisabled = calendarDisabledDates.indexOf(dateStr) !== -1;
       } else if (pickerId === 'nb-out') {
         // For check-out: block if date is before/equal to check-in, or if there's any blocked date in the interval
         if (!selectedDatesCalendar['nb-in'] || dateStr <= selectedDatesCalendar['nb-in']) {
