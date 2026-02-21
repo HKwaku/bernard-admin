@@ -598,13 +598,9 @@ export async function openBookPackageModal() {
   }
 
   async function isDateDisabled(pkg, dateISO, pickerId) {
-    // 1) past
-    const todayD = new Date();
-    todayD.setHours(0, 0, 0, 0);
-    const dateObj = new Date(dateISO);
-    if (dateObj < todayD) return true;
+    // Past dates are selectable; only fully booked dates are deactivated.
 
-    // 2) validity
+    // 1) validity
     if (pkg.valid_from && dateISO < pkg.valid_from) return true;
     if (pkg.valid_until && dateISO > pkg.valid_until) return true;
 

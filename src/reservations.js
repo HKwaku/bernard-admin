@@ -2042,16 +2042,19 @@ async function openEditModal(id) {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
+      const horizonStart = new Date(today);
+      horizonStart.setFullYear(horizonStart.getFullYear() - 2);
+
       const horizonEnd = new Date(today);
       horizonEnd.setFullYear(horizonEnd.getFullYear() + 1);
 
-      const horizonStartISO = toDateInput(today);
+      const horizonStartISO = toDateInput(horizonStart);
       const horizonEndISO = toDateInput(horizonEnd);
 
       // If package has no linked rooms, disable everything in the horizon
       if (!pkg || allowedRoomIds.length === 0) {
         const disabled = [];
-        const cur = new Date(today);
+        const cur = new Date(horizonStart);
         while (cur <= horizonEnd) {
           disabled.push(toDateInput(cur));
           cur.setDate(cur.getDate() + 1);
@@ -2124,7 +2127,7 @@ async function openEditModal(id) {
 
       // 3) Disable check-in dates where no room is free for the full package stay
       const disabled = [];
-      const ciCursor = new Date(today);
+      const ciCursor = new Date(horizonStart);
 
       while (ciCursor <= horizonEnd) {
         const ciStr = toDateInput(ciCursor);
@@ -2180,10 +2183,7 @@ async function openEditModal(id) {
     
     const disabledSet = new Set();
     
-    // 1) Always disable past dates
-    for (let i = -365; i < 0; i++) {
-      disabledSet.add(addDaysISO(todayISO, i));
-    }
+    // Past dates are selectable; only fully booked dates are deactivated.
 
     pkgId = wrap.querySelector('#er-package')?.value || '';
     const pkgSelected = !!pkgId;
@@ -2200,10 +2200,12 @@ async function openEditModal(id) {
         return;
       }
 
-      // Horizon: 1 year (match PackagesModal)
+      // Horizon: 2 years back + 1 year forward (past dates checked for fully booked)
+      const horizonStart2 = new Date(today);
+      horizonStart2.setFullYear(horizonStart2.getFullYear() - 2);
       const horizonEnd = new Date(today);
       horizonEnd.setFullYear(horizonEnd.getFullYear() + 1);
-      const horizonStartISO = toDateInput(today);
+      const horizonStartISO = toDateInput(horizonStart2);
       const horizonEndISO = toDateInput(horizonEnd);
 
       // Build occupancy map for each room_type_id in this package
@@ -2249,7 +2251,7 @@ async function openEditModal(id) {
       // - outside pkg.valid_from
       // - checkout exceeds pkg.valid_until
       // - no room is free for entire [ci, ci+nights)
-      const ciCursor = new Date(today);
+      const ciCursor = new Date(horizonStart2);
       while (ciCursor <= horizonEnd) {
         const ciStr = toDateInput(ciCursor);
         const coStr = addDaysISO(ciStr, nights);
@@ -2297,12 +2299,12 @@ async function openEditModal(id) {
     }
 
     
-    // 2) For next 90 days (not 365!), disable dates where combined capacity < adults
-    // Reduced from 365 to 90 for performance - most bookings are within 90 days
+    // Disable dates where combined capacity < adults (past + future)
+    const PAST_LOOKAHEAD = 365; // Check 1 year back for fully booked dates
     const MAX_LOOKAHEAD = 365;
-    const BATCH_SIZE = 30; // Smaller batches for faster response
+    const BATCH_SIZE = 30;
     
-    for (let batchStart = 0; batchStart <= MAX_LOOKAHEAD; batchStart += BATCH_SIZE) {
+    for (let batchStart = -PAST_LOOKAHEAD; batchStart <= MAX_LOOKAHEAD; batchStart += BATCH_SIZE) {
       const promises = [];
       const dates = [];
       
@@ -2427,8 +2429,8 @@ async function openEditModal(id) {
       
       // Different blocking logic for check-in vs check-out
       if (pickerId === 'er-in') {
-        // For check-in: block if that specific date has no availability
-        isDisabled = calendarDisabledDates.indexOf(dateStr) !== -1 || dateStr < today;
+        // For check-in: block if that specific date has no availability (fully booked)
+        isDisabled = calendarDisabledDates.indexOf(dateStr) !== -1;
       } else if (pickerId === 'er-out') {
         // For check-out: block if date is before/equal to check-in, or if there's any blocked date in the interval
         if (!selectedDatesCalendar['er-in'] || dateStr <= selectedDatesCalendar['er-in']) {
