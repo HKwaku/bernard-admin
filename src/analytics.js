@@ -290,12 +290,17 @@ view.innerHTML = `
       </div>
 
       </div>
-      <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+      <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
         <!-- View Toggle -->
         <div class="chart-controls">
           <button class="chart-btn active" id="view-standard" data-view="standard">Standard</button>
           <button class="chart-btn" id="view-comparison" data-view="comparison">Comparison</button>
           <button class="chart-btn" id="view-client" data-view="client">Client Analytics</button>
+        </div>
+        <span style="color: #cbd5e1; font-size: 13px;">|</span>
+        <div class="chart-controls">
+          <button class="chart-btn active" data-influencer="all">All Bookings</button>
+          <button class="chart-btn" data-influencer="exclude">Excl. Influencer</button>
         </div>
         </div>
     </div>
@@ -324,13 +329,7 @@ view.innerHTML = `
     <!-- OCCUPANCY OVERVIEW                                        -->
     <!-- ========================================================= -->
     <div class="analytics-section">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-        <h2 class="analytics-section-title" style="margin:0;">Occupancy Overview</h2>
-        <div class="chart-controls">
-          <button class="chart-btn active" data-influencer="all">All Bookings</button>
-          <button class="chart-btn" data-influencer="exclude">Excl. Influencer</button>
-        </div>
-      </div>
+      <h2 class="analytics-section-title">Occupancy Overview</h2>
       <div class="metrics-grid" id="occupancy-metrics">
         <div class="metric-card"><div class="metric-label">Loading...</div></div>
       </div>
@@ -595,13 +594,7 @@ function renderStandardViewContent() {
     <!-- OCCUPANCY OVERVIEW                                        -->
     <!-- ========================================================= -->
     <div class="analytics-section">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-        <h2 class="analytics-section-title" style="margin:0;">Occupancy Overview</h2>
-        <div class="chart-controls">
-          <button class="chart-btn active" data-influencer="all">All Bookings</button>
-          <button class="chart-btn" data-influencer="exclude">Excl. Influencer</button>
-        </div>
-      </div>
+      <h2 class="analytics-section-title">Occupancy Overview</h2>
       <div class="metrics-grid" id="occupancy-metrics">
         <div class="metric-card"><div class="metric-label">Loading...</div></div>
       </div>
@@ -741,7 +734,6 @@ function renderStandardViewContent() {
     document.querySelectorAll('.chart-btn[data-chart]').forEach((btn) => {
       btn.addEventListener('click', handleChartGranularityClick);
     });
-    attachInfluencerToggle();
   }, 100);
 
   // Init drill-through modal (idempotent) and attach delegated click handler
@@ -2244,10 +2236,16 @@ function attachInfluencerToggle() {
 }
 
 function refreshOccupancyAndRevenue() {
-  loadOccupancyMetrics();
-  loadOccupancyTrendChart();
-  loadOccupancyChart();
-  loadRevenueMetrics();
+  if (viewMode === 'standard') {
+    loadOccupancyMetrics();
+    loadOccupancyTrendChart();
+    loadOccupancyChart();
+    loadRevenueMetrics();
+  } else if (viewMode === 'comparison') {
+    renderComparisonView(dateRange);
+  } else if (viewMode === 'client') {
+    renderClientAnalyticsView();
+  }
 }
 
 // ============================================================
