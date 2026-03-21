@@ -3,6 +3,8 @@
 
 import { renderComparisonView } from './analytics-comparison.js';
 import { initClientAnalytics, updateClientAnalyticsDateRange } from './client-analytics.js';
+import { initBookingAnalytics, updateBookingAnalyticsDateRange, handleBookingDrillClick } from './booking-analytics.js';
+import { initDrillThroughModal, openDrillModal } from './drill-modal.js';
 import { supabase } from './config/supabase.js';
 import { formatCurrency, toast } from './utils/helpers.js';
 
@@ -295,7 +297,8 @@ view.innerHTML = `
         <div class="chart-controls">
           <button class="chart-btn active" id="view-standard" data-view="standard">Standard</button>
           <button class="chart-btn" id="view-comparison" data-view="comparison">Comparison</button>
-          <button class="chart-btn" id="view-client" data-view="client">Client Analytics</button>
+          <button class="chart-btn" id="view-client" data-view="client">Client</button>
+          <button class="chart-btn" id="view-booking-analytics" data-view="booking-analytics">Bookings</button>
         </div>
         <span style="color: #cbd5e1; font-size: 13px;">|</span>
         <div class="chart-controls">
@@ -556,6 +559,14 @@ syncCheckboxDropdownsToDateRange();
     });
     renderClientAnalyticsView();
   });
+
+  document.getElementById('view-booking-analytics')?.addEventListener('click', () => {
+    viewMode = 'booking-analytics';
+    document.querySelectorAll('[data-view]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.view === 'booking-analytics');
+    });
+    renderBookingAnalyticsView();
+  });
 }
 
 function renderClientAnalyticsView() {
@@ -565,6 +576,15 @@ function renderClientAnalyticsView() {
   container.innerHTML = '<div id="view-client-analytics"></div>';
   updateClientAnalyticsDateRange(dateRange.start, dateRange.end);
   initClientAnalytics();
+}
+
+function renderBookingAnalyticsView() {
+  const container = document.getElementById('analytics-content');
+  if (!container) return;
+  
+  container.innerHTML = '<div id="view-booking-analytics"></div>';
+  updateBookingAnalyticsDateRange(dateRange.start, dateRange.end);
+  initBookingAnalytics();
 }
 
 function renderStandardViewContent() {
@@ -2245,6 +2265,8 @@ function refreshOccupancyAndRevenue() {
     renderComparisonView(dateRange);
   } else if (viewMode === 'client') {
     renderClientAnalyticsView();
+  } else if (viewMode === 'booking-analytics') {
+    renderBookingAnalyticsView();
   }
 }
 
@@ -2574,6 +2596,8 @@ function refreshView() {
     renderComparisonView(dateRange);
   } else if (viewMode === 'client') {
     updateClientAnalyticsDateRange(dateRange.start, dateRange.end);
+  } else if (viewMode === 'booking-analytics') {
+    updateBookingAnalyticsDateRange(dateRange.start, dateRange.end);
   } else {
     loadAllAnalytics();
   }
@@ -2582,48 +2606,6 @@ function refreshView() {
 // ============================================================
 // DRILL-THROUGH MODAL  – click a metric tile to see details
 // ============================================================
-
-function initDrillThroughModal() {
-  // Inject modal HTML once
-  let modal = document.getElementById('drill-modal');
-  if (modal) return;
-
-  modal = document.createElement('div');
-  modal.id = 'drill-modal';
-  modal.className = 'drill-modal-overlay';
-  modal.innerHTML = `
-    <div class="drill-modal-content">
-      <div class="drill-modal-header">
-        <h3 class="drill-modal-title" id="drill-modal-title">Details</h3>
-        <button class="drill-modal-close" id="drill-modal-close">&times;</button>
-      </div>
-      <div class="drill-modal-body" id="drill-modal-body">Loading…</div>
-    </div>
-  `;
-  document.body.appendChild(modal);
-
-  // Close handlers
-  document.getElementById('drill-modal-close').addEventListener('click', closeDrillModal);
-  modal.addEventListener('click', (e) => {
-    if (e.target === modal) closeDrillModal();
-  });
-  // Escape key
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeDrillModal();
-  });
-}
-
-function openDrillModal(title, bodyHtml) {
-  initDrillThroughModal();
-  document.getElementById('drill-modal-title').textContent = title;
-  document.getElementById('drill-modal-body').innerHTML = bodyHtml;
-  document.getElementById('drill-modal').classList.add('active');
-}
-
-function closeDrillModal() {
-  const modal = document.getElementById('drill-modal');
-  if (modal) modal.classList.remove('active');
-}
 
 async function handleDrillClick(type) {
   const titleMap = {

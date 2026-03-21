@@ -96,7 +96,7 @@ function renderClientAnalytics() {
       
       <!-- Header -->
       <div style="margin-bottom: 24px;">
-        <h2 style="font-size: 20px; font-weight: 700; color: #0f172a; margin-bottom: 8px;">Client Analytics</h2>
+        <h2 style="font-size: 20px; font-weight: 700; color: #0f172a; margin-bottom: 8px;">Client</h2>
         <p style="font-size: 14px; color: #64748b;">Guest demographics, booking patterns, and loyalty insights${getExcludeInfluencer() ? ' <span style="color:#ef4444;font-weight:600;">(excl. influencer)</span>' : ''}</p>
       </div>
 
