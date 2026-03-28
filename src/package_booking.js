@@ -150,7 +150,7 @@ export async function openBookPackageModal() {
   // 1) Load active packages
   const { data: packages, error: pkgErr } = await supabase
    .from('packages')
-   .select('id, code, name, package_price, currency, nights, valid_from, valid_until, is_active')
+   .select('id, code, name, package_price, currency, nights, valid_from, valid_until, is_active, applies_to_days')
 
     .eq('is_active', true)
     .order('name', { ascending: true });
@@ -164,6 +164,32 @@ export async function openBookPackageModal() {
     wrap.remove();
     alert('No active packages available.');
     return;
+  }
+
+  // Which calendar days count as "weekend" (same table as guest site / PackagesModal)
+  let weekendDays = [];
+  const { data: wdRows, error: wdErr } = await supabase
+    .from('weekend_definitions')
+    .select('day_of_week, is_weekend');
+  if (!wdErr && wdRows) {
+    weekendDays = wdRows.filter((d) => d.is_weekend).map((d) => d.day_of_week);
+  }
+
+  /** Every night in [checkIn, checkOut) must match applies_to_days (weekend_definitions). */
+  function stayMatchesAppliesToDays(pkg, checkInISO, checkOutISO) {
+    const appliesTo = pkg.applies_to_days || 'both';
+    if (appliesTo === 'both') return true;
+    if (!checkInISO || !checkOutISO) return false;
+    const ci = new Date(checkInISO + 'T00:00:00');
+    const co = new Date(checkOutISO + 'T00:00:00');
+    if (Number.isNaN(ci.getTime()) || Number.isNaN(co.getTime()) || co <= ci) return false;
+    for (let cur = new Date(ci.getTime()); cur < co; cur.setDate(cur.getDate() + 1)) {
+      const day = cur.getDay();
+      const isWeekend = weekendDays.includes(day);
+      if (appliesTo === 'weekends' && !isWeekend) return false;
+      if (appliesTo === 'weekdays' && isWeekend) return false;
+    }
+    return true;
   }
 
   const pkgIds = packages.map((p) => p.id);
@@ -604,6 +630,7 @@ export async function openBookPackageModal() {
   // - past dates
   // - package validity (valid_from / valid_until)
   // - min nights rule (checkout must be >= checkin + nights)
+  // - applies_to_days vs weekend_definitions (every night must qualify)
   // - availability: there must be at least one cabin available for the implied stay range
   async function getAvailableRoomsForRange(pkg, ci, co) {
     const rooms = roomsByPackage.get(pkg.id) || [];
@@ -612,6 +639,8 @@ export async function openBookPackageModal() {
     // validity already checked before call usually, but keep safe
     if (pkg.valid_from && ci < pkg.valid_from) return [];
     if (pkg.valid_until && (ci > pkg.valid_until || co > pkg.valid_until)) return [];
+
+    if (!stayMatchesAppliesToDays(pkg, ci, co)) return [];
 
     const roomIds = rooms.map((r) => r.id).filter(Boolean);
 
@@ -691,6 +720,7 @@ export async function openBookPackageModal() {
     if (pickerId === 'co') {
       // For checkout, require that there is availability for [checkin, checkout)
       if (!inEl.value) return true;
+
       const available = await getAvailableRoomsForRange(pkg, inEl.value, dateISO);
       return available.length === 0;
     }
@@ -842,6 +872,8 @@ export async function openBookPackageModal() {
       if (ci > pkg.valid_until) return [];
       if (co > pkg.valid_until) return [];
     }
+
+    if (!stayMatchesAppliesToDays(pkg, ci, co)) return [];
 
     const roomIds = rooms.map((r) => r.id).filter(Boolean);
 
@@ -1076,6 +1108,13 @@ export async function openBookPackageModal() {
           alert(`Check-out must be on or before ${pkg.valid_until}.`);
           return;
         }
+      }
+
+      if (!stayMatchesAppliesToDays(pkg, inEl.value, outEl.value)) {
+        alert(
+          'Selected dates do not match this package weekday/weekend rule (see Packages setup).'
+        );
+        return;
       }
 
       // PackagesModal-style availability: only allow rooms that are actually available

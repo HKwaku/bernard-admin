@@ -1742,6 +1742,14 @@
 
 /* ===== Client Analytics – mobile overflow prevention ===== */
 @media (max-width: 767px) {
+  /* Clip horizontal spill from client analytics (nested grids / flex rows) */
+  #view-analytics > .card-bd {
+    overflow-x: hidden !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+
   /* Force ALL inline grids inside client analytics to single column */
   .client-analytics-container [style*="grid-template-columns: repeat(3"],
   .client-analytics-container [style*="grid-template-columns: 1fr 1fr"],

@@ -101,7 +101,7 @@ function renderBookingAnalytics() {
       </div>
 
       <div class="analytics-section" id="booking-pending-7days-section">
-        <div class="analytics-section-title">Pending Payment (Last 7 Days)</div>
+        <div class="analytics-section-title" id="booking-pending-section-title">Pending payment</div>
         <div id="booking-pending-7days"></div>
       </div>
 
@@ -191,24 +191,45 @@ async function renderPending7Days() {
   const el = document.getElementById('booking-pending-7days');
   if (!el) return;
 
-  try {
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    sevenDaysAgo.setHours(0, 0, 0, 0);
+  const titleEl = document.getElementById('booking-pending-section-title');
+  if (titleEl) {
+    titleEl.textContent =
+      dateFilterMode === 'occupancy'
+        ? 'Pending payment (stay overlaps selected period)'
+        : 'Pending payment (created in selected period)';
+  }
 
-    const { data, error } = await supabase
+  try {
+    const excl = getExcludeInfluencer();
+    let query = supabase
       .from('reservations')
-      .select('id, confirmation_code, guest_first_name, guest_last_name, guest_email, guest_phone, country_code, room_type_code, check_in, check_out, created_at, status, total, nights')
-      .eq('status', 'pending_payment')
-      .gte('created_at', sevenDaysAgo.toISOString())
-      .order('created_at', { ascending: false });
+      .select('id, confirmation_code, guest_first_name, guest_last_name, guest_email, guest_phone, country_code, room_type_code, check_in, check_out, created_at, status, total, nights, is_influencer')
+      .eq('status', 'pending_payment');
+
+    if (dateFilterMode === 'created') {
+      query = query
+        .gte('created_at', dateRange.start.toISOString())
+        .lte('created_at', new Date(dateRange.end.getTime() + 86400000).toISOString());
+    } else {
+      query = query
+        .lte('check_in', sqlDate(dateRange.end))
+        .gt('check_out', sqlDate(dateRange.start));
+    }
+
+    query = query.order('created_at', { ascending: false });
+
+    const { data, error } = await query;
 
     if (error) throw error;
 
-    const reservations = data || [];
+    let reservations = data || [];
+    if (excl) reservations = reservations.filter((r) => !r.is_influencer);
 
     if (reservations.length === 0) {
-      el.innerHTML = '<div class="analytics-empty">No pending payment bookings in the last 7 days</div>';
+      el.innerHTML =
+        dateFilterMode === 'occupancy'
+          ? '<div class="analytics-empty">No pending payment bookings with a stay overlapping the selected period</div>'
+          : '<div class="analytics-empty">No pending payment bookings created in the selected period</div>';
       return;
     }
 
@@ -220,7 +241,7 @@ async function renderPending7Days() {
             const created = r.created_at ? new Date(r.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '–';
             const checkIn = r.check_in ? new Date(r.check_in + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '–';
             return `
-              <div class="drill-bar-row" data-drill-bar="booking-detail-${r.id}" title="Open full booking details" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px; cursor: pointer;">
+              <div class="drill-bar-row" data-drill-bar="booking-detail-${r.id}" title="View booking details" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px; cursor: pointer;">
                 <div>
                   <div style="font-weight: 600; color: #0f172a;">${r.confirmation_code || '–'}</div>
                   <div style="font-size: 13px; color: #64748b;">${guest} · ${r.room_type_code || '–'} · Check-in ${checkIn}</div>
@@ -567,6 +588,70 @@ function escapeHtmlCell(s) {
     .replace(/"/g, '&quot;');
 }
 
+function viewOnlyRow(label, valueHtml) {
+  return `<div style="display:grid;grid-template-columns:minmax(110px,140px) 1fr;gap:8px;padding:10px 0;border-bottom:1px solid #e2e8f0;font-size:13px;align-items:start;"><span style="color:#64748b;">${escapeHtmlCell(label)}</span><span style="color:#0f172a;word-break:break-word;">${valueHtml}</span></div>`;
+}
+
+function buildBookingViewOnlyHtml(r) {
+  if (!r) return '<div class="analytics-empty">No data</div>';
+  const guest = escapeHtmlCell([r.guest_first_name, r.guest_last_name].filter(Boolean).join(' ').trim() || '–');
+  const phone = [r.country_code, r.guest_phone].filter(Boolean).join(' ').trim();
+  const phoneHtml = escapeHtmlCell(phone || '–');
+  const emailHtml = escapeHtmlCell(r.guest_email || '–');
+  let html = '<div style="max-width:520px;">';
+  html += `<p style="font-size:12px;color:#64748b;margin:0 0 12px;">View only — contact the guest using the details below.</p>`;
+  html += viewOnlyRow('Confirmation', escapeHtmlCell(r.confirmation_code || '–'));
+  html += viewOnlyRow('Guest', guest);
+  html += viewOnlyRow('Email', emailHtml);
+  html += viewOnlyRow('Phone', phoneHtml);
+  html += viewOnlyRow('Room', escapeHtmlCell(r.room_type_code || r.room_name || '–'));
+  html += viewOnlyRow('Check-in', escapeHtmlCell(fmtDate(r.check_in)));
+  html += viewOnlyRow('Check-out', escapeHtmlCell(fmtDate(r.check_out)));
+  html += viewOnlyRow('Nights', escapeHtmlCell(r.nights ?? '–'));
+  if (r.adults != null || r.children != null) {
+    html += viewOnlyRow('Guests', escapeHtmlCell(`${r.adults ?? '–'} adults · ${r.children ?? 0} children`));
+  }
+  html += viewOnlyRow('Status', escapeHtmlCell(formatStatusLabel(r.status)));
+  if (r.payment_status) {
+    html += viewOnlyRow('Payment', escapeHtmlCell(String(r.payment_status)));
+  }
+  html += viewOnlyRow('Total', escapeHtmlCell(formatCurrency(parseFloat(r.total) || 0, r.currency || 'GHS')));
+  html += viewOnlyRow('Created', escapeHtmlCell(fmtDate(r.created_at)));
+  if (r.package_code || r.package_name) {
+    html += viewOnlyRow('Package', escapeHtmlCell([r.package_code, r.package_name].filter(Boolean).join(' · ') || '–'));
+  }
+  if (r.notes) {
+    html += viewOnlyRow('Notes', escapeHtmlCell(r.notes));
+  }
+  html += '</div>';
+  return html;
+}
+
+async function openBookingViewOnlyModal(id) {
+  initDrillThroughModal();
+  openDrillModal('Booking details', '<div style="text-align:center;padding:24px;color:#64748b;">Loading…</div>');
+  try {
+    const { data: r, error } = await supabase
+      .from('reservations')
+      .select(
+        'id,confirmation_code,room_type_code,room_name,check_in,check_out,nights,adults,children,status,payment_status,total,currency,guest_first_name,guest_last_name,guest_email,guest_phone,country_code,notes,package_code,package_name,created_at'
+      )
+      .eq('id', id)
+      .single();
+    if (error || !r) {
+      document.getElementById('drill-modal-body').innerHTML =
+        '<div class="analytics-empty">Could not load this booking.</div>';
+      return;
+    }
+    const title = `Booking ${r.confirmation_code || ''} (view only)`.trim();
+    openDrillModal(title, buildBookingViewOnlyHtml(r));
+  } catch (e) {
+    console.error('openBookingViewOnlyModal', e);
+    document.getElementById('drill-modal-body').innerHTML =
+      '<div class="analytics-empty">Error loading booking.</div>';
+  }
+}
+
 function buildBookingDrillTable(rows) {
   if (!rows || rows.length === 0) {
     return '<div class="analytics-empty" style="padding: 24px; text-align: center;">No reservations</div>';
@@ -602,8 +687,8 @@ export async function handleBookingDrillClick(drillType) {
 
   if (drillType.startsWith('booking-detail-')) {
     const rawId = drillType.replace('booking-detail-', '');
-    if (rawId && typeof window !== 'undefined' && typeof window.editReservation === 'function') {
-      window.editReservation(rawId);
+    if (rawId) {
+      await openBookingViewOnlyModal(rawId);
       return;
     }
   }
