@@ -763,10 +763,24 @@ function renderStandardViewContent() {
     content.addEventListener('click', (e) => {
       // 1) Metric tile click
       const card = e.target.closest('.metric-card[data-drill]');
-      if (card) { handleDrillClick(card.dataset.drill); return; }
+      if (card) {
+        if (card.dataset.drill?.startsWith('booking-')) {
+          handleBookingDrillClick(card.dataset.drill);
+          return;
+        }
+        handleDrillClick(card.dataset.drill);
+        return;
+      }
       // 2) Horizontal bar click
       const bar = e.target.closest('.drill-bar-row[data-drill-bar]');
-      if (bar) { handleBarDrillClick(bar.dataset.drillBar); return; }
+      if (bar) {
+        if (bar.dataset.drillBar?.startsWith('booking-')) {
+          handleBookingDrillClick(bar.dataset.drillBar);
+          return;
+        }
+        handleBarDrillClick(bar.dataset.drillBar);
+        return;
+      }
       // 3) Upcoming check-in row click
       const checkin = e.target.closest('.drill-checkin-row[data-drill-checkin]');
       if (checkin) { handleCheckinDrillClick(checkin.dataset.drillCheckin); return; }

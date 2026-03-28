@@ -33,6 +33,7 @@ import { openBlockDatesModal } from './blocked_bookings.js'; // NEW
 import { initChefMenu } from './chefMenu.js';
 import { initExtraSelections } from './extraSelections.js';
 import { openUserGuide } from './userGuide.js';
+import { initNotifications } from './notifications.js';
 
 
 // Main app initializer
@@ -64,7 +65,9 @@ export function initApp() {
 
           <div class="brand">
             <span class="bot">🤖</span> Bernard
-            <button id="logout-btn" title="Sign out" style="
+            <div id="notification-bell-wrap" style="display: inline-flex; align-items: center; gap: 8px; margin-left: auto;">
+              <div id="notification-bell-container" style="position: relative; display: inline-flex;"></div>
+              <button id="logout-btn" class="logout-desktop" title="Sign out" style="
               margin-left:auto;
               background:none;
               border:1px solid rgba(255,255,255,0.2);
@@ -76,6 +79,7 @@ export function initApp() {
               white-space:nowrap;
               transition:all 0.15s;
             ">Logout</button>
+            </div>
           </div>
 
           <div class="tabs" id="tabs">
@@ -348,6 +352,12 @@ export function initApp() {
     console.error('Chat init failed on load:', e);
   }
 
+  // ---------- Notifications (bell) ----------
+  try {
+    initNotifications();
+  } catch (e) {
+    console.error('Notifications init failed:', e);
+  }
 
   // ---------- Mobile Menu (right-aligned dropdown) ----------
   const mBtn = $('#mobile-menu-btn');

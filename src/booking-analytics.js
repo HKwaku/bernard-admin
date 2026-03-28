@@ -58,16 +58,17 @@ async function fetchReservationsForPeriod() {
   const excl = getExcludeInfluencer();
   let query = supabase
     .from('reservations')
-    .select('id, confirmation_code, guest_first_name, guest_last_name, guest_email, room_type_code, check_in, check_out, created_at, status, total, nights, is_influencer');
+    .select('id, confirmation_code, guest_first_name, guest_last_name, guest_email, guest_phone, country_code, room_type_code, check_in, check_out, created_at, status, total, nights, is_influencer');
 
   if (dateFilterMode === 'created') {
     query = query
       .gte('created_at', dateRange.start.toISOString())
       .lte('created_at', new Date(dateRange.end.getTime() + 86400000).toISOString());
   } else {
+    // Stay overlaps [start, end] (inclusive nights) iff check_in <= end AND check_out > start (exclusive checkout)
     query = query
       .lte('check_in', sqlDate(dateRange.end))
-      .gte('check_out', sqlDate(dateRange.start));
+      .gt('check_out', sqlDate(dateRange.start));
   }
 
   const { data, error } = await query;
@@ -97,6 +98,11 @@ function renderBookingAnalytics() {
           <button class="chart-btn ${dateFilterMode === 'occupancy' ? 'active' : ''}" id="booking-filter-occupancy" data-booking-filter="occupancy">Occupancy dates</button>
         </div>
         <p id="booking-filter-hint" style="font-size: 12px; color: #94a3b8; margin-top: 8px;"></p>
+      </div>
+
+      <div class="analytics-section" id="booking-pending-7days-section">
+        <div class="analytics-section-title">Pending Payment (Last 7 Days)</div>
+        <div id="booking-pending-7days"></div>
       </div>
 
       <div class="analytics-section">
@@ -139,6 +145,7 @@ function initBookingDrillHandler() {
     const bar = e.target.closest('.drill-bar-row[data-drill-bar]');
     const drill = card?.dataset?.drill || (bar?.dataset?.drillBar?.startsWith('booking-') ? bar.dataset.drillBar : null);
     if (drill && drill.startsWith('booking-')) {
+      e.preventDefault();
       e.stopPropagation();
       handleBookingDrillClick(drill);
     }
@@ -165,7 +172,13 @@ function updateBookingFilterHint() {
 }
 
 async function renderBookingAnalyticsContent() {
+  try {
+    await fetchReservationsForPeriod();
+  } catch (err) {
+    console.error('Booking analytics: failed to load reservations for period', err);
+  }
   await Promise.all([
+    renderPending7Days(),
     renderHitRatioMetrics(),
     renderStatusSummary(),
     renderBookingsByMonthChart(),
@@ -174,12 +187,68 @@ async function renderBookingAnalyticsContent() {
   updateBookingFilterHint();
 }
 
+async function renderPending7Days() {
+  const el = document.getElementById('booking-pending-7days');
+  if (!el) return;
+
+  try {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
+
+    const { data, error } = await supabase
+      .from('reservations')
+      .select('id, confirmation_code, guest_first_name, guest_last_name, guest_email, guest_phone, country_code, room_type_code, check_in, check_out, created_at, status, total, nights')
+      .eq('status', 'pending_payment')
+      .gte('created_at', sevenDaysAgo.toISOString())
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const reservations = data || [];
+
+    if (reservations.length === 0) {
+      el.innerHTML = '<div class="analytics-empty">No pending payment bookings in the last 7 days</div>';
+      return;
+    }
+
+    const html = `
+      <div class="chart-card">
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          ${reservations.map(r => {
+            const guest = [r.guest_first_name, r.guest_last_name].filter(Boolean).join(' ').trim() || 'Guest';
+            const created = r.created_at ? new Date(r.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '–';
+            const checkIn = r.check_in ? new Date(r.check_in + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '–';
+            return `
+              <div class="drill-bar-row" data-drill-bar="booking-detail-${r.id}" title="Open full booking details" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px; cursor: pointer;">
+                <div>
+                  <div style="font-weight: 600; color: #0f172a;">${r.confirmation_code || '–'}</div>
+                  <div style="font-size: 13px; color: #64748b;">${guest} · ${r.room_type_code || '–'} · Check-in ${checkIn}</div>
+                </div>
+                <div style="text-align: right;">
+                  <div style="font-weight: 600; color: #b45309;">${formatCurrency(parseFloat(r.total) || 0, 'GHS')}</div>
+                  <div style="font-size: 11px; color: #94a3b8;">Created ${created}</div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+
+    el.innerHTML = html;
+  } catch (err) {
+    console.error('Error rendering pending 7 days:', err);
+    el.innerHTML = '<div class="analytics-empty">Error loading pending bookings</div>';
+  }
+}
+
 async function renderHitRatioMetrics() {
   const el = document.getElementById('booking-hit-ratio-metrics');
   if (!el) return;
 
   try {
-    const reservations = await fetchReservationsForPeriod();
+    const reservations = cachedReservations;
     const total = reservations.length;
     const totalNights = sumNights(reservations);
 
@@ -256,7 +325,7 @@ async function renderStatusSummary() {
   if (!el) return;
 
   try {
-    const reservations = await fetchReservationsForPeriod();
+    const reservations = cachedReservations;
     const total = reservations.length;
 
     const statusOrder = ['pending_payment', 'confirmed', 'checked-in', 'checked-out', 'cancelled'];
@@ -318,7 +387,7 @@ async function renderBookingsByMonthChart() {
   if (!el) return;
 
   try {
-    const reservations = await fetchReservationsForPeriod();
+    const reservations = cachedReservations;
     const hint = getBookingFilterHint();
 
     if (reservations.length === 0) {
@@ -367,10 +436,10 @@ async function renderBookingsByMonthChart() {
 
     let html = `<p style="font-size: 12px; color: #64748b; margin-bottom: 12px;">${chartTitle}</p>`;
     html += '<div style="display: flex; flex-direction: column; gap: 12px;">';
-    sortedMonths.forEach(({ label, count, nights }) => {
+    sortedMonths.forEach(({ key, label, count, nights }) => {
       const barWidth = (count / maxCount) * 100;
       html += `
-        <div style="display: flex; align-items: center; gap: 12px;">
+        <div class="drill-bar-row" data-drill-bar="booking-month-${key}" style="display: flex; align-items: center; gap: 12px; cursor: pointer; border-radius: 6px; padding: 4px 0; transition: background 0.15s ease;">
           <div style="min-width: 90px; font-size: 14px; font-weight: 500; color: #0f172a;">${label}</div>
           <div style="flex: 1; height: 28px; background: #f1f5f9; border-radius: 6px; overflow: hidden;">
             <div style="width: ${barWidth}%; height: 100%; background: linear-gradient(90deg, #4f46e5 0%, #4338ca 100%); transition: width 0.5s ease;"></div>
@@ -393,7 +462,7 @@ async function renderAdditionalMetrics() {
   if (!el) return;
 
   try {
-    const reservations = await fetchReservationsForPeriod();
+    const reservations = cachedReservations;
     const completed = reservations.filter(r => {
       const s = (r.status || '').toLowerCase();
       return s === 'confirmed' || s === 'checked-in' || s === 'checked-out';
@@ -489,21 +558,33 @@ function fmtDate(str) {
   }
 }
 
+function escapeHtmlCell(s) {
+  if (s == null || s === '') return '–';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 function buildBookingDrillTable(rows) {
   if (!rows || rows.length === 0) {
     return '<div class="analytics-empty" style="padding: 24px; text-align: center;">No reservations</div>';
   }
-  const headers = ['Confirmation', 'Guest', 'Room', 'Check-in', 'Check-out', 'Created', 'Status', 'Nights', 'Total'];
+  const headers = ['Confirmation', 'Guest', 'Email', 'Phone', 'Room', 'Check-in', 'Check-out', 'Created', 'Status', 'Nights', 'Total'];
   let html = '<div class="drill-table-wrap"><table class="drill-table"><thead><tr>';
   headers.forEach(h => { html += `<th>${h}</th>`; });
   html += '</tr></thead><tbody>';
   rows.forEach(r => {
-    const guest = [r.guest_first_name, r.guest_last_name].filter(Boolean).join(' ').trim() || '–';
+    const guest = escapeHtmlCell([r.guest_first_name, r.guest_last_name].filter(Boolean).join(' ').trim() || '–');
+    const phone = [r.country_code, r.guest_phone].filter(Boolean).join(' ').trim();
     const status = (r.status || '').toLowerCase().replace(/[-_]/g, '');
     html += `<tr>
-      <td>${r.confirmation_code || '–'}</td>
+      <td>${escapeHtmlCell(r.confirmation_code)}</td>
       <td>${guest}</td>
-      <td>${r.room_type_code || '–'}</td>
+      <td>${escapeHtmlCell(r.guest_email)}</td>
+      <td>${escapeHtmlCell(phone || '–')}</td>
+      <td>${escapeHtmlCell(r.room_type_code)}</td>
       <td>${fmtDate(r.check_in)}</td>
       <td>${fmtDate(r.check_out)}</td>
       <td>${fmtDate(r.created_at)}</td>
@@ -516,8 +597,16 @@ function buildBookingDrillTable(rows) {
   return html;
 }
 
-export function handleBookingDrillClick(drillType) {
+export async function handleBookingDrillClick(drillType) {
   initDrillThroughModal();
+
+  if (drillType.startsWith('booking-detail-')) {
+    const rawId = drillType.replace('booking-detail-', '');
+    if (rawId && typeof window !== 'undefined' && typeof window.editReservation === 'function') {
+      window.editReservation(rawId);
+      return;
+    }
+  }
 
   const titleMap = {
     'booking-total': 'All Reservations',
@@ -549,6 +638,32 @@ export function handleBookingDrillClick(drillType) {
     filtered = cachedReservations.filter(r => (r.status || '').toLowerCase() === status);
     const label = formatStatusLabel(status);
     openDrillModal(`${label} – ${filtered.length} Reservations`, buildBookingDrillTable(filtered));
+    return;
+  } else if (drillType === 'booking-pending-7days') {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
+    const { data } = await supabase
+      .from('reservations')
+      .select('id, confirmation_code, guest_first_name, guest_last_name, guest_email, guest_phone, country_code, room_type_code, check_in, check_out, created_at, status, total, nights')
+      .eq('status', 'pending_payment')
+      .gte('created_at', sevenDaysAgo.toISOString())
+      .order('created_at', { ascending: false });
+    filtered = data || [];
+    openDrillModal(`Pending Payment (Last 7 Days) – ${filtered.length} Reservations`, buildBookingDrillTable(filtered));
+    return;
+  } else if (drillType.startsWith('booking-month-')) {
+    const monthKey = drillType.replace('booking-month-', '');
+    const [year, month] = monthKey.split('-').map(Number);
+    const monthIdx = month - 1;
+    filtered = cachedReservations.filter(r => {
+      const ci = r.check_in ? String(r.check_in).slice(0, 10) : null;
+      const co = r.check_out ? String(r.check_out).slice(0, 10) : null;
+      if (!ci || !co) return false;
+      return nightsInMonthForStay(ci, co, year, monthIdx) > 0;
+    });
+    const monthLabel = new Date(year, monthIdx).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    openDrillModal(`${monthLabel} – ${filtered.length} Reservations`, buildBookingDrillTable(filtered));
     return;
   }
 

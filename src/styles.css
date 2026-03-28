@@ -1052,6 +1052,42 @@ label {
     font-size: 1rem;
     order: 1;
     flex: 1;
+    overflow: visible;
+  }
+
+  /* Logout only in hamburger menu on mobile */
+  .logout-desktop {
+    display: none !important;
+  }
+
+  /* Notification dropdown: fixed so it is not clipped by overflow */
+  #notification-bell-wrap,
+  #notification-bell-container {
+    overflow: visible;
+  }
+
+  .notification-panel {
+    position: fixed !important;
+    left: 12px !important;
+    right: 12px !important;
+    top: calc(56px + env(safe-area-inset-top, 0px)) !important;
+    width: auto !important;
+    max-width: none !important;
+    max-height: min(72vh, 520px);
+    z-index: 10050 !important;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .notification-panel:not([hidden]) {
+    display: flex !important;
+  }
+
+  #notification-panel-body {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    flex: 1;
+    min-height: 0;
   }
 
   .tab {
