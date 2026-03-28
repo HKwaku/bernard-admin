@@ -687,9 +687,11 @@ function renderCalendarView(reservations) {
     'July','August','September','October','November','December'
   ];
    // ---- Occupancy baseline: how many cabins exist in total? ----
-  const allActiveReservations = (allReservations || []).filter(
-    (r) => r.status !== 'cancelled'
-  );
+  // Calendar hides cancelled and pending_payment (unpaid holds should not block the grid)
+  const allActiveReservations = (allReservations || []).filter((r) => {
+    const s = (r.status || '').toLowerCase();
+    return s !== 'cancelled' && s !== 'pending_payment';
+  });
 
   const cabinSet = new Set(
     allActiveReservations
@@ -699,11 +701,12 @@ function renderCalendarView(reservations) {
 
   // Used to decide when a day is "full" vs "partial"
   const totalCabins = cabinSet.size || 1;
-  // Group reservations by each date they span (ignore cancelled)
+  // Group reservations by each date they span (ignore cancelled and pending_payment)
   const reservationsByDate = {};
-  const activeReservationsForMonth = reservations.filter(
-    (r) => r.status !== 'cancelled'
-  );
+  const activeReservationsForMonth = reservations.filter((r) => {
+    const s = (r.status || '').toLowerCase();
+    return s !== 'cancelled' && s !== 'pending_payment';
+  });
 
   activeReservationsForMonth.forEach((r) => {
 

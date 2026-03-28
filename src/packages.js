@@ -84,6 +84,11 @@ async function initPackages() {
                   p.currency || 'GHS'
                 )}</strong></span>
                 ${p.nights ? `<span>Nights: <strong>${p.nights}</strong></span>` : ''}
+                ${
+                  p.applies_to_days && p.applies_to_days !== 'both'
+                    ? `<span>${p.applies_to_days === 'weekends' ? 'Weekends only' : 'Weekdays only'}</span>`
+                    : ''
+                }
                 ${validity}
                 ${p.is_featured ? `<span>Featured</span>` : ''}
               </div>
@@ -339,6 +344,18 @@ function openPackageModal(mode = 'add', id = null) {
           </div>
 
           <div class="form-group">
+            <label>Applies to nights</label>
+            <select id="pkg-applies-to-days">
+              <option value="both" ${(p.applies_to_days || 'both') === 'both' ? 'selected' : ''}>All nights (weekdays &amp; weekends)</option>
+              <option value="weekdays" ${p.applies_to_days === 'weekdays' ? 'selected' : ''}>Weekdays only</option>
+              <option value="weekends" ${p.applies_to_days === 'weekends' ? 'selected' : ''}>Weekends only</option>
+            </select>
+            <div class="muted" style="margin-top:6px;font-size:12px">
+              Each night of the guest stay must qualify (uses your site&apos;s weekend definitions). Choose &quot;All nights&quot; for no restriction.
+            </div>
+          </div>
+
+          <div class="form-group">
             <label>Image URL</label>
             <div style="display:flex; gap:8px; align-items:center">
               <input id="pkg-image" type="url" placeholder="https://..." style="flex:1" value="${p.image_url || ''}">
@@ -571,6 +588,10 @@ function collectPackageForm() {
 
   const valid_from = root.querySelector('#pkg-from').value || null;
   const valid_until = root.querySelector('#pkg-until').value || null;
+  const appliesToEl = root.querySelector('#pkg-applies-to-days');
+  const applies_to_days = appliesToEl
+    ? appliesToEl.value || 'both'
+    : 'both';
   const image_url = root.querySelector('#pkg-image').value.trim() || null;
   const is_featured = root.querySelector('#pkg-featured').value === 'true';
   const is_active = root.querySelector('#pkg-active').value === 'true';
@@ -592,6 +613,7 @@ function collectPackageForm() {
     nights,
     valid_from,
     valid_until,
+    applies_to_days,
     image_url,
     is_featured,
     is_active,
@@ -740,6 +762,13 @@ async function openPackageViewModal(packageId) {
           )}</p>
           <p><strong>Nights:</strong> ${pkg.nights || 'N/A'}</p>
           <p><strong>Validity:</strong> ${validity}</p>
+          <p><strong>Applies to nights:</strong> ${
+            !pkg.applies_to_days || pkg.applies_to_days === 'both'
+              ? 'All nights (weekdays & weekends)'
+              : pkg.applies_to_days === 'weekends'
+                ? 'Weekends only'
+                : 'Weekdays only'
+          }</p>
           <p><strong>Status:</strong>
             <span class="badge ${isActive ? 'ok' : 'err'}">
               ${isActive ? 'Active' : 'Inactive'}

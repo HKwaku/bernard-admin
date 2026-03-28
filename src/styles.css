@@ -1066,7 +1066,13 @@ label {
     overflow: visible;
   }
 
-  .notification-panel {
+  /* Do not set display:flex on .notification-panel alone — it overrides [hidden] on some mobile engines */
+  #notification-panel.notification-panel[hidden],
+  .notification-panel[hidden] {
+    display: none !important;
+  }
+
+  .notification-panel:not([hidden]) {
     position: fixed !important;
     left: 12px !important;
     right: 12px !important;
@@ -1075,12 +1081,8 @@ label {
     max-width: none !important;
     max-height: min(72vh, 520px);
     z-index: 10050 !important;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .notification-panel:not([hidden]) {
     display: flex !important;
+    flex-direction: column;
   }
 
   #notification-panel-body {
