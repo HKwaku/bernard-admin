@@ -399,6 +399,13 @@ export async function openBookPackageModal() {
         </div>
 
         <div class="form-group">
+          <label style="display:flex;align-items:center;gap:4px;">
+            <span>Influencer?</span>
+            <input type="checkbox" id="pb-influencer" style="width:auto;flex-shrink:0;margin-left:2px" />
+          </label>
+        </div>
+
+        <div class="form-group">
           <label>Notes</label>
           <textarea id="pb-notes" rows="3"></textarea>
         </div>
@@ -1185,6 +1192,7 @@ export async function openBookPackageModal() {
             wrap.querySelector('#pb-children').value || '0',
             10
           ) || 0,
+        is_influencer: wrap.querySelector('#pb-influencer').checked,
         status: 'confirmed',
         payment_status: 'unpaid',
         currency,

@@ -30,9 +30,9 @@ const tools = [
           room_codes: { type: "string", description: "JSON array of room codes, e.g. [\"SAND\", \"PALM\"] or [\"ALL\"]" },
           start_date: { type: "string", description: "Start date (YYYY-MM-DD, inclusive)" },
           end_date: { type: "string", description: "End date (YYYY-MM-DD, exclusive)" },
-          reason: { type: "string", description: "Reason: maintenance, staff holiday, renovation, other" }
+          reason: { type: "string", description: "Required free-text reason the dates are blocked (e.g. pool maintenance, staff holiday, private event)" }
         },
-        required: ["room_codes", "start_date", "end_date"]
+        required: ["room_codes", "start_date", "end_date", "reason"]
       }
     }
   },
@@ -106,7 +106,7 @@ IMPORTANT: Do NOT assume or hardcode room/cabin names. Call list_room_types when
 === BLOCKING WORKFLOW ===
 1. Ask: "Which room(s) should be blocked?" (or "all rooms")
 2. Ask: "What date range? (start and end dates)"
-3. Ask: "What is the reason? (maintenance, staff holiday, renovation, other)"
+3. Ask: "Why are these dates being blocked?" (a reason is required; free text is fine)
 4. Summarize and confirm before blocking.
 
 Pass room codes as a JSON array: ["SAND", "PALM"] or ["ALL"] for all rooms.

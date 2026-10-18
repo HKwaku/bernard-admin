@@ -152,6 +152,7 @@ const tools = [
           adults: { type: "number", description: "Number of adults (default 2)" },
           children: { type: "number", description: "Number of children (default 0)" },
           notes: { type: "string", description: "Special requests or notes" },
+          is_influencer: { type: "boolean", description: "Mark the guest as an influencer (excluded from analytics when filtered). Default false." },
           extras: { type: "string", description: "JSON array of extras by name and quantity, e.g. [{\"name\": \"Airport Transfer\", \"quantity\": 1}, {\"name\": \"Breakfast\", \"quantity\": 2}]" },
           coupon_code: { type: "string", description: "Coupon code to apply" },
           price_override_per_night: { type: "number", description: "Manual price override per night in GHS. Only use if user explicitly requests a custom price. Omit to use the active pricing model." }
@@ -270,6 +271,7 @@ const tools = [
           adults: { type: "number", description: "Total adults across all rooms" },
           children: { type: "number", description: "Number of children (default 0)" },
           notes: { type: "string", description: "Special requests or notes" },
+          is_influencer: { type: "boolean", description: "Mark the guest as an influencer (excluded from analytics when filtered). Default false." },
           extras: { type: "string", description: "JSON array of extras by name, e.g. [{\"name\": \"Airport Transfer\", \"quantity\": 1}]" },
           coupon_code: { type: "string", description: "Coupon code to apply" },
           price_override_per_night: { type: "number", description: "Manual price override per night in GHS applied to ALL rooms. Only use if user explicitly requests a custom price. Omit to use the active pricing model." }
@@ -297,6 +299,7 @@ const tools = [
           adults: { type: "number", description: "Number of adults (default 2)" },
           children: { type: "number", description: "Number of children (default 0)" },
           notes: { type: "string", description: "Special requests" },
+          is_influencer: { type: "boolean", description: "Mark the guest as an influencer. Default false." },
           coupon_code: { type: "string", description: "Coupon code to apply" }
         },
         required: ["package_code", "room_code", "check_in", "guest_first_name", "guest_last_name", "guest_email"]

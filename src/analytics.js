@@ -1194,15 +1194,16 @@ function renderLineChart(containerId, points, options = {}) {
 
 async function loadRevenueChart() {
   try {
-    const { data: reservations, error } = await supabase
+    let { data: reservations, error } = await supabase
       .from('reservations')
-      .select('total, check_in')
+      .select('total, check_in, is_influencer')
       .lte('check_in', sqlDate(dateRange.end))
       .gte('check_out', sqlDate(dateRange.start))
       .in('status', ['confirmed','completed', 'checked-in', 'checked-out'])
       .order('check_in');
 
     if (error) throw error;
+    if (excludeInfluencer) reservations = (reservations || []).filter(r => !r.is_influencer);
 
     if (!reservations || !reservations.length) {
       renderLineChart('revenue-chart', []);
@@ -1539,9 +1540,9 @@ async function loadSourcesChart() {
 
 async function loadExtrasMetrics() {
   try {
-    const { data: reservationExtras, error } = await supabase
+    let { data: reservationExtras, error } = await supabase
       .from('reservation_extras')
-      .select('*, reservations!inner(check_in, check_out, status)')
+      .select('*, reservations!inner(check_in, check_out, status, is_influencer)')
       .lte('reservations.check_in', dateRange.end.toISOString().split('T')[0])
       .gte('reservations.check_out', dateRange.start.toISOString().split('T')[0])
       .in('reservations.status', ['confirmed', 'completed', 'checked-in', 'checked-out']);
@@ -1549,12 +1550,17 @@ async function loadExtrasMetrics() {
 
     if (error) throw error;
 
-    const { data: reservations } = await supabase
+    let { data: reservations } = await supabase
       .from('reservations')
-      .select('id')
+      .select('id, is_influencer')
       .lte('check_in', dateRange.end.toISOString().split('T')[0])
       .gte('check_out', dateRange.start.toISOString().split('T')[0])
       .in('status', ['confirmed', 'completed', 'checked-in', 'checked-out']);
+
+    if (excludeInfluencer) {
+      reservationExtras = (reservationExtras || []).filter(e => !e.reservations?.is_influencer);
+      reservations = (reservations || []).filter(r => !r.is_influencer);
+    }
 
     const totalRevenue = reservationExtras.reduce((sum, e) => sum + (parseFloat(e.subtotal) || 0), 0);
     const bookingsWithExtras = new Set(reservationExtras.map(e => e.reservation_id)).size;
@@ -2275,6 +2281,8 @@ function refreshOccupancyAndRevenue() {
     loadOccupancyTrendChart();
     loadOccupancyChart();
     loadRevenueMetrics();
+    if (document.getElementById('revenue-chart')) loadRevenueChart();
+    if (document.getElementById('extras-metrics') ) loadExtrasMetrics();
   } else if (viewMode === 'comparison') {
     renderComparisonView(dateRange);
   } else if (viewMode === 'client') {

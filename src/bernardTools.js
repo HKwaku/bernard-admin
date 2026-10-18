@@ -1687,13 +1687,14 @@ export const createReservationTool = tool({
     adults: z.number().default(2).describe("Number of adults (default 2)"),
     children: z.number().default(0).describe("Number of children"),
     notes: z.string().optional().describe("Special requests or notes"),
+    is_influencer: z.boolean().optional().describe("Whether guest is an influencer"),
     extras: z.string().optional().describe("JSON array of extras by name and quantity, e.g. [{\"name\": \"Airport Transfer\", \"quantity\": 1}, {\"name\": \"Breakfast\", \"quantity\": 2}]"),
     coupon_code: z.string().optional().describe("Coupon code to apply"),
     price_override_per_night: z.number().optional().describe("Manual price override per night in GHS. If provided, bypasses dynamic pricing and uses this flat rate per night instead."),
   }),
   async func(input) {
     const { room_code, check_in, check_out, guest_first_name, guest_last_name,
-            guest_email, guest_phone, country_code, adults, children, notes,
+            guest_email, guest_phone, country_code, adults, children, notes, is_influencer,
             extras, coupon_code, price_override_per_night } = input;
 
     // --- Validate dates ---
@@ -1968,7 +1969,7 @@ export const createReservationTool = tool({
       currency,
       status: 'confirmed',
       payment_status: 'unpaid',
-      is_influencer: false,
+      is_influencer: !!is_influencer,
       notes: notes || null,
     };
 
@@ -3430,6 +3431,7 @@ export const createGroupReservationTool = tool({
     adults: z.number().default(2).describe("Total number of adults across all rooms"),
     children: z.number().default(0).describe("Number of children"),
     notes: z.string().optional().describe("Special requests or notes"),
+    is_influencer: z.boolean().optional().describe("Whether guest is an influencer"),
     extras: z.string().optional().describe("JSON array of extras by name and quantity (attached to primary room only)"),
     coupon_code: z.string().optional().describe("Coupon code to apply"),
     price_override_per_night: z.number().optional().describe("Manual price override per night in GHS applied to ALL rooms. If provided, bypasses dynamic pricing."),
@@ -3437,7 +3439,7 @@ export const createGroupReservationTool = tool({
   async func(input) {
     const { check_in, check_out, guest_first_name, guest_last_name,
             guest_email, guest_phone, country_code, adults, children,
-            notes, extras, coupon_code } = input;
+            notes, is_influencer, extras, coupon_code } = input;
 
     // Parse room codes
     let roomCodes;
@@ -3793,7 +3795,7 @@ export const createGroupReservationTool = tool({
         currency,
         status: 'confirmed',
         payment_status: 'unpaid',
-        is_influencer: false,
+        is_influencer: !!is_influencer,
         notes: notes || null,
       };
 
@@ -4298,9 +4300,11 @@ export const blockDatesTool = tool({
     room_codes: z.string().describe("JSON array of room codes to block, e.g. [\"SAND\", \"PALM\"], or [\"ALL\"] for all rooms"),
     start_date: z.string().describe("Start date of range to block (YYYY-MM-DD, inclusive)"),
     end_date: z.string().describe("End date of range to block (YYYY-MM-DD, exclusive)"),
-    reason: z.string().optional().describe("Reason for blocking (e.g., 'maintenance', 'staff holiday', 'renovation')"),
+    reason: z.string().describe("Required: why the dates are blocked (e.g., 'pool maintenance', 'staff holiday', 'private owner event')"),
   }),
   async func({ room_codes, start_date, end_date, reason }) {
+    reason = (reason || '').trim();
+    if (!reason) return "✗ A reason is required. Ask the user why these dates are being blocked.";
     const sd = new Date(start_date + 'T00:00:00');
     const ed = new Date(end_date + 'T00:00:00');
     if (isNaN(sd.getTime()) || isNaN(ed.getTime())) return "✗ Invalid date format. Use YYYY-MM-DD.";
@@ -4455,11 +4459,12 @@ export const createPackageReservationTool = tool({
     adults: z.number().default(2).describe("Number of adults"),
     children: z.number().default(0).describe("Number of children"),
     notes: z.string().optional().describe("Special requests"),
+    is_influencer: z.boolean().optional().describe("Whether guest is an influencer"),
     coupon_code: z.string().optional().describe("Coupon code to apply"),
   }),
   async func(input) {
     const { check_in, guest_first_name, guest_last_name, guest_email,
-            guest_phone, country_code, adults, children, notes, coupon_code } = input;
+            guest_phone, country_code, adults, children, notes, is_influencer, coupon_code } = input;
 
     // --- Fetch package ---
     let pkgQuery = supabase.from("packages").select("*");
@@ -4619,7 +4624,7 @@ export const createPackageReservationTool = tool({
       currency,
       status: 'confirmed',
       payment_status: 'unpaid',
-      is_influencer: false,
+      is_influencer: !!is_influencer,
       notes: notes || null,
       package_id: pkg.id,
       package_code: pkg.code || null,

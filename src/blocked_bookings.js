@@ -87,14 +87,17 @@ export async function openBlockDatesModal() {
           </div>
 
           <div class="form-group">
-            <label>Reason</label>
-            <select id="bd-reason">
-                <option value="maintenance">Maintenance</option>
-                <option value="staff holiday">Staff holiday</option>
-                <option value="other">Private Event</option>
-                <option value="other">Other</option>
-            </select>
-            </div>
+            <label>Reason for blocking <span style="color:#ef4444">*</span></label>
+            <input id="bd-reason" type="text" list="bd-reason-options" maxlength="200"
+                   placeholder="e.g. Pool repairs, Staff holiday, Private event for the owners" />
+            <datalist id="bd-reason-options">
+              <option value="Maintenance"></option>
+              <option value="Staff holiday"></option>
+              <option value="Private event"></option>
+              <option value="Owner use"></option>
+              <option value="Renovation"></option>
+            </datalist>
+          </div>
 
         </div>
 
@@ -181,7 +184,11 @@ export async function openBlockDatesModal() {
           return;
         }
 
-        const reason = modal.querySelector('#bd-reason')?.value || null;
+        const reason = (modal.querySelector('#bd-reason')?.value || '').trim();
+        if (!reason) {
+          alert('Please say why these dates are being blocked.');
+          return;
+        }
 
 
         const startISO = inEl.value;

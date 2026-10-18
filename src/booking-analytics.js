@@ -58,7 +58,7 @@ async function fetchReservationsForPeriod() {
   const excl = getExcludeInfluencer();
   let query = supabase
     .from('reservations')
-    .select('id, confirmation_code, guest_first_name, guest_last_name, guest_email, guest_phone, country_code, room_type_code, check_in, check_out, created_at, status, total, nights, is_influencer');
+    .select('id, confirmation_code, guest_first_name, guest_last_name, guest_email, guest_phone, country_code, room_type_code, check_in, check_out, created_at, status, total, nights, is_influencer, contacted_at');
 
   if (dateFilterMode === 'created') {
     query = query
@@ -187,6 +187,35 @@ async function renderBookingAnalyticsContent() {
   updateBookingFilterHint();
 }
 
+function formatContactedAt(iso) {
+  return iso
+    ? new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+    : '';
+}
+
+// Small control on each pending-payment row: tag the guest as contacted to complete the booking
+function contactedControlHtml(r) {
+  const contacted = !!r.contacted_at;
+  return `
+    <div style="margin-top: 6px; display: flex; align-items: center; justify-content: flex-end; gap: 6px;">
+      ${contacted ? `<span style="font-size: 11px; color: #15803d; font-weight: 600;">✓ Contacted ${formatContactedAt(r.contacted_at)}</span>` : ''}
+      <button class="btn" data-contacted-toggle="${r.id}" style="padding: 2px 8px; font-size: 11px;">${contacted ? 'Undo' : 'Mark contacted'}</button>
+    </div>`;
+}
+
+async function toggleContacted(id) {
+  const target = cachedReservations.find((x) => String(x.id) === String(id));
+  const next = target?.contacted_at ? null : new Date().toISOString();
+  const { error } = await supabase.from('reservations').update({ contacted_at: next }).eq('id', id);
+  if (error) {
+    console.error('Failed to update contacted flag', error);
+    alert('Could not update contacted status: ' + (error.message || error));
+  } else if (target) {
+    target.contacted_at = next;
+  }
+  await renderPending7Days();
+}
+
 async function renderPending7Days() {
   const el = document.getElementById('booking-pending-7days');
   if (!el) return;
@@ -203,7 +232,7 @@ async function renderPending7Days() {
     const excl = getExcludeInfluencer();
     let query = supabase
       .from('reservations')
-      .select('id, confirmation_code, guest_first_name, guest_last_name, guest_email, guest_phone, country_code, room_type_code, check_in, check_out, created_at, status, total, nights, is_influencer')
+      .select('id, confirmation_code, guest_first_name, guest_last_name, guest_email, guest_phone, country_code, room_type_code, check_in, check_out, created_at, status, total, nights, is_influencer, contacted_at')
       .eq('status', 'pending_payment');
 
     if (dateFilterMode === 'created') {
@@ -249,6 +278,7 @@ async function renderPending7Days() {
                 <div style="text-align: right;">
                   <div style="font-weight: 600; color: #b45309;">${formatCurrency(parseFloat(r.total) || 0, 'GHS')}</div>
                   <div style="font-size: 11px; color: #94a3b8;">Created ${created}</div>
+                  ${contactedControlHtml(r)}
                 </div>
               </div>
             `;
@@ -258,6 +288,13 @@ async function renderPending7Days() {
     `;
 
     el.innerHTML = html;
+    el.querySelectorAll('[data-contacted-toggle]').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        btn.disabled = true;
+        await toggleContacted(btn.dataset.contactedToggle);
+      });
+    });
   } catch (err) {
     console.error('Error rendering pending 7 days:', err);
     el.innerHTML = '<div class="analytics-empty">Error loading pending bookings</div>';
@@ -623,6 +660,9 @@ function buildBookingViewOnlyHtml(r) {
   if (r.notes) {
     html += viewOnlyRow('Notes', escapeHtmlCell(r.notes));
   }
+  if ((r.status || '').toLowerCase() === 'pending_payment') {
+    html += viewOnlyRow('Contacted to complete booking', r.contacted_at ? 'Yes, ' + formatContactedAt(r.contacted_at) : 'Not yet');
+  }
   html += '</div>';
   return html;
 }
@@ -634,7 +674,7 @@ async function openBookingViewOnlyModal(id) {
     const { data: r, error } = await supabase
       .from('reservations')
       .select(
-        'id,confirmation_code,room_type_code,room_name,check_in,check_out,nights,adults,children,status,payment_status,total,currency,guest_first_name,guest_last_name,guest_email,guest_phone,country_code,notes,package_code,package_name,created_at'
+        'id,confirmation_code,room_type_code,room_name,check_in,check_out,nights,adults,children,status,payment_status,total,currency,guest_first_name,guest_last_name,guest_email,guest_phone,country_code,notes,package_code,package_name,created_at,contacted_at,is_influencer'
       )
       .eq('id', id)
       .single();
@@ -656,7 +696,7 @@ function buildBookingDrillTable(rows) {
   if (!rows || rows.length === 0) {
     return '<div class="analytics-empty" style="padding: 24px; text-align: center;">No reservations</div>';
   }
-  const headers = ['Confirmation', 'Guest', 'Email', 'Phone', 'Room', 'Check-in', 'Check-out', 'Created', 'Status', 'Nights', 'Total'];
+  const headers = ['Confirmation', 'Guest', 'Email', 'Phone', 'Room', 'Check-in', 'Check-out', 'Created', 'Status', 'Contacted', 'Nights', 'Total'];
   let html = '<div class="drill-table-wrap"><table class="drill-table"><thead><tr>';
   headers.forEach(h => { html += `<th>${h}</th>`; });
   html += '</tr></thead><tbody>';
@@ -674,6 +714,7 @@ function buildBookingDrillTable(rows) {
       <td>${fmtDate(r.check_out)}</td>
       <td>${fmtDate(r.created_at)}</td>
       <td><span class="drill-status drill-status-${status}">${formatStatusLabel(r.status)}</span></td>
+      <td>${(r.status || '').toLowerCase() === 'pending_payment' ? (r.contacted_at ? '✓ ' + formatContactedAt(r.contacted_at) : 'No') : '–'}</td>
       <td>${r.nights ?? '–'}</td>
       <td style="text-align:right;">${formatCurrency(parseFloat(r.total) || 0, 'GHS')}</td>
     </tr>`;
@@ -730,7 +771,7 @@ export async function handleBookingDrillClick(drillType) {
     sevenDaysAgo.setHours(0, 0, 0, 0);
     const { data } = await supabase
       .from('reservations')
-      .select('id, confirmation_code, guest_first_name, guest_last_name, guest_email, guest_phone, country_code, room_type_code, check_in, check_out, created_at, status, total, nights')
+      .select('id, confirmation_code, guest_first_name, guest_last_name, guest_email, guest_phone, country_code, room_type_code, check_in, check_out, created_at, status, total, nights, contacted_at')
       .eq('status', 'pending_payment')
       .gte('created_at', sevenDaysAgo.toISOString())
       .order('created_at', { ascending: false });
