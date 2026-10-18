@@ -1739,13 +1739,6 @@ async function openEditModal(id) {
           </div>
 
           <div class="form-group">
-            <label style="display:flex;align-items:center;gap:4px;">
-              <span>Influencer?</span>
-              <input type="checkbox" id="er-influencer" style="width:auto;flex-shrink:0;margin-left:2px" ${r.is_influencer ? 'checked' : ''} />
-            </label>
-          </div>
-
-          <div class="form-group">
             <label>Children</label>
             <input id="er-children" type="number" min="0" step="1" value="${r.children || 0}" />
           </div>
@@ -1819,6 +1812,13 @@ async function openEditModal(id) {
             <span style="font-weight:800">Total:</span>
             <span id="calc-total" style="font-weight:800;color:var(--brand)">GHS 0.00</span>
           </div>
+        </div>
+
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" id="er-influencer" style="width:auto;flex-shrink:0" ${r.is_influencer ? 'checked' : ''} />
+            <span>Influencer (excluded from analytics when filtered)</span>
+          </label>
         </div>
 
         <div class="form-grid">
