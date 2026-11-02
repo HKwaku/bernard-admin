@@ -313,7 +313,7 @@ export const listExtrasTool = tool({
     return formatTable(
       activeExtras.map(e => ({
         Code: e.code || '—',
-        Name: e.name,
+        Name: e.admin_only ? `${e.name} (admin only)` : e.name,
         Category: e.category || "N/A",
         Price: `${e.currency || 'GHS'} ${e.price}`,
         "Unit Type": e.unit_type?.replace(/_/g, ' ') || 'per booking',
@@ -372,6 +372,7 @@ export const createExtraTool = tool({
     unit_type: z.enum(["per_booking", "per_night", "per_person", "per_person_per_night"]).default("per_booking"),
     is_active: z.boolean().default(true),
     needs_guest_input: z.boolean().default(false).describe("Whether the guest needs to provide input for this extra (e.g., choosing a date/time for an experience)"),
+    admin_only: z.boolean().default(false).describe("If true the extra is hidden from guests on the public website and only available to staff when creating/editing bookings"),
   }),
   async func(input) {
     const { error } = await supabase.from("extras").insert({
@@ -384,6 +385,7 @@ export const createExtraTool = tool({
       unit_type: input.unit_type,
       is_active: input.is_active,
       needs_guest_input: input.needs_guest_input,
+      admin_only: input.admin_only,
     });
 
     if (error) return `Error creating extra: ${error.message}`;
@@ -392,6 +394,7 @@ export const createExtraTool = tool({
 - Price: ${input.currency} ${input.price} ${input.unit_type.replace(/_/g, ' ')}
 - Category: ${input.category || 'N/A'}
 - Needs Guest Input: ${input.needs_guest_input ? 'Yes' : 'No'}
+- Visibility: ${input.admin_only ? 'Admin dashboard only (hidden from guests)' : 'Public website and admin'}
 - Status: ${input.is_active ? 'Active' : 'Inactive'}`;
   },
 });
@@ -411,6 +414,7 @@ export const updateExtraTool = tool({
       unit_type: z.enum(["per_booking", "per_night", "per_person", "per_person_per_night"]).optional(),
       is_active: z.boolean().optional(),
       needs_guest_input: z.boolean().optional().describe("Whether the guest needs to provide input for this extra"),
+      admin_only: z.boolean().optional().describe("true = hidden from guests on the public website, staff-only"),
     }),
   }),
   async func({ identifier, updates }) {
@@ -440,6 +444,7 @@ export const updateExtraTool = tool({
     if (updates.unit_type !== undefined) payload.unit_type = updates.unit_type;
     if (updates.is_active !== undefined) payload.is_active = updates.is_active;
     if (updates.needs_guest_input !== undefined) payload.needs_guest_input = updates.needs_guest_input;
+    if (updates.admin_only !== undefined) payload.admin_only = updates.admin_only;
 
     if (Object.keys(payload).length === 0) return `✗ No update fields provided.`;
 

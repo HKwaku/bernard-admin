@@ -43,6 +43,7 @@ export async function initExtras() {
           </div>
           <div style="text-align:right">
             <span class="badge ${isActive ? 'ok' : 'err'}">${isActive ? 'Active' : 'Inactive'}</span>
+            ${x.admin_only ? '<div style="margin-top:6px"><span class="badge" style="background:#e0e7ff;color:#3730a3">Admin only</span></div>' : ''}
           </div>
         </div>
 
@@ -146,6 +147,14 @@ function openExtraModal(id = null) {
             </select>
           </div>
         </div>
+
+        <div class="form-group">
+          <label>Visible on guest website</label>
+          <select id="e-admin-only">
+            <option value="false" selected>Yes - guests can pick it when booking</option>
+            <option value="true">No - admin dashboard only</option>
+          </select>
+        </div>
       </div>
       <div style="padding:16px 24px;border-top:2px solid #e2e8f0;display:flex;justify-content:flex-end;gap:10px;flex-shrink:0;">
         <button class="btn" id="extra-cancel">Cancel</button>
@@ -198,6 +207,7 @@ function collectExtraForm() {
   const unit_type = root.querySelector('#e-unit-type').value;
   const active = root.querySelector('#e-active').value === 'true';
   const needs_guest_input = root.querySelector('#e-needs-guest-input').value === 'true';
+  const admin_only = root.querySelector('#e-admin-only').value === 'true';
 
   if (!name || !code || Number.isNaN(price)) {
     throw new Error('Name, Code, and Price are required.');
@@ -211,7 +221,8 @@ function collectExtraForm() {
     currency,
     unit_type,
     is_active: active,
-    needs_guest_input
+    needs_guest_input,
+    admin_only
   };
 }
 
@@ -233,6 +244,7 @@ async function fillExtraForm(id) {
   root.querySelector('#e-unit-type').value = e.unit_type || 'per_booking';
   root.querySelector('#e-active').value = (e.is_active !== false) ? 'true' : 'false';
   root.querySelector('#e-needs-guest-input').value = e.needs_guest_input ? 'true' : 'false';
+  root.querySelector('#e-admin-only').value = e.admin_only ? 'true' : 'false';
 }
 
 async function toggleExtraStatus(id, currentStatus) {

@@ -170,7 +170,8 @@ const tools = [
           currency: { type: "string", description: "Currency (default: GHS)" },
           unit_type: { type: "string", description: "Pricing unit: per_booking, per_night, per_person, or per_person_per_night" },
           needs_guest_input: { type: "boolean", description: "Whether the guest needs to provide input (e.g., choose date/time). Default: false" },
-          is_active: { type: "boolean", description: "Active status (default: true)" }
+          is_active: { type: "boolean", description: "Active status (default: true)" },
+          admin_only: { type: "boolean", description: "If true, hide from guests on the public website; staff-only. Default: false" }
         },
         required: ["name", "code", "price"]
       }
@@ -192,7 +193,8 @@ const tools = [
               category: { type: "string" }, description: { type: "string" },
               price: { type: "number" }, currency: { type: "string" },
               unit_type: { type: "string" }, is_active: { type: "boolean" },
-              needs_guest_input: { type: "boolean", description: "Whether guest needs to provide input" }
+              needs_guest_input: { type: "boolean", description: "Whether guest needs to provide input" },
+              admin_only: { type: "boolean", description: "true = hidden from guests on the public website, staff-only" }
             }
           }
         },
