@@ -54,6 +54,57 @@ function getBookingFilterHint() {
     : 'Showing reservations with stays overlapping the selected period';
 }
 
+const SUCCESS_STATUSES = ['confirmed', 'completed', 'checked-in', 'checked-out'];
+
+const normText = (v) => String(v || '').trim().toLowerCase().replace(/\s+/g, ' ');
+const normDate = (v) => (v ? String(v).slice(0, 10) : '');
+const normAmount = (v) => Math.round((parseFloat(v) || 0) * 100);
+
+function recoveryKey(r) {
+  return [
+    normText(r.guest_email),
+    normText(r.guest_first_name),
+    normText(r.guest_last_name),
+    normAmount(r.total),
+    normDate(r.check_in),
+    normDate(r.check_out),
+  ].join('|');
+}
+
+/**
+ * Flags pending_payment rows as `_recovered` when the same guest later completed a
+ * different booking with identical email, name, total, check-in and check-out.
+ * Those are retries, not missed bookings, so they should not need a follow-up call.
+ * The successful booking may fall outside the selected period, so it is looked up separately.
+ */
+async function markRecoveredPending(rows) {
+  const pending = (rows || []).filter(
+    (r) => (r.status || '').toLowerCase() === 'pending_payment'
+  );
+  pending.forEach((r) => { r._recovered = false; });
+
+  const emails = [...new Set(pending.map((r) => (r.guest_email || '').trim()).filter(Boolean))];
+  if (!emails.length) return rows;
+
+  const successKeys = new Set();
+  const CHUNK = 100;
+  for (let i = 0; i < emails.length; i += CHUNK) {
+    const { data, error } = await supabase
+      .from('reservations')
+      .select('id, guest_email, guest_first_name, guest_last_name, total, check_in, check_out')
+      .in('guest_email', emails.slice(i, i + CHUNK))
+      .in('status', SUCCESS_STATUSES);
+    if (error) {
+      console.error('Could not check for recovered bookings', error);
+      return rows;
+    }
+    (data || []).forEach((x) => successKeys.add(recoveryKey(x)));
+  }
+
+  pending.forEach((r) => { r._recovered = successKeys.has(recoveryKey(r)); });
+  return rows;
+}
+
 async function fetchReservationsForPeriod() {
   const excl = getExcludeInfluencer();
   let query = supabase
@@ -76,6 +127,7 @@ async function fetchReservationsForPeriod() {
 
   let res = data || [];
   if (excl) res = res.filter(r => !r.is_influencer);
+  await markRecoveredPending(res);
   cachedReservations = res;
   return res;
 }
@@ -253,6 +305,9 @@ async function renderPending7Days() {
 
     let reservations = data || [];
     if (excl) reservations = reservations.filter((r) => !r.is_influencer);
+    await markRecoveredPending(reservations);
+    const recoveredCount = reservations.filter((r) => r._recovered).length;
+    reservations = reservations.filter((r) => !r._recovered);
 
     if (reservations.length === 0) {
       el.innerHTML =
@@ -264,6 +319,7 @@ async function renderPending7Days() {
 
     const html = `
       <div class="chart-card">
+        ${recoveredCount ? `<div style="font-size: 12px; color: #64748b; margin-bottom: 10px;">${recoveredCount} pending ${recoveredCount === 1 ? 'booking' : 'bookings'} hidden because the guest completed an identical booking</div>` : ''}
         <div style="display: flex; flex-direction: column; gap: 10px;">
           ${reservations.map(r => {
             const guest = [r.guest_first_name, r.guest_last_name].filter(Boolean).join(' ').trim() || 'Guest';
@@ -310,7 +366,7 @@ async function renderHitRatioMetrics() {
     const total = reservations.length;
     const totalNights = sumNights(reservations);
 
-    const pendingPayment = reservations.filter(r => (r.status || '').toLowerCase() === 'pending_payment');
+    const pendingPayment = reservations.filter(r => (r.status || '').toLowerCase() === 'pending_payment' && !r._recovered);
     const completed = reservations.filter(r => {
       const s = (r.status || '').toLowerCase();
       return s === 'confirmed' || s === 'checked-in' || s === 'checked-out';
@@ -527,9 +583,9 @@ async function renderAdditionalMetrics() {
     });
     const uncompleted = reservations.filter(r => {
       const s = (r.status || '').toLowerCase();
-      return s === 'pending_payment' || s === 'cancelled';
+      return (s === 'pending_payment' && !r._recovered) || s === 'cancelled';
     });
-    const pendingPayment = reservations.filter(r => (r.status || '').toLowerCase() === 'pending_payment');
+    const pendingPayment = reservations.filter(r => (r.status || '').toLowerCase() === 'pending_payment' && !r._recovered);
     const cancelled = reservations.filter(r => (r.status || '').toLowerCase() === 'cancelled');
 
     const revenueCompleted = completed.reduce((sum, r) => sum + (parseFloat(r.total) || 0), 0);
@@ -753,10 +809,10 @@ export async function handleBookingDrillClick(drillType) {
   } else if (drillType === 'booking-uncompleted') {
     filtered = cachedReservations.filter(r => {
       const s = (r.status || '').toLowerCase();
-      return s === 'pending_payment' || s === 'cancelled';
+      return (s === 'pending_payment' && !r._recovered) || s === 'cancelled';
     });
   } else if (drillType === 'booking-pending') {
-    filtered = cachedReservations.filter(r => (r.status || '').toLowerCase() === 'pending_payment');
+    filtered = cachedReservations.filter(r => (r.status || '').toLowerCase() === 'pending_payment' && !r._recovered);
   } else if (drillType === 'booking-cancelled') {
     filtered = cachedReservations.filter(r => (r.status || '').toLowerCase() === 'cancelled');
   } else if (drillType.startsWith('booking-status-')) {
@@ -775,7 +831,7 @@ export async function handleBookingDrillClick(drillType) {
       .eq('status', 'pending_payment')
       .gte('created_at', sevenDaysAgo.toISOString())
       .order('created_at', { ascending: false });
-    filtered = data || [];
+    filtered = (await markRecoveredPending(data || [])).filter(r => !r._recovered);
     openDrillModal(`Pending Payment (Last 7 Days) – ${filtered.length} Reservations`, buildBookingDrillTable(filtered));
     return;
   } else if (drillType.startsWith('booking-month-')) {
